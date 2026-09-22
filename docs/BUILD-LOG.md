@@ -868,3 +868,47 @@
    - 多設備 fitStage 比例（iPhone 390x844 滿屏、iPad 舒適比、Desktop 9:16）：全數 PASS。
    - 指針防斷觸捕獲（setPointerCapture）：PASS。
 2. 同步鏡像至 `C:\Users\何任軒\Desktop\Antigravity\starfall-quiz\`，於桌面環境執行測試亦 100% 通過。
+
+---
+
+## 2026-09-22 11:35 — BUILD-016：S0001 專屬權限隔離 (LAB / Google Sheet 設定) 與跨網域公網正式上線 (GitHub Pages)
+
+### 完成項目
+1. **S0001 (測試玩家) 專屬權限嚴格隔離**：
+   - 僅有 `currentStudentId === 'S0001'`（測試玩家）能存取與看見以下管理工具：
+     - 頂部 HUD 之「LAB」按鈕（`#labBtn`）。
+     - 暫停選單（`#pauseModal`）底欄之「開啟 LAB」按鈕（`#pauseLabBtn`）。
+     - 暫停選單（`#pauseModal`）底欄之「Google Sheet 設定」按鈕（`#pauseGsBtn`）。
+     - 開始畫面中之「連線 Google Sheet」按鈕（`#openGsBtn`）。
+   - 一般學員帳號（S0002、S0003...）或新學員註冊模式下，上述 4 大入口全面隱藏（`display: none`）。
+   - 暫停選單底部按鈕列在一般學員狀態下，自動平順延伸為「繼續戰鬥」與「重新開始」兩大對稱按鈕，版面俐落乾淨。
+   - 主動安全守衛：
+     - `openLab()`：方法起始處檢查 `currentStudentId === 'S0001'`，若不符合則彈出 Toast 提示「權限不足：僅有 S0001 測試玩家可使用 LAB 面板」並拒絕開啟。
+     - `openGs()`：檢查 `currentStudentId === 'S0001'`，若不符合則彈出提示並拒絕開啟。
+   - 動態即時更新：新增 `updatePermissionUI()` 方法，於初始化、學員切換 (`switchStudent`)、下拉選單變更、新學員註冊與暫停呼叫時自動更新介面可見性。
+2. **跨網域/外網公網遊玩正式上線 (GitHub Pages 部署)**：
+   - 將專案初始化為 Git 倉庫，建立首個乾淨發行版本 Commit。
+   - 透過 GitHub CLI (`gh`) 登入之 `r98921080` 帳號建立公開遠端倉庫 `https://github.com/r98921080/starfall-quiz` 並推送 `main` 分支。
+   - 成功透過 GitHub API 開通 GitHub Pages 靜態網站代管服務：
+     👉 **正式公網遊玩網址：`https://r98921080.github.io/starfall-quiz/`**
+   - 學生、家長與教師在不在同一個網域（不同 Wi-Fi、4G/5G 行動網路、在家或不同校區）的情況下，均可直接透過該 HTTPS 網址在手機、平板與電腦上秒開暢玩。
+   - 題庫獲取與作答歷程完全透過 Google Apps Script 雲端端點即時傳輸，全域不受內網或防火牆限制。
+   - 新增 `deploy-to-web.bat` 一鍵部署更新批次腳本，未來任何程式碼修改雙擊即可自動推送更新。
+
+### 異動檔案
+- `game.js`：新增 `updatePermissionUI()`、於 5 大生命週期掛載、增設 `openLab()` 與 `openGs()` 權限守衛。
+- `starfall-quiz.html` & `index.html`：保持完全同步。
+- `style.css`：`.pause-footer` 彈性排版支援 2 鍵與 4 鍵自適應。
+- `deploy-to-web.bat`：新增一鍵部署與更新 GitHub Pages 批次檔。
+- `.gitignore`：排除系統暫存檔案。
+- `scripts/test-v1.12.js`：新建 BUILD-016 專用測試套件（31 項指標全數 PASS）。
+
+### 測試方式
+1. 執行 `node scripts/test-v1.12.js`：
+   - S0001 狀態：HUD LAB、暫停 LAB、暫停 Sheet、開始 Sheet 均顯示；openLab() 與 openGs() 成功放行。
+   - S0002 狀態：上述 4 個按鈕全面隱藏（display: none）；openLab() 與 openGs() 守衛成功攔截。
+   - 註冊新學員狀態：按鈕維持隱藏。
+   - 跨網域設定：無寫死 localhost 或私有 IP，Apps Script 為公網 HTTPS。
+   - 31 項測試全數 PASS。
+2. 執行 `node scripts/test-v1.11.js`：40 項多設備與學生隔離測試全數 PASS。
+3. 透過 `gh api /repos/r98921080/starfall-quiz/pages` 確認 GitHub Pages 服務已成功開通。
