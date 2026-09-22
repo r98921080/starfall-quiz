@@ -1,0 +1,25 @@
+{
+  "name": "星墜答問：神話機神",
+  "short_name": "星墜答問",
+  "description": "直向射擊 × 知識解謎。神話機甲自適應學習戰鬥遊戲。",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#060912",
+  "theme_color": "#060912",
+  "icons": [
+    {
+      "src": "assets/icons/weapons/weapon_1.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/weapons/weapon_2.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

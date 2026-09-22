@@ -1,0 +1,1622 @@
+/* ============================================================
+   星墜答問：神話機神 (StarFall Quiz: Mythic Mecha)
+   樣式表 — 商業級科幻機甲視覺與響應式觸控設計
+   ============================================================ */
+
+:root {
+  --bg-dark: #060912;
+  --bg-card: rgba(14, 20, 36, 0.92);
+  --bg-card-hover: rgba(22, 34, 60, 0.98);
+  --border-cyan: rgba(51, 224, 224, 0.35);
+  --border-glow: 0 0 15px rgba(51, 224, 224, 0.25);
+  --text-main: #f0f6fc;
+  --text-muted: #8ca3ba;
+  
+  --cyan: #33e0e0;
+  --cyan-bright: #67ffff;
+  --cyan-dim: #0d8b94;
+  --blue: #00a2ff;
+  --magenta: #e0409a;
+  --gold: #f5bc38;
+  --green: #48e583;
+  --red: #ff4766;
+  --orange: #ff9138;
+  --purple: #b359ff;
+  
+  --font-display: 'Cabinet Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --font-body: 'Satoshi', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  color: var(--text-main);
+  font-family: var(--font-body);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 主容器與 9:16 置中視圖 */
+#appWrap {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at center, #0a0f1d 0%, #020308 100%);
+}
+
+#stage {
+  position: relative;
+  background: var(--bg-dark);
+  overflow: hidden;
+  box-shadow: 0 0 50px rgba(0, 162, 255, 0.18), 0 0 100px rgba(0, 0, 0, 0.9);
+}
+
+canvas#gameCanvas {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+/* 頂部 HUD */
+#hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  padding: 10px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  pointer-events: none;
+}
+
+.hud-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hud-panel {
+  background: rgba(8, 12, 22, 0.78);
+  border: 1px solid var(--border-cyan);
+  border-radius: 8px;
+  padding: 6px 10px;
+  backdrop-filter: blur(8px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.hud-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.hud-val {
+  font-size: 15px;
+  font-weight: 800;
+  font-family: var(--font-display);
+  color: var(--cyan-bright);
+}
+
+/* 生命格與護盾 */
+.hp-cells {
+  display: flex;
+  gap: 4px;
+  margin-top: 3px;
+}
+.hp-cell {
+  width: 18px;
+  height: 9px;
+  background: rgba(255, 71, 102, 0.2);
+  border: 1px solid var(--red);
+  border-radius: 2px;
+  transition: all 0.2s ease;
+}
+.hp-cell.active {
+  background: linear-gradient(90deg, #ff3355, #ff6b85);
+  box-shadow: 0 0 6px rgba(255, 71, 102, 0.8);
+}
+.shield-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--cyan);
+  margin-top: 2px;
+}
+.shield-badge.off {
+  opacity: 0.3;
+}
+
+/* 擦彈同步值 */
+.sync-wrap {
+  width: 90px;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+.sync-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--blue), var(--cyan-bright));
+  transition: width 0.15s ease-out;
+  box-shadow: 0 0 8px var(--cyan);
+}
+
+/* Boss 頂部大型血條浮層 */
+#bossHud {
+  position: absolute;
+  top: 65px;
+  left: 20px;
+  right: 20px;
+  z-index: 10;
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: none;
+}
+.boss-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+}
+.boss-name {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 14px;
+  color: #fff;
+  letter-spacing: 0.04em;
+}
+.boss-phase-badge {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(224, 64, 154, 0.25);
+  border: 1px solid var(--magenta);
+  color: var(--magenta);
+}
+.boss-bar-frame {
+  height: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+.boss-bar-ghost {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.75);
+  transition: width 0.5s ease-out;
+}
+.boss-bar-fill {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  background: linear-gradient(90deg, #ff8533, #ff3366 70%, #e0409a);
+  transition: width 0.08s linear;
+}
+.boss-shield-fill {
+  position: absolute;
+  inset: 0;
+  width: 0%;
+  background: rgba(51, 224, 224, 0.85);
+  box-shadow: 0 0 8px var(--cyan);
+}
+
+/* 大招警告橫幅 */
+#ultimateWarning {
+  position: absolute;
+  top: 140px;
+  left: 0;
+  right: 0;
+  z-index: 12;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 51, 85, 0.45) 20%, rgba(255, 51, 85, 0.45) 80%, transparent);
+  border-top: 1px solid rgba(255, 71, 102, 0.8);
+  border-bottom: 1px solid rgba(255, 71, 102, 0.8);
+  pointer-events: none;
+  animation: warningPulse 0.35s infinite alternate ease-in-out;
+}
+@keyframes warningPulse {
+  from { opacity: 0.8; transform: scaleY(0.96); }
+  to { opacity: 1; transform: scaleY(1.04); }
+}
+.warning-sub {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  color: #ff99aa;
+  text-transform: uppercase;
+}
+.warning-title {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 22px;
+  color: #fff;
+  text-shadow: 0 0 12px rgba(255, 71, 102, 0.9);
+}
+
+/* Boss / 小 Boss 震撼出場警報特效 (Entrance Overlay) */
+#bossEntranceOverlay {
+  position: absolute;
+  top: 18%;
+  left: 0;
+  right: 0;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+  animation: entranceSlideIn 0.35s ease-out forwards;
+}
+#bossEntranceOverlay.hidden {
+  display: none !important;
+}
+@keyframes entranceSlideIn {
+  from { opacity: 0; transform: scale(1.15) translateY(-20px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.boss-entrance-stripe {
+  height: 14px;
+  background: repeating-linear-gradient(
+    -45deg,
+    #ff4766,
+    #ff4766 16px,
+    #121622 16px,
+    #121622 32px
+  );
+  box-shadow: 0 0 14px rgba(255, 71, 102, 0.8);
+}
+.boss-entrance-box {
+  background: rgba(10, 14, 26, 0.94);
+  padding: 16px 20px;
+  text-align: center;
+  border-top: 2px solid var(--gold);
+  border-bottom: 2px solid var(--gold);
+  box-shadow: 0 0 35px rgba(255, 71, 102, 0.5), inset 0 0 25px rgba(245, 188, 56, 0.2);
+}
+.boss-entrance-alert-badge {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.25em;
+  color: #ff4766;
+  text-shadow: 0 0 10px rgba(255, 71, 102, 0.8);
+  margin-bottom: 6px;
+  animation: badgeBlink 0.4s infinite alternate;
+}
+@keyframes badgeBlink {
+  from { opacity: 0.75; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1.02); }
+}
+.boss-entrance-title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 0 16px rgba(245, 188, 56, 0.9), 0 0 30px rgba(255, 71, 102, 0.8);
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+.boss-entrance-sub {
+  font-size: 12px;
+  color: var(--cyan);
+  letter-spacing: 0.12em;
+  font-weight: 700;
+}
+
+/* Boss 破滅遺言神格消散橫幅 (Defeat Overlay) */
+#bossDefeatOverlay {
+  position: absolute;
+  bottom: 22%;
+  left: 12px;
+  right: 12px;
+  z-index: 50;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  animation: defeatFadeIn 0.4s ease-out forwards;
+}
+#bossDefeatOverlay.hidden {
+  display: none !important;
+}
+@keyframes defeatFadeIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.boss-defeat-card {
+  background: linear-gradient(135deg, rgba(20, 10, 24, 0.96), rgba(12, 16, 32, 0.98));
+  border: 1px solid var(--gold);
+  border-radius: 12px;
+  padding: 14px 18px;
+  text-align: center;
+  box-shadow: 0 0 30px rgba(245, 188, 56, 0.4), 0 0 50px rgba(0, 0, 0, 0.9);
+  max-width: 420px;
+  width: 100%;
+}
+.boss-defeat-badge {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  color: var(--gold);
+  margin-bottom: 4px;
+}
+.boss-defeat-name {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 0 10px var(--gold);
+  margin-bottom: 6px;
+}
+.boss-defeat-quote {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fce7f3;
+  line-height: 1.5;
+  font-style: italic;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
+}
+
+/* 頂部操作按鈕 (>= 44x44px 觸控熱區) */
+.hud-btn {
+  pointer-events: auto;
+  cursor: pointer;
+  min-width: 44px;
+  min-height: 44px;
+  background: rgba(8, 12, 22, 0.82);
+  border: 1px solid var(--border-cyan);
+  border-radius: 8px;
+  color: var(--cyan);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+  transition: transform 0.1s, background 0.15s, border-color 0.15s;
+}
+.hud-btn:active {
+  transform: scale(0.94);
+  background: rgba(51, 224, 224, 0.2);
+}
+.hud-btn.lab-btn {
+  color: var(--gold);
+  border-color: rgba(245, 188, 56, 0.4);
+}
+.hud-btn.bgm-btn {
+  color: var(--cyan-bright);
+}
+.hud-btn.bgm-btn.off {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+/* 靈丸集氣現已改為按住全螢幕任意處集氣，隱藏舊右下按鈕 */
+#spiritChargeZone {
+  display: none !important;
+}
+
+.lab-fusion-btn {
+  background: rgba(26, 38, 64, 0.8);
+  border: 1px solid var(--border-cyan);
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--text-light);
+  text-align: left;
+}
+.lab-fusion-btn:hover {
+  background: rgba(51, 224, 224, 0.15);
+  border-color: var(--cyan);
+}
+.lab-fusion-btn.active {
+  background: rgba(245, 188, 56, 0.2);
+  border-color: var(--gold);
+  color: var(--gold);
+  box-shadow: 0 0 10px rgba(245, 188, 56, 0.3);
+}
+
+
+/* 彈出層通用容器 */
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: radial-gradient(ellipse at center, rgba(6, 9, 18, 0.88) 0%, rgba(3, 4, 10, 0.97) 100%);
+  backdrop-filter: blur(8px);
+  opacity: 1;
+  transition: opacity 0.25s ease;
+}
+.overlay.hidden {
+  display: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 按鈕風格 (>= 44x44px) */
+.btn {
+  min-height: 48px;
+  padding: 12px 24px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  color: #041019;
+  background: linear-gradient(135deg, var(--cyan-bright), var(--cyan-dim));
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(51, 224, 224, 0.35);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.btn:active {
+  transform: scale(0.96);
+}
+.btn.ghost {
+  background: rgba(18, 28, 48, 0.8);
+  border: 1px solid var(--border-cyan);
+  color: var(--cyan);
+  box-shadow: none;
+}
+.btn.gold {
+  background: linear-gradient(135deg, #ffd768, #e09f1b);
+  box-shadow: 0 4px 20px rgba(245, 188, 56, 0.4);
+}
+.btn.danger {
+  background: linear-gradient(135deg, #ff6688, #cc2244);
+  color: #fff;
+}
+.btn-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 14px;
+}
+
+/* 標題與內文 */
+.title-big {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(2rem, 8vw, 3.2rem);
+  text-align: center;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, #fff 20%, var(--cyan) 70%, var(--magenta));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 35px rgba(51, 224, 224, 0.3);
+}
+.subtitle {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  text-align: center;
+  max-width: 38ch;
+  margin-top: 8px;
+}
+
+/* 答題卡 (Quiz Modal) */
+#quizCard {
+  width: min(94%, 420px);
+  background: var(--bg-card);
+  border: 1px solid var(--border-cyan);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), var(--border-glow);
+  animation: cardPopup 0.28s cubic-bezier(0.18, 1, 0.32, 1);
+}
+@keyframes cardPopup {
+  from { opacity: 0; transform: translateY(20px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.quiz-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.quiz-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.quiz-badge {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(51, 224, 224, 0.12);
+  border: 1px solid var(--border-cyan);
+  color: var(--cyan);
+}
+.quiz-diff {
+  color: var(--gold);
+  font-size: 12px;
+  letter-spacing: 2px;
+}
+.quiz-q-text {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #fff;
+  text-align: left;
+}
+.quiz-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 4px;
+}
+.opt-btn {
+  pointer-events: auto;
+  cursor: pointer;
+  min-height: 48px;
+  padding: 10px 14px;
+  background: rgba(22, 32, 54, 0.85);
+  border: 1px solid rgba(120, 200, 230, 0.25);
+  border-radius: 10px;
+  color: var(--text-main);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: all 0.15s ease;
+}
+.opt-btn:active {
+  transform: scale(0.98);
+}
+.opt-key {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: rgba(51, 224, 224, 0.15);
+  color: var(--cyan);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.opt-btn.correct {
+  border-color: var(--green);
+  background: rgba(72, 229, 131, 0.25);
+  box-shadow: 0 0 12px rgba(72, 229, 131, 0.4);
+}
+.opt-btn.wrong {
+  border-color: var(--red);
+  background: rgba(255, 71, 102, 0.25);
+  box-shadow: 0 0 12px rgba(255, 71, 102, 0.4);
+}
+.quiz-timer-bar {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+.quiz-timer-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, var(--cyan), var(--magenta));
+  transform-origin: left;
+}
+.quiz-explain {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  background: rgba(10, 16, 28, 0.7);
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: none;
+}
+
+/* 升級與整備卡片 (Upgrade Cards) */
+#upgradeCardModal {
+  width: min(94%, 460px);
+  background: var(--bg-card);
+  border: 1px solid var(--border-cyan);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 85vh;
+  overflow-y: auto;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.upgrade-cards-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.upgrade-card {
+  pointer-events: auto;
+  cursor: pointer;
+  background: rgba(18, 28, 48, 0.88);
+  border: 1px solid var(--border-cyan);
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+.upgrade-card:hover {
+  transform: translateY(-2px);
+}
+.upgrade-card:active {
+  transform: scale(0.98);
+  border-color: var(--cyan-bright);
+}
+.upgrade-card.quality-legendary {
+  border: 1.5px solid var(--gold);
+  background: linear-gradient(135deg, rgba(46, 36, 12, 0.95), rgba(20, 16, 8, 0.95));
+  box-shadow: 0 0 22px rgba(245, 188, 56, 0.45);
+}
+.upgrade-card.quality-epic {
+  border: 1.5px solid #c054ff;
+  background: linear-gradient(135deg, rgba(40, 20, 60, 0.95), rgba(18, 12, 30, 0.95));
+  box-shadow: 0 0 18px rgba(192, 84, 255, 0.35);
+}
+.upgrade-card.quality-rare {
+  border: 1.5px solid var(--cyan-bright);
+  background: linear-gradient(135deg, rgba(16, 42, 64, 0.95), rgba(10, 22, 36, 0.95));
+  box-shadow: 0 0 16px rgba(51, 224, 224, 0.35);
+}
+.upgrade-card.quality-good {
+  border: 1.5px solid #48e583;
+  background: linear-gradient(135deg, rgba(16, 46, 30, 0.95), rgba(10, 26, 18, 0.95));
+  box-shadow: 0 0 14px rgba(72, 229, 131, 0.25);
+}
+.upgrade-card.quality-common {
+  border: 1px solid #7a8fa6;
+  background: rgba(22, 32, 48, 0.9);
+}
+.upgrade-icon-box {
+  width: 58px;
+  height: 58px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.65);
+  border: 1px solid var(--border-cyan);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  flex: none;
+  overflow: hidden;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.8);
+}
+.upgrade-icon-img {
+  width: 90%;
+  height: 90%;
+  object-fit: contain;
+  filter: drop-shadow(0 0 6px rgba(51, 224, 224, 0.7));
+}
+.upgrade-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+}
+.upgrade-name-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.upgrade-name {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 15px;
+  color: #fff;
+  letter-spacing: 0.04em;
+}
+.upgrade-rank-tag {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(51, 224, 224, 0.15);
+  border: 1px solid var(--border-cyan);
+  color: var(--cyan-bright);
+}
+.upgrade-rank-tag.max {
+  background: rgba(245, 188, 56, 0.2);
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.upgrade-effect-tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gold);
+  text-shadow: 0 0 4px rgba(245, 188, 56, 0.4);
+}
+.upgrade-desc {
+  font-size: 11.5px;
+  color: #c5d5e8;
+  line-height: 1.4;
+}
+
+/* LAB 面板與 Google Sheet 連線面板 (Modals) */
+#labModal, #gsModal {
+  width: min(94%, 480px);
+  max-height: 85vh;
+  background: rgba(10, 15, 28, 0.97);
+  border: 1px solid var(--gold);
+  border-radius: 16px;
+  box-shadow: 0 0 40px rgba(245, 188, 56, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 40;
+}
+#gsModal {
+  border-color: var(--cyan);
+  box-shadow: 0 0 40px rgba(51, 224, 224, 0.3);
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  flex-shrink: 0;
+}
+.modal-header h2 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 18px;
+  color: var(--cyan-bright);
+  letter-spacing: 0.05em;
+}
+.lab-header h2 {
+  color: var(--gold);
+}
+.lab-tabs {
+  display: flex;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0 10px;
+  background: rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
+}
+.lab-tab {
+  pointer-events: auto;
+  cursor: pointer;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-weight: 700;
+  font-size: 12px;
+  border-bottom: 2px solid transparent;
+}
+.lab-tab.active {
+  color: var(--gold);
+  border-bottom-color: var(--gold);
+}
+.modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  padding: 16px 18px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 機甲螢光自定義捲軸 */
+.modal-body::-webkit-scrollbar,
+#upgradeCardModal::-webkit-scrollbar,
+.hangar-scroll-list::-webkit-scrollbar {
+  width: 6px;
+}
+.modal-body::-webkit-scrollbar-track,
+#upgradeCardModal::-webkit-scrollbar-track,
+.hangar-scroll-list::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 3px;
+}
+.modal-body::-webkit-scrollbar-thumb,
+#upgradeCardModal::-webkit-scrollbar-thumb,
+.hangar-scroll-list::-webkit-scrollbar-thumb {
+  background: rgba(51, 224, 224, 0.45);
+  border-radius: 3px;
+}
+.modal-body::-webkit-scrollbar-thumb:hover,
+#upgradeCardModal::-webkit-scrollbar-thumb:hover,
+.hangar-scroll-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(51, 224, 224, 0.8);
+}
+
+/* 初始武裝整備機庫 (Hangar Loadout Modal) */
+#hangarModal {
+  width: min(94%, 520px);
+  max-height: 86vh;
+  background: rgba(8, 14, 26, 0.98);
+  border: 1px solid var(--cyan);
+  border-radius: 16px;
+  box-shadow: 0 0 35px rgba(51, 224, 224, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 45;
+}
+.hangar-scroll-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.hangar-weapon-card {
+  pointer-events: auto;
+  cursor: pointer;
+  background: rgba(18, 28, 48, 0.85);
+  border: 1px solid rgba(51, 224, 224, 0.25);
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  transition: all 0.2s ease;
+}
+.hangar-weapon-card:hover {
+  background: rgba(24, 38, 64, 0.95);
+  border-color: var(--cyan);
+  transform: translateY(-2px);
+}
+.hangar-weapon-card.selected {
+  border: 1.5px solid var(--gold);
+  background: linear-gradient(135deg, rgba(46, 36, 12, 0.92), rgba(20, 16, 8, 0.92));
+  box-shadow: 0 0 16px rgba(245, 188, 56, 0.35);
+}
+.hangar-icon-box {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.hangar-icon-img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 6px rgba(51, 224, 224, 0.4));
+}
+.hangar-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.hangar-name-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.hangar-name {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 14px;
+  color: #fff;
+}
+.hangar-tag {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(51, 224, 224, 0.15);
+  color: var(--cyan-bright);
+  border: 1px solid rgba(51, 224, 224, 0.35);
+}
+.hangar-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.35;
+  margin: 0;
+}
+.lab-section-title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--cyan);
+  text-transform: uppercase;
+}
+.lab-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.lab-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.lab-grid3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+.lab-toggle-btn {
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lab-toggle-btn.active {
+  border-color: var(--cyan);
+  background: rgba(51, 224, 224, 0.2);
+  color: var(--cyan-bright);
+}
+
+/* 16款武器 LAB 精緻控制卡片 */
+.lab-weapon-card {
+  background: rgba(14, 25, 44, 0.85);
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+.lab-weapon-card:hover {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(18, 32, 56, 0.9);
+}
+.lab-weapon-card.equipped-active {
+  border-color: var(--cyan);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+  background: rgba(20, 38, 64, 0.95);
+}
+.lab-weapon-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.lab-weapon-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+.lab-weapon-icon {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  flex-shrink: 0;
+}
+.lab-weapon-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+}
+.lab-weapon-tag {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 4px;
+  display: inline-block;
+}
+.lab-weapon-tag.active {
+  background: rgba(56, 189, 248, 0.2);
+  color: var(--cyan-bright);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+}
+.lab-weapon-tag.passive {
+  background: rgba(168, 85, 247, 0.2);
+  color: #d8b4fe;
+  border: 1px solid rgba(168, 85, 247, 0.5);
+}
+.lab-equip-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  background: rgba(56, 189, 248, 0.15);
+  color: var(--cyan-bright);
+  transition: all 0.15s ease;
+}
+.lab-equip-btn:hover {
+  background: rgba(56, 189, 248, 0.3);
+}
+.lab-equip-btn.is-equipped {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
+.lab-equip-btn.is-equipped:hover {
+  background: rgba(239, 68, 68, 0.35);
+}
+
+
+/* 輸入框樣式 */
+.input-field {
+  width: 100%;
+  background: rgba(18, 28, 48, 0.9);
+  border: 1px solid var(--border-cyan);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: #fff;
+  outline: none;
+}
+.input-field:focus {
+  border-color: var(--cyan-bright);
+  box-shadow: 0 0 10px rgba(51, 224, 224, 0.4);
+}
+
+/* 提示訊息 Toast */
+#toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: rgba(14, 22, 38, 0.97);
+  border: 1px solid var(--cyan);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
+}
+#toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* 響應式優化 */
+@media (max-width: 480px) {
+  #hud { padding: 6px 8px; }
+  .hud-val { font-size: 13px; }
+  #spiritChargeZone { bottom: 18px; right: 14px; width: 68px; height: 68px; }
+  #spiritRingSvg { width: 76px; height: 76px; }
+  .title-big { font-size: 2.2rem; }
+}
+
+/* ============================================================
+   暫停選單作戰武裝庫 (Pause Armory Modal & Slot Management)
+   ============================================================ */
+#pauseModal {
+  background: linear-gradient(135deg, rgba(14, 22, 38, 0.98), rgba(8, 12, 22, 0.99));
+  border: 1px solid var(--border-cyan);
+  border-radius: 16px;
+  width: 94%;
+  max-width: 460px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 0 35px rgba(0, 0, 0, 0.9), 0 0 15px rgba(51, 224, 224, 0.25);
+  overflow: hidden;
+  position: relative;
+}
+
+.pause-armory-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  padding: 14px;
+}
+
+/* 基礎火控常駐說明欄 */
+.base-fire-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(51, 224, 224, 0.08);
+  border: 1px solid rgba(51, 224, 224, 0.25);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.base-fire-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: rgba(51, 224, 224, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: var(--cyan-bright);
+  flex-shrink: 0;
+}
+.base-fire-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.base-fire-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--cyan-bright);
+}
+.base-fire-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+/* 武裝庫分類標題 */
+.armory-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+.armory-count-badge {
+  background: rgba(245, 188, 56, 0.15);
+  border: 1px solid var(--border-gold);
+  color: var(--gold);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+/* 主動武器 3 槽位緊湊橫向列 (保證 3 槽同時完整顯示免捲動) */
+.active-slots-compact-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  width: 100%;
+  margin-bottom: 10px;
+  box-sizing: border-box;
+}
+.armory-slot-compact {
+  background: rgba(14, 22, 38, 0.88);
+  border: 1px dashed rgba(51, 224, 224, 0.35);
+  border-radius: 6px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 48px;
+  position: relative;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.armory-slot-compact.equipped {
+  border: 1px solid var(--cyan-bright);
+  background: rgba(51, 224, 224, 0.1);
+  box-shadow: 0 0 10px rgba(51, 224, 224, 0.15);
+}
+.armory-slot-compact.empty {
+  opacity: 0.65;
+  background: rgba(10, 16, 28, 0.6);
+}
+.slot-line-top {
+  font-size: 11px;
+  font-weight: 800;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+  line-height: 1.3;
+}
+.slot-line-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin-top: 4px;
+}
+.slot-compact-lv {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--gold-bright, #facc15);
+}
+.slot-compact-unequip {
+  background: rgba(255, 71, 102, 0.2);
+  border: 1px solid rgba(255, 71, 102, 0.5);
+  color: #ff4766;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.slot-compact-unequip:hover {
+  background: rgba(255, 71, 102, 0.45);
+  color: #ffffff;
+  box-shadow: 0 0 6px rgba(255, 71, 102, 0.5);
+}
+
+/* 分區標題 (主動/被動) */
+.armory-sub-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--cyan-bright);
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+/* 互動式武裝矩陣與即時檢視窗容器 */
+.armory-interactive-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 緊湊小圖示矩陣 (44x44px) */
+.armory-tiles-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
+  gap: 6px;
+  padding: 4px 0;
+}
+@media (max-width: 480px) {
+  .armory-tiles-container {
+    grid-template-columns: repeat(6, 1fr);
+    gap: 5px;
+  }
+}
+.armory-tile {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: rgba(18, 28, 48, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.armory-tile:hover {
+  border-color: var(--cyan);
+  background: rgba(51, 224, 224, 0.15);
+  box-shadow: 0 0 10px rgba(51, 224, 224, 0.35);
+  transform: translateY(-2px);
+  z-index: 2;
+}
+.armory-tile.selected {
+  border-color: var(--cyan-bright);
+  box-shadow: 0 0 12px rgba(51, 224, 224, 0.6);
+  background: rgba(51, 224, 224, 0.2);
+  transform: scale(1.05);
+  z-index: 3;
+}
+.armory-tile.is-equipped {
+  border-color: var(--gold);
+  box-shadow: 0 0 8px rgba(245, 188, 56, 0.4);
+}
+.armory-tile.is-passive {
+  border-left: 2px solid var(--green);
+}
+.armory-tile.is-locked {
+  opacity: 0.38;
+  filter: grayscale(0.8);
+}
+.armory-tile img {
+  width: 80%;
+  height: 80%;
+  object-fit: contain;
+  pointer-events: none;
+}
+.tile-rank-badge {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--gold);
+  background: rgba(0, 0, 0, 0.75);
+  padding: 0 3px;
+  border-radius: 3px;
+  line-height: 1.2;
+}
+.tile-rank-badge.max {
+  color: #ff4766;
+  background: rgba(255, 215, 0, 0.2);
+  border: 1px solid var(--gold);
+}
+.tile-equipped-dot {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 5px var(--gold);
+}
+
+/* 即時戰術檢視面板 (Weapon Inspector Pane) */
+.armory-inspector-panel {
+  background: linear-gradient(135deg, rgba(14, 22, 38, 0.95), rgba(8, 14, 24, 0.98));
+  border: 1px solid var(--border-cyan);
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 120px;
+}
+.inspector-empty-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+}
+.inspector-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.inspector-img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  flex-shrink: 0;
+}
+.inspector-title-box {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.inspector-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.inspector-name {
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff;
+}
+.inspector-rank {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--gold);
+}
+.inspector-tags {
+  display: flex;
+  gap: 4px;
+}
+.inspector-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+.inspector-fusion-hint {
+  font-size: 11px;
+  color: var(--gold);
+  background: rgba(245, 188, 56, 0.12);
+  border: 1px solid rgba(245, 188, 56, 0.35);
+  border-radius: 6px;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.inspector-action-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+/* 暫停底部按鈕列 */
+.pause-footer {
+  padding: 10px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  gap: 8px;
+  background: rgba(8, 12, 20, 0.9);
+}
+.pause-footer .btn {
+  flex: 1;
+  min-height: 40px;
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+/* ============================================================
+   行動裝置與平板專屬響應式適配 (Mobile & Tablet Responsive)
+   ============================================================ */
+@supports (padding: max(0px)) {
+  #hud {
+    padding-top: max(10px, env(safe-area-inset-top, 10px));
+    padding-left: max(12px, env(safe-area-inset-left, 12px));
+    padding-right: max(12px, env(safe-area-inset-right, 12px));
+  }
+}
+
+.hud-btn#fullscreenBtn {
+  color: var(--cyan);
+  border-color: rgba(51, 224, 224, 0.45);
+  font-size: 13px;
+}
+.hud-btn#fullscreenBtn:active {
+  background: rgba(51, 224, 224, 0.25);
+}
+
+/* 行動端觸控無延遲與文字選取防護 */
+canvas#gameCanvas {
+  touch-action: none !important;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.btn, .opt-btn, .hud-btn {
+  touch-action: manipulation;
+}
+
+/* 窄螢幕與手機排版自適應優化 */
+@media (max-width: 480px) {
+  .title-big {
+    font-size: 30px !important;
+  }
+  .subtitle {
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+    margin-bottom: 8px !important;
+  }
+  .pilot-login-card {
+    max-width: 100% !important;
+    padding: 10px 12px !important;
+  }
+  .quiz-card {
+    padding: 14px 16px !important;
+    max-height: 88vh !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+  .quiz-q-text {
+    font-size: 14.5px !important;
+  }
+  .opt-btn {
+    min-height: 44px !important;
+    padding: 8px 12px !important;
+    font-size: 13px !important;
+  }
+}
+
+/* 極矮螢幕 (例如手機橫屏或彈出軟鍵盤) */
+@media (max-height: 640px) {
+  .overlay {
+    padding: 8px !important;
+    justify-content: flex-start !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+  .title-big {
+    font-size: 24px !important;
+    margin-top: 6px !important;
+  }
+  .subtitle {
+    display: none !important;
+  }
+  .pilot-login-card {
+    margin-top: 6px !important;
+  }
+}
+
+

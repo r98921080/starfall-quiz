@@ -1,0 +1,108 @@
+{
+  "fusions": [
+    {
+      "id": "comet_spirit",
+      "name": "彗星靈丸",
+      "ingredients": ["spirit_bullet", "grenade_launcher"],
+      "minRank": 3,
+      "slotType": "main",
+      "description": "靈丸凝聚重型榴彈爆燃彈頭，命中引發連續巨型核爆與大範圍空間烈焰！",
+      "resonance": {
+        "name": "靈爆共鳴",
+        "effect": "靈丸命中附帶榴彈範圍爆炸"
+      },
+      "trueFusion": {
+        "damageMultiplier": 1.6,
+        "blastCount": 5,
+        "burnAreaSec": 4.0,
+        "screenShake": 1.4
+      }
+    },
+    {
+      "id": "prism_rainbow_sky",
+      "name": "虹晶天幕",
+      "ingredients": ["beam_cannon", "prism_wingman"],
+      "minRank": 3,
+      "slotType": "main",
+      "description": "光束砲穿透稜鏡僚機，向全場四面八方折射出交織滅世雷射光網！",
+      "resonance": {
+        "name": "折光共鳴",
+        "effect": "光束主砲射擊時稜鏡僚機射速翻倍"
+      },
+      "trueFusion": {
+        "dpsMultiplier": 1.8,
+        "refractCount": 6,
+        "crossGrid": true,
+        "pierceShield": true
+      }
+    },
+    {
+      "id": "swarm_hunter",
+      "name": "蜂群獵手",
+      "ingredients": ["homing_missile", "combat_wingman"],
+      "minRank": 3,
+      "slotType": "support",
+      "description": "隨行僚機改裝微型蜂巢飛彈發射架，與主機同時傾瀉漫天巡弋導彈！",
+      "resonance": {
+        "name": "導引共鳴",
+        "effect": "僚機攻擊有機率附帶單發追蹤飛彈"
+      },
+      "trueFusion": {
+        "missilePerSalvo": 8,
+        "wingmanSalvoSec": 1.5,
+        "targetPrioritizeBoss": true
+      }
+    },
+    {
+      "id": "orbital_aegis",
+      "name": "軌道壁壘",
+      "ingredients": ["jade_chakram", "quantum_shield"],
+      "minRank": 3,
+      "slotType": "sub",
+      "description": "青玉飛輪與埃癸斯神盾合為一體，環繞生成無死角偏折光幕，攔截敵彈充電！",
+      "resonance": {
+        "name": "偏折共鳴",
+        "effect": "飛輪每消除 5 顆敵彈縮短護盾冷卻 1 秒"
+      },
+      "trueFusion": {
+        "shieldCooldownMult": 0.6,
+        "absorbToSync": true,
+        "reflectBullets": true
+      }
+    },
+    {
+      "id": "meltdown_impact",
+      "name": "熔核轟擊",
+      "ingredients": ["grenade_launcher", "singularity_core"],
+      "minRank": 3,
+      "slotType": "sub",
+      "description": "重裝熔岩榴彈灌注虛空重力奇點，著彈形成坍縮引力熔爐，吸扯並引爆周遭全部敵彈！",
+      "resonance": {
+        "name": "燃爆共鳴",
+        "effect": "榴彈爆炸 100% 觸發燃燒"
+      },
+      "trueFusion": {
+        "igniteEnemyBullets": true,
+        "lavaPoolDps": 180,
+        "lavaDurationSec": 5.0
+      }
+    },
+    {
+      "id": "chrono_judgement",
+      "name": "凝時裁決",
+      "ingredients": ["beam_cannon", "time_dilation"],
+      "minRank": 3,
+      "slotType": "main",
+      "description": "高能光束撕裂時空連續體，光束釋放時全場敵機與彈幕進入極致慢速！",
+      "resonance": {
+        "name": "時滯共鳴",
+        "effect": "光束擊中敵機使其減速 40%"
+      },
+      "trueFusion": {
+        "globalSlowDuringBeam": 0.5,
+        "bossWarningExtension": 1.5,
+        "critChanceBonus": 0.3
+      }
+    }
+  ]
+}

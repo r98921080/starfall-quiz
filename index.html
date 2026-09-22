@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#060912">
+  <link rel="manifest" href="manifest.json">
+  <title>星墜答問：神話機神｜StarFall Quiz: Mythic Mecha</title>
+  <link href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@700,800,900&f[]=satoshi@500,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="appWrap">
+  <div id="stage">
+    <!-- 遊戲主畫布 -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- 頂部 HUD -->
+    <div id="hud">
+      <div class="hud-group">
+        <div class="hud-panel">
+          <span class="hud-label">STAGE / WAVE</span>
+          <span class="hud-val" id="hudStageWave">關卡 1-1</span>
+        </div>
+        <div class="hud-panel">
+          <span class="hud-label">SCORE</span>
+          <span class="hud-val" id="hudScore">0</span>
+        </div>
+        <div class="hud-panel" id="hudPressurePanel">
+          <span class="hud-label">知識壓力</span>
+          <span class="hud-val" id="hudPressure" style="color:var(--cyan); font-size:12px;">Lv.0 (平穩)</span>
+        </div>
+      </div>
+
+      <div class="hud-group" style="align-items:flex-end;">
+        <div style="display:flex; gap:6px;">
+          <button class="hud-btn" id="fullscreenBtn" aria-label="全螢幕切換" title="切換全螢幕">⛶</button>
+          <button class="hud-btn bgm-btn" id="bgmBtn" aria-label="音樂切換">🎵</button>
+          <button class="hud-btn lab-btn" id="labBtn" aria-label="開啟 LAB 測試面板">LAB</button>
+          <button class="hud-btn" id="pauseBtn" aria-label="暫停遊戲">⏸</button>
+        </div>
+        <div class="hud-panel" style="align-items:flex-end; margin-top:4px;">
+          <span class="hud-label">ARMOR HP</span>
+          <div class="hp-cells" id="hudHpCells">
+            <div class="hp-cell active"></div>
+            <div class="hp-cell active"></div>
+            <div class="hp-cell active"></div>
+          </div>
+          <div class="shield-badge off" id="hudShieldBadge">🛡 護盾離線</div>
+        </div>
+        <div class="hud-panel" style="align-items:flex-end; margin-top:2px;">
+          <span class="hud-label">擦彈同步值</span>
+          <div class="sync-wrap"><div class="sync-bar" id="hudSyncBar"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Boss 頂部大型血條 -->
+    <div id="bossHud">
+      <div class="boss-title-row">
+        <span class="boss-name" id="bossName">迦樓羅・裂空王</span>
+        <span class="boss-phase-badge" id="bossPhase">PHASE 1</span>
+      </div>
+      <div class="boss-bar-frame">
+        <div class="boss-bar-ghost" id="bossHpGhost"></div>
+        <div class="boss-bar-fill" id="bossHpFill"></div>
+        <div class="boss-shield-fill" id="bossShieldFill"></div>
+      </div>
+    </div>
+
+    <!-- Boss 大招警告橫幅 -->
+    <div id="ultimateWarning">
+      <span class="warning-sub">WARNING // HIGH ENERGY SIGNATURE</span>
+      <span class="warning-title" id="warningTitle">迦樓羅：一飛沖天！</span>
+    </div>
+
+    <!-- Boss / 小 Boss 震撼出場全屏警報橫幅 -->
+    <div id="bossEntranceOverlay" class="hidden">
+      <div class="boss-entrance-stripe"></div>
+      <div class="boss-entrance-box">
+        <div class="boss-entrance-alert-badge" id="bossEntranceBadge">⚠️ WARNING: MYTHIC MECHA DETECTED ⚠️</div>
+        <div class="boss-entrance-title" id="bossEntranceTitle">【迦樓羅・裂空王】降臨</div>
+        <div class="boss-entrance-sub" id="bossEntranceSub">神話神格展開 // 全域警戒模式啟動</div>
+      </div>
+      <div class="boss-entrance-stripe"></div>
+    </div>
+
+    <!-- Boss 破滅神格寂滅對話橫幅 -->
+    <div id="bossDefeatOverlay" class="hidden">
+      <div class="boss-defeat-card">
+        <div class="boss-defeat-badge">💥 MYTHIC MECHA ANNIHILATED // 神格破滅</div>
+        <div class="boss-defeat-name" id="bossDefeatName">【迦樓羅・裂空王】</div>
+        <div class="boss-defeat-quote" id="bossDefeatQuote">「你竟然刮傷了我美麗的羽毛...難道是龍族派你來的嗎？！」</div>
+      </div>
+    </div>
+
+    <!-- 獨立靈丸集氣區 (右下方) -->
+    <div id="spiritChargeZone" role="button" aria-label="靈丸集氣區">
+      <svg id="spiritRingSvg" viewBox="0 0 84 84">
+        <circle id="spiritRingCircle" cx="42" cy="42" r="40"></circle>
+      </svg>
+      <span class="spirit-text" id="spiritChargeText">靈丸</span>
+      <span class="spirit-sub" id="spiritChargeSub">按住蓄力</span>
+    </div>
+
+    <!-- 開始選單 Overlay -->
+    <div class="overlay" id="startScreen">
+      <h1 class="title-big">星墜答問<br><span style="font-size:0.65em; letter-spacing:0.04em;">神話機神</span></h1>
+      <p class="subtitle">直向射擊 × 知識解謎。按住畫面任意處（或滑鼠左鍵）即可引導戰機並同時蓄力靈丸，鬆開手指或左鍵立即發射巨大靈丸！擊敗 Boss 後回答題目，以知識升級武器品質與觸發真融合！</p>
+      
+      <!-- 學生身分登錄與獨立學習歷程卡片 -->
+      <div class="pilot-login-card" style="margin-top:12px; background:rgba(18,26,44,0.85); border:1px solid rgba(56,189,248,0.35); border-radius:12px; padding:12px 16px; width:100%; max-width:330px; box-sizing:border-box;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <span style="font-size:12px; font-weight:800; color:var(--cyan); letter-spacing:0.04em;">🧑‍✈️ 駕駛員學員 (獨立出題歷程)</span>
+          <span id="studentIdBadge" style="font-size:11px; font-weight:700; color:var(--gold); background:rgba(245,188,56,0.15); border:1px solid rgba(245,188,56,0.4); padding:2px 8px; border-radius:10px;">序號：S0001</span>
+        </div>
+        
+        <!-- 現有學員快速切換或新學員模式 -->
+        <div style="margin-bottom:8px;">
+          <select id="studentSelect" style="width:100%; background:#0c1220; color:var(--gold); border:1px solid #334d70; border-radius:6px; padding:6px 8px; font-size:12px; font-weight:700; outline:none;">
+            <option value="__new__">➕ 註冊新駕駛員學員...</option>
+          </select>
+        </div>
+
+        <div style="display:flex; gap:8px; margin-bottom:6px;">
+          <input type="text" id="studentNameInput" placeholder="學生姓名 (如: 王小明)" maxlength="16" style="flex:1.2; background:#0c1220; color:#fff; border:1px solid #233554; border-radius:6px; padding:6px 10px; font-size:13px; font-weight:600; outline:none;">
+          <select id="studentGradeSelect" style="flex:0.8; background:#0c1220; color:var(--cyan); border:1px solid #233554; border-radius:6px; padding:6px 8px; font-size:12px; font-weight:700; outline:none;">
+            <option value="三年級">三年級</option>
+            <option value="一年級">一年級</option>
+            <option value="二年級">二年級</option>
+            <option value="四年級">四年級</option>
+            <option value="五年級">五年級</option>
+            <option value="六年級">六年級</option>
+            <option value="國中">國中</option>
+          </select>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
+          <span id="studentMistakeBadge" style="font-size:11px; color:#ff99aa; font-weight:700;">待雪恥錯題：0 題</span>
+          <button id="registerStudentBtn" class="btn" style="min-height:28px; padding:4px 10px; font-size:11px; border-radius:6px;">確認學員</button>
+        </div>
+        <div id="studentSyncStatus" style="font-size:11px; color:var(--text-muted); text-align:left; margin-top:6px;">雲端作答歷程將如實記錄至 Google Sheet</div>
+      </div>
+
+      <div style="margin-top:10px; display:flex; flex-direction:column; gap:6px; align-items:center;">
+        <label style="font-size:12px; color:var(--text-muted); font-weight:700;">選擇啟始關卡：</label>
+        <select id="startStageSelect" style="background:#121a2c; color:var(--cyan); border:1px solid var(--border-cyan); padding:8px 16px; border-radius:8px; font-weight:700; font-size:14px; outline:none;">
+          <option value="1">第 1 關：迦樓羅・裂空王 (神鳥羽刃)</option>
+          <option value="2">第 2 關：雷公・震霄 (雷鼓落雷)</option>
+          <option value="3">第 3 關：美杜莎・返照 (蛇鏡反射)</option>
+          <option value="4">第 4 關：饕餮・萬喰 (引力吞噬)</option>
+          <option value="5">第 5 關：阿特拉斯・墜星 (重力壓頂)</option>
+          <option value="6">第 6 關：雅典娜・神盾 (極性神盾)</option>
+          <option value="7">第 7 關：許德拉・再生 (多首重生)</option>
+          <option value="8">第 8 關：獨眼巨人・天爐 (熔爐掃射)</option>
+          <option value="9">第 9 關：玉藻前・幻械 (九尾幻影)</option>
+          <option value="10">第 10 關：提亞瑪特・混沌母艦 (創世混沌)</option>
+        </select>
+      </div>
+
+      <!-- 初始武裝選擇入口 -->
+      <div style="margin-top:10px; display:flex; flex-direction:column; align-items:center; gap:6px;">
+        <button class="btn sm gold" id="openHangarBtn" style="min-height:38px; font-size:13px; padding:6px 16px;">
+          ⚙️ 初始武裝整備 (選擇 16 款首發武器)
+        </button>
+        <div id="startWeaponBadge" style="font-size:12px; color:var(--cyan-bright); font-weight:700;">
+          當前首發武裝：多管神機砲 Lv.1
+        </div>
+      </div>
+
+      <div class="btn-row" style="margin-top:10px;">
+        <button class="btn" id="startPlayBtn">出擊出航</button>
+        <button class="btn ghost" id="openGsBtn">連線 Google Sheet</button>
+      </div>
+      <p class="subtitle" style="font-size:11px; margin-top:12px;">📱 操作提示：點按或滑動螢幕任何一處皆可直接集氣，手指移開即發射！無需尋找集氣按鈕。</p>
+    </div>
+
+    <!-- 初始武裝整備機庫 Overlay (Hangar Loadout) -->
+    <div class="overlay hidden" id="hangarOverlay">
+      <div id="hangarModal">
+        <div class="modal-header">
+          <h2>戰機初始武裝整備艙</h2>
+          <button class="hud-btn" id="closeHangarBtn" style="min-width:36px; min-height:36px; font-size:18px;">✕</button>
+        </div>
+        <p style="font-size:12px; color:var(--text-muted); padding:10px 18px 0; margin:0;">
+          請挑選 1 款作為戰機的初始首發主武裝（出擊即裝備 Lv.1）：
+        </p>
+        <div class="hangar-scroll-list" id="hangarWeaponsList">
+          <!-- 動態載入 16 款武器卡片 -->
+        </div>
+        <div style="padding:12px 18px; border-top:1px solid rgba(255,255,255,0.1); display:flex; justify-content:flex-end;">
+          <button class="btn sm" id="confirmHangarBtn" style="min-height:40px; font-size:13px;">確認出擊配置</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 暫停選單 Overlay (含作戰武裝庫與主動武器即時更換) -->
+    <div class="overlay hidden" id="pauseScreen">
+      <div id="pauseModal">
+        <div class="modal-header">
+          <h2>戰術中斷 // 作戰武裝庫整備</h2>
+          <button class="hud-btn" id="resumeHeaderBtn" style="min-width:36px; min-height:36px; font-size:18px;">✕</button>
+        </div>
+
+        <div class="modal-body pause-armory-body">
+          <!-- 核心火控固定提示 (精簡條) -->
+          <div class="base-fire-banner">
+            <div class="base-fire-icon">⚡</div>
+            <div class="base-fire-info">
+              <span class="base-fire-title">常規火控：天青雙聯機砲 (常駐發射)</span>
+              <span class="base-fire-desc">無論更換何種武裝，戰機始終保有雙管基礎彈幕。</span>
+            </div>
+          </div>
+
+          <!-- 主動武器裝備槽 (上限 3 個，免捲動完整展示) -->
+          <div class="armory-section-header">
+            <span>⚔️ 當前主動武裝 (<span id="activeSlotsCount">0 / 3</span> 款主彈道)</span>
+            <span style="font-size:11px; color:var(--text-muted);">最多同時啟動 3 款</span>
+          </div>
+          <div class="active-slots-compact-grid" id="pauseActiveSlotsGrid">
+            <!-- 動態生成 3 個緊湊雙行主動槽位 -->
+          </div>
+
+          <!-- 武器庫存分區圖示網格與即時檢視窗容器 -->
+          <div class="armory-interactive-layout">
+            <!-- 左側/上方：分類圖示網格 -->
+            <div class="armory-grid-column">
+              <div class="armory-sub-header">
+                <span>⚔️ 主動戰鬥武裝 (空位時點擊自動裝備)</span>
+              </div>
+              <div class="armory-tiles-container" id="pauseActiveTilesContainer">
+                <!-- 動態生成主動武器小圖示 -->
+              </div>
+
+              <div class="armory-sub-header" style="margin-top:10px;">
+                <span>🛡️ 被動增益模組 (常駐自律生效，不佔主動槽)</span>
+              </div>
+              <div class="armory-tiles-container" id="pausePassiveTilesContainer">
+                <!-- 動態生成被動武器小圖示 -->
+              </div>
+            </div>
+
+            <!-- 右側/下方：即時戰術檢視面板 (Inspector) -->
+            <div class="armory-inspector-panel" id="armoryInspector">
+              <div class="inspector-empty-hint">請滑鼠懸停或點選任一武器圖示以檢視詳細性能</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer pause-footer">
+          <button class="btn" id="resumeBtn">繼續戰鬥</button>
+          <button class="btn ghost" id="pauseGsBtn">Google Sheet 設定</button>
+          <button class="btn ghost" id="pauseLabBtn">開啟 LAB</button>
+          <button class="btn danger" id="restartBtn">重新開始</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 答題卡 Overlay (Quiz Screen) -->
+    <div class="overlay hidden" id="quizScreen">
+      <div id="quizCard">
+        <div class="quiz-header">
+          <div class="quiz-badges">
+            <span class="quiz-badge" id="quizSubjectBadge">國語文</span>
+            <span class="quiz-badge" id="quizSkillBadge">字形辨識</span>
+            <span class="quiz-badge" id="quizReviewBadge" style="display:none; color:var(--gold); border-color:var(--gold);">錯題復仇</span>
+          </div>
+          <span class="quiz-diff" id="quizDiff">★★☆</span>
+        </div>
+
+        <div class="quiz-q-text" id="quizQuestion">題目載入中...</div>
+        
+        <div class="quiz-opts" id="quizOpts">
+          <!-- 選項按鈕 -->
+        </div>
+
+        <div class="quiz-timer-bar">
+          <div class="quiz-timer-fill" id="quizTimerFill"></div>
+        </div>
+
+        <div class="quiz-explain" id="quizExplain"></div>
+      </div>
+    </div>
+
+    <!-- 升級與整備 Overlay (Upgrade Screen) -->
+    <div class="overlay hidden" id="upgradeScreen">
+      <div id="upgradeCardModal">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h2 style="font-family:var(--font-display); font-size:18px; color:var(--cyan);">戰術裝備整備</h2>
+          <span id="upgradeQualityBadge" style="font-size:11px; font-weight:800; padding:3px 8px; border-radius:4px; background:rgba(245,188,56,0.2); color:var(--gold); border:1px solid var(--gold);">稀有品質 (1.35x)</span>
+        </div>
+        <p style="font-size:12px; color:var(--text-muted);">答題答對 <b id="upgradeCorrectCount" style="color:var(--cyan-bright);">3/5</b> 題。請選擇一項武器、模組或升階強化：</p>
+        
+        <div class="upgrade-cards-grid" id="upgradeCardsGrid">
+          <!-- 3 張可選卡片 -->
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
+          <button class="btn ghost sm" id="skipUpgradeBtn" style="min-height:36px; padding:6px 14px; font-size:12px;">略過整備</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 遊戲結束 / 結算 Overlay -->
+    <div class="overlay hidden" id="gameOverScreen">
+      <h2 class="title-big" id="gameOverTitle" style="font-size:2.4rem;">任務完成</h2>
+      <div class="hud-panel" style="flex-direction:row; gap:24px; padding:16px 24px; margin-top:14px;">
+        <div style="text-align:center;">
+          <div class="hud-label">最終得分</div>
+          <div class="hud-val" id="endScore" style="font-size:24px; color:var(--cyan-bright);">0</div>
+        </div>
+        <div style="text-align:center;">
+          <div class="hud-label">達成關卡</div>
+          <div class="hud-val" id="endStage" style="font-size:24px;">1</div>
+        </div>
+        <div style="text-align:center;">
+          <div class="hud-label">答題正確率</div>
+          <div class="hud-val" id="endAcc" style="font-size:24px; color:var(--green);">0%</div>
+        </div>
+      </div>
+      <div class="btn-row" style="margin-top:20px;">
+        <button class="btn" id="playAgainBtn">再次出擊</button>
+      </div>
+    </div>
+
+    <!-- Google Sheet 連線設定 Modal -->
+    <div class="overlay hidden" id="gsOverlay">
+      <div id="gsModal">
+        <div class="modal-header">
+          <h2>Google Sheet 雲端連線設定</h2>
+          <button class="hud-btn" id="closeGsBtn" style="min-width:36px; min-height:36px; font-size:18px;">✕</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size:12px; color:var(--text-muted); line-height:1.5;">
+            貼上你在 Google Apps Script 部署成功的 Web App 網址（必須以 <code style="color:var(--cyan);">/exec</code> 結尾），即可連線至你的雲端試算表讀取題庫並自動上傳作答紀錄！
+          </p>
+
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <label style="font-size:12px; font-weight:700; color:var(--cyan);">Apps Script Web App 網址：</label>
+            <input type="text" class="input-field" id="gsUrlInput" placeholder="https://script.google.com/macros/s/AKfycb.../exec">
+          </div>
+
+          <div class="btn-row" style="margin-top:6px; justify-content:space-between;">
+            <button class="btn sm" id="gsSaveBtn" style="flex:1;">儲存設定</button>
+            <button class="btn sm gold" id="gsTestBtn" style="flex:1;">連線診斷測試</button>
+          </div>
+
+          <div id="gsStatusBox" style="background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:12px; font-size:12px; line-height:1.5; color:#fff;">
+            狀態：尚未測試連線。
+          </div>
+
+          <div style="font-size:11px; color:var(--text-muted); border-top:1px solid rgba(255,255,255,0.08); padding-top:10px;">
+            📖 尚未建立試算表？請參閱專案目錄中的 <code style="color:var(--cyan-bright);">docs/GS-SETUP.md</code> 完整圖文指引。
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 戰鬥內 LAB 測試面板 (In-game Lab Modal) -->
+    <div class="overlay hidden" id="labOverlay">
+      <div id="labModal">
+        <div class="modal-header lab-header">
+          <h2>戰鬥內 LAB 即時調校面板</h2>
+          <button class="hud-btn" id="closeLabBtn" style="min-width:36px; min-height:36px; font-size:18px;">✕</button>
+        </div>
+        
+        <div class="lab-tabs">
+          <button class="lab-tab active" data-tab="weapons">武器調控</button>
+          <button class="lab-tab" data-tab="bosses">Boss 召喚</button>
+          <button class="lab-tab" data-tab="battle">戰鬥除錯</button>
+          <button class="lab-tab" data-tab="quiz">答題學習</button>
+        </div>
+
+        <div class="modal-body">
+          <!-- 武器分頁 -->
+          <div class="lab-panel active" id="labPanel-weapons">
+            <span class="lab-section-title">全域品質設定</span>
+            <div class="lab-grid3" style="margin-bottom:10px;">
+              <button class="lab-toggle-btn" data-quality="common">普通 (1.0x)</button>
+              <button class="lab-toggle-btn" data-quality="good">優良 (1.15x)</button>
+              <button class="lab-toggle-btn active" data-quality="rare">稀有 (1.35x)</button>
+              <button class="lab-toggle-btn" data-quality="epic">史詩 (1.65x)</button>
+              <button class="lab-toggle-btn" data-quality="legendary">傳說 (2.00x)</button>
+            </div>
+
+            <div class="lab-row" style="margin-bottom:10px;">
+              <button class="btn sm gold" id="labMaxAllBtn" style="flex:1; min-height:40px; font-size:13px;">一鍵全部滿階 (Rank 5)</button>
+              <button class="btn sm ghost" id="labClearAllBtn" style="flex:1; min-height:40px; font-size:13px;">清空所有副武/模組</button>
+            </div>
+
+            <span class="lab-section-title">⚡ 六大真融合武器 (即時點擊開關)</span>
+            <div id="labFusionsList" class="lab-grid2" style="margin-bottom:12px;">
+              <!-- 動態生成 6 種真融合武器切換按鈕 -->
+            </div>
+
+            <span class="lab-section-title">個別武器 Rank 調節 (0–5)</span>
+            <div id="labWeaponsList" style="display:flex; flex-direction:column; gap:8px;">
+              <!-- 動態生成 14 種武器滑桿與按鈕 -->
+            </div>
+          </div>
+
+          <!-- Boss 分頁 -->
+          <div class="lab-panel" id="labPanel-bosses" style="display:none;">
+            <span class="lab-section-title">即時生成 Boss</span>
+            <div class="lab-grid2">
+              <button class="btn sm" id="labSpawnMiniBossBtn" style="min-height:42px; font-size:13px;">生成小 Boss</button>
+              <button class="btn sm gold" id="labSpawnMajorBossBtn" style="min-height:42px; font-size:13px;">生成當前大 Boss</button>
+            </div>
+            
+            <div style="margin-top:10px;">
+              <label style="font-size:12px; color:var(--text-muted); font-weight:700;">選擇關卡 Boss：</label>
+              <select id="labBossSelect" style="width:100%; background:#121a2c; color:var(--cyan); border:1px solid var(--border-cyan); padding:8px; border-radius:8px; font-weight:700; margin-top:4px;">
+                <option value="1">1. 迦樓羅・裂空王 (神鳥俯衝)</option>
+                <option value="2">2. 雷公・震霄 (落雷引導)</option>
+                <option value="3">3. 美杜莎・返照 (蛇鏡折射)</option>
+                <option value="4">4. 饕餮・萬喰 (引力黑洞)</option>
+                <option value="5">5. 阿特拉斯・墜星 (重力壓縮)</option>
+                <option value="6">6. 雅典娜・神盾 (極性神盾)</option>
+                <option value="7">7. 許德拉・再生 (多首要塞)</option>
+                <option value="8">8. 獨眼巨人・天爐 (熔爐掃射)</option>
+                <option value="9">9. 玉藻前・幻械 (九尾幻影)</option>
+                <option value="10">10. 提亞瑪特・混沌母艦 (創世混沌)</option>
+              </select>
+            </div>
+
+            <div class="lab-grid2" style="margin-top:10px;">
+              <button class="btn sm ghost" id="labForceUltimateBtn" style="min-height:42px; font-size:13px;">立即觸發大招預警</button>
+              <button class="btn sm danger" id="labKillBossBtn" style="min-height:42px; font-size:13px;">一鍵秒殺當前 Boss</button>
+            </div>
+
+            <span class="lab-section-title" style="margin-top:12px; display:block;">Boss 階段與神話機制深度測試</span>
+            <div class="lab-grid2" style="margin-top:6px;">
+              <button class="btn sm ghost" id="labBossPhase1Btn" style="min-height:38px; font-size:12px;">切換 Phase 1 (常規)</button>
+              <button class="btn sm danger" id="labBossPhase2Btn" style="min-height:38px; font-size:12px;">切換 Phase 2 (狂暴)</button>
+            </div>
+            <div class="lab-grid3" style="margin-top:6px;">
+              <button class="lab-toggle-btn" id="labBossHp100Btn">100% HP</button>
+              <button class="lab-toggle-btn" id="labBossHp50Btn">50% 變身</button>
+              <button class="lab-toggle-btn" id="labBossHp10Btn">10% 瀕死</button>
+            </div>
+            <button class="btn sm gold" id="labTriggerMythicMechanicBtn" style="min-height:40px; font-size:13px; margin-top:8px; width:100%;">
+              ⚡ 立即觸發專屬神話機制 (仙瓶/吞噬/蛇首等)
+            </button>
+          </div>
+
+          <!-- 戰鬥除錯分頁 -->
+          <div class="lab-panel" id="labPanel-battle" style="display:none;">
+            <span class="lab-section-title">戰場狀態與輔助開關</span>
+            <div class="lab-grid2">
+              <button class="lab-toggle-btn" id="labGodmodeBtn">無敵模式：關</button>
+              <button class="lab-toggle-btn" id="labHitboxBtn">顯示碰撞框：關</button>
+            </div>
+
+            <div class="lab-grid2" style="margin-top:8px;">
+              <button class="btn sm ghost" id="labClearBulletsBtn" style="min-height:40px; font-size:13px;">清空場上敵彈</button>
+              <button class="btn sm ghost" id="labSpawnDummyBtn" style="min-height:40px; font-size:13px;">生成測試木樁</button>
+            </div>
+
+            <div style="background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:10px; margin-top:10px;">
+              <div style="font-size:11px; color:var(--text-muted); font-weight:700;">即時輸出統計 (DPS)</div>
+              <div style="font-size:20px; font-weight:800; color:var(--cyan-bright); font-family:var(--font-display);" id="labDpsVal">0 DPS</div>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:4px;" id="labDpsSub">總傷害：0 ｜ 擦彈計數：0</div>
+            </div>
+          </div>
+
+          <!-- 題庫與學習分頁 -->
+          <div class="lab-panel" id="labPanel-quiz" style="display:none;">
+            <span class="lab-section-title">答題演算法與自適應模擬</span>
+            <div class="lab-grid2">
+              <button class="btn sm" id="labTriggerQuizBtn" style="min-height:40px; font-size:13px;">立即觸發 5 題答題</button>
+              <button class="btn sm ghost" id="labSimulatePerfectBtn" style="min-height:40px; font-size:13px;">模擬 5/5 全對</button>
+            </div>
+            
+            <div class="lab-grid2" style="margin-top:8px;">
+              <button class="btn sm ghost" id="labSimulateLowBtn" style="min-height:40px; font-size:13px;">模擬 1/5 答題 (加壓)</button>
+              <button class="btn sm ghost" id="labResetPressureBtn" style="min-height:40px; font-size:13px;">歸零知識壓力</button>
+            </div>
+
+            <div style="background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:10px; margin-top:10px;">
+              <div style="font-size:11px; color:var(--text-muted); font-weight:700;">題庫狀態</div>
+              <div style="font-size:13px; color:#fff; margin-top:4px;" id="labBankStatus">已載入 150 題 ｜ 離線同調隊列：0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 浮動提示 Toast -->
+    <div id="toast">提示訊息</div>
+  </div>
+</div>
+
+<!-- 腳本引入 -->
+<script src="starfall-game-api-config.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

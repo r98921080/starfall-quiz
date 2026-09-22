@@ -1,0 +1,374 @@
+{
+  "mini_boss": {
+    "id": "mini_boss",
+    "name": "星宿巡察艦・前哨神械",
+    "title": "先鋒精英機甲",
+    "asset": "assets/bosses/boss_mini.png",
+    "baseHp": 50000,
+    "width": 140,
+    "height": 140,
+    "hitboxRadius": 42,
+    "shieldType": "none",
+    "introVoice": "前方偵測到高能前哨機神！",
+    "defeatVoiceLine": "先鋒巡察艦...動力核心過載停機！",
+    "phaseThresholds": [0.5],
+    "skills": [
+      {
+        "id": "pulse_barrage",
+        "name": "天宿連射",
+        "cooldown": 4.5,
+        "type": "fan",
+        "bulletCount": 7,
+        "speed": 220
+      },
+      {
+        "id": "charge_slash",
+        "name": "破空突進",
+        "cooldown": 8.0,
+        "type": "charge",
+        "warningTime": 2.0,
+        "voiceLine": "前哨突襲！"
+      }
+    ]
+  },
+  "bosses": [
+    {
+      "stage": 1,
+      "id": "garuda",
+      "name": "迦樓羅・裂空王",
+      "title": "金黑機械神鳥",
+      "asset": "assets/bosses/boss_1_garuda.png",
+      "baseHp": 120000,
+      "width": 190,
+      "height": 190,
+      "hitboxRadius": 48,
+      "shieldType": "white",
+      "introVoice": "裂空之翼，斬斷星河！",
+      "defeatVoiceLine": "你竟然刮傷了我美麗的羽毛...難道是龍族派你來的嗎？！",
+      "phases": 2,
+      "ultimates": [
+        {
+          "id": "skyward_dive",
+          "name": "金羽裂空・天罰降臨",
+          "warningTime": 2.5,
+          "voiceLine": "迦樓羅：金羽裂空・天罰降臨！",
+          "description": "漫天正弦金羽瀑布灑落全場",
+          "damage": 2
+        },
+        {
+          "id": "feather_barrage",
+          "name": "神鳥一飛沖天・滅世羽嵐",
+          "warningTime": 2.5,
+          "voiceLine": "迦樓羅：一飛沖天・滅世羽嵐！",
+          "description": "急速掠空俯衝並留下滯空 3 秒定時引爆金羽",
+          "damage": 2
+        }
+      ]
+    },
+    {
+      "stage": 2,
+      "id": "leigong",
+      "name": "雷公・震霄",
+      "title": "雷鼓機神",
+      "asset": "assets/bosses/boss_2_leigong.png",
+      "baseHp": 135000,
+      "width": 190,
+      "height": 190,
+      "hitboxRadius": 50,
+      "shieldType": "blue",
+      "introVoice": "天雷萬丈，皆由我發！",
+      "defeatVoiceLine": "雷霆...竟然熄滅了？！凡人的意志，竟能凌駕於天罰之上...",
+      "phases": 2,
+      "ultimates": [
+        {
+          "id": "thunder_grid",
+          "name": "雷鼓震天・五芒破界",
+          "warningTime": 2.6,
+          "voiceLine": "雷公：雷鼓震天・五芒破界！",
+          "description": "五芒星雷射矩陣激發雷球迸射",
+          "damage": 2
+        },
+        {
+          "id": "flash_rush",
+          "name": "九天雷霆萬鈞・十連絕滅",
+          "warningTime": 2.6,
+          "voiceLine": "雷公：九天雷霆萬鈞・十連絕滅！",
+          "description": "天頂驚雷十連劈，巨型白色閃電直貫全場",
+          "damage": 2
+        }
+      ]
+    },
+    {
+      "stage": 3,
+      "id": "medusa",
+      "name": "美杜莎・返照",
+      "title": "蛇鏡反射機神",
+      "asset": "assets/bosses/boss_3_medusa.png",
+      "baseHp": 155000,
+      "width": 190,
+      "height": 190,
+      "hitboxRadius": 48,
+      "shieldType": "purple",
+      "introVoice": "凡凝視我者，化為齏粉！",
+      "defeatVoiceLine": "石化的視線...為什麼無效？！這冰冷的凝視...我好睏...",
+      "phases": 2,
+      "ultimates": [
+        {
+          "id": "petrify_gaze",
+          "name": "萬蛇凝視・石化神光",
+          "warningTime": 2.8,
+          "voiceLine": "美杜莎：萬蛇凝視・石化神光！",
+          "description": "扇形石化光束與紫色環形反射彈幕",
+          "damage": 2
+        },
+        {
+          "id": "mirror_reflection",
+          "name": "顧影自憐・蛇鏡天幕",
+          "warningTime": 2.6,
+          "voiceLine": "美杜莎：顧影自憐・蛇鏡天幕！",
+          "description": "召喚蛇髮鏡像分身折射高能雷射光網",
+          "damage": 2
+        }
+      ]
+    },
+    {
+      "stage": 4,
+      "id": "taotie",
+      "name": "饕餮・萬喰",
+      "title": "巨口吞噬母艦",
+      "asset": "assets/bosses/boss_4_taotie.png",
+      "baseHp": 175000,
+      "width": 200,
+      "height": 200,
+      "hitboxRadius": 54,
+      "shieldType": "green",
+      "introVoice": "萬物入腹，飢渴難耐！",
+      "defeatVoiceLine": "飢餓...永恆的飢餓！吞下了不可名狀的熱能...肚子要爆開了——！",
+      "phases": 2,
+      "ultimates": [
+        {
+          "id": "vortex_pull",
+          "name": "黑洞引力・貪婪坍縮",
+          "warningTime": 2.5,
+          "voiceLine": "饕餮：黑洞引力・貪婪坍縮！",
+          "description": "中心黑洞強大引力吸引戰機並射出綠色濁流",
+          "damage": 1
+        },
+        {
+          "id": "devour_heal",
+          "name": "噬天吞地・萬獸狂食",
+          "warningTime": 3.0,
+          "voiceLine": "饕餮：噬天吞地・萬獸狂食！",
+          "description": "狂暴召喚暴食傀儡吞噬回復裝甲並釋放熔火腐蝕彈",
+          "damage": 2
+        }
+      ]
+    },
+    {
+      "stage": 5,
+      "id": "atlas",
+      "name": "阿特拉斯・墜星",
+      "title": "重力巨神",
+      "asset": "assets/bosses/boss_5_atlas.png",
+      "baseHp": 195000,
+      "width": 210,
+      "height": 210,
+      "hitboxRadius": 56,
+      "shieldType": "orange",
+      "introVoice": "蒼穹傾覆，以此身為柱！",
+      "defeatVoiceLine": "連天空的重量我都承受得住...為什麼撐不起你這一擊？！天穹...崩塌了！",
+      "phases": 2,
+      "ultimates": [
+        {
+          "id": "gravity_press",
+          "name": "泰坦重壓・地動山搖",
+          "warningTime": 2.8,
+          "voiceLine": "阿特拉斯：泰坦重壓・地動山搖！",
+          "description": "超強重力場下沉震擊，引發全屏星體碎屑震顫",
+          "damage": 2
+        },
+        {
+          "id": "asteroid_toss",
+          "name": "群星墜落・蒼穹傾覆",
+          "warningTime": 2.6,
+          "voiceLine": "阿特拉斯：群星墜落・蒼穹傾覆！",
+          "description": "引力投擲巨型隕石核心碎裂擴散",
+          "damage": 2
+        }
+      ]
+    },
+    {
+      "stage": 6,
+      "id": "athena",
+      "name": "雅典娜・神盾",
+      "title": "極性神盾機神",
+      "asset": "assets/bosses/boss_6_athena.png",
+      "baseHp": 215000,
+      "width": 195,
+      "height": 195,
+      "hitboxRadius": 50,
+      "shieldType": "shift",
+      "introVoice": "智慧與堅壁，立於不敗！",
+      "defeatVoiceLine": "神盾的極性序列被解析了？！這不是蠻力...這是智慧的勝利，凡人！",
+      "phases": 2,
+      "ultimates": [
+        {
+          "id": "aegis_fortress",
+          "name": "固若金湯・聖裁之盾",
+          "warningTime": 2.5,
+          "voiceLine": "雅典娜：固若金湯・聖裁之盾！",
+          "description": "極性神盾全面展開，浮游炮環繞齊射",
+          "damage": 2
+        },
+        {
+          "id": "lance_counter",
+          "name": "長槍貫日・以矛破盾",
+          "warningTime": 2.7,
+          "voiceLine": "雅典娜：長槍貫日・以矛破盾！",
+          "description": "凝聚神聖光束長槍貫穿全場",
+          "damage": 2
+        }
+      ]
+    },
+    {
+      "stage": 7,
+      "id": "hydra",
+      "name": "許德拉・再生",
+      "title": "多首再生要塞",
+      "asset": "assets/bosses/boss_7_hydra.png",
+      "baseHp": 235000,
+      "width": 210,
+      "height": 210,
+      "hitboxRadius": 55,
+      "shieldType": "green",
+      "introVoice": "斬我一首，重生雙頭！",
+      "defeatVoiceLine": "砍下一顆頭明明會長出兩顆...為什麼劇毒之血在燃燒？！",
+      "phases": 2,
+      "ultimates": [
+        {
+          "id": "regrowth_mutate",
+          "name": "九首死靈・毒沼暴湧",
+          "warningTime": 2.5,
+          "voiceLine": "許德拉：九首死靈・毒沼暴湧！",
+          "description": "九蛇首齊射墨綠劇毒光束與環形酸液",
+          "damage": 2
+        },
+        {
+          "id": "decapitate_hunt",
+          "name": "萬毒弒神・死灰復燃",
+          "warningTime": 2.8,
+          "voiceLine": "許德拉：萬毒弒神・死灰復燃！",
+          "description": "蛇首分裂出動，全屏游移獵殺",
+          "damage": 2
+        }
+      ]
+    },
+    {
+      "stage": 8,
+      "id": "cyclops",
+      "name": "獨眼巨人・天爐",
+      "title": "熔爐獨眼機神",
+      "asset": "assets/bosses/boss_8_cyclops.png",
+      "baseHp": 255000,
+      "width": 205,
+      "height": 205,
+      "hitboxRadius": 54,
+      "shieldType": "orange",
+      "introVoice": "天爐熔火，鑄造破滅！",
+      "defeatVoiceLine": "天爐的神火...熄滅了！你的機甲鋼鐵比赫菲斯托斯的熔爐還要熾熱！",
+      "phases": 2,
+      "ultimates": [
+        {
+          "id": "retaliation_beam",
+          "name": "天爐神火・睚眥熔射",
+          "warningTime": 2.6,
+          "voiceLine": "獨眼巨人：天爐神火・睚眥熔射！",
+          "description": "鎖定自機軸線瞬間釋放熔融天爐雷射柱",
+          "damage": 2
+        },
+        {
+          "id": "cyclops_sweep",
+          "name": "赫菲斯托斯・滅世掃蕩",
+          "warningTime": 3.0,
+          "voiceLine": "獨眼巨人：赫菲斯托斯・滅世掃蕩！",
+          "description": "獨眼核聚變 360 度旋轉天爐光束掃射全場",
+          "damage": 3
+        }
+      ]
+    },
+    {
+      "stage": 9,
+      "id": "tamamo",
+      "name": "玉藻前・幻械",
+      "title": "九尾天狐機神",
+      "asset": "assets/bosses/boss_9_tamamo.png",
+      "baseHp": 240000,
+      "width": 200,
+      "height": 200,
+      "hitboxRadius": 50,
+      "shieldType": "purple",
+      "introVoice": "九尾弄巧，真真假假！",
+      "defeatVoiceLine": "九尾的幻術雷達...竟然全被你看穿了？！呵呵...妾身這副機神假面，就此碎裂吧...",
+      "phases": 2,
+      "ultimates": [
+        {
+          "id": "laser_allure",
+          "name": "九尾妖火・媚影迷蹤",
+          "warningTime": 2.8,
+          "voiceLine": "玉藻前：九尾妖火・媚影迷蹤！",
+          "description": "九尾狐火交錯散開，幻影殘像齊射粉紅穿甲光束",
+          "damage": 2
+        },
+        {
+          "id": "mimic_power",
+          "name": "殺生石封・天狐裂變",
+          "warningTime": 2.6,
+          "voiceLine": "玉藻前：殺生石封・天狐裂變！",
+          "description": "召喚殺生石共鳴法陣，放射全域魅惑螺旋彈幕",
+          "damage": 2
+        }
+      ]
+    },
+    {
+      "stage": 10,
+      "id": "tiamat",
+      "name": "提亞瑪特・混沌母艦",
+      "title": "創世混沌巨龍",
+      "asset": "assets/bosses/boss_10_tiamat.png",
+      "baseHp": 480000,
+      "width": 230,
+      "height": 230,
+      "hitboxRadius": 60,
+      "shieldType": "chaos",
+      "introVoice": "混沌初開，回歸無極！",
+      "defeatVoiceLine": "原初之海沸騰...混沌的星環碎裂！創世母艦的寂滅，難道才是新宇宙的黎明？！",
+      "phases": 3,
+      "ultimates": [
+        {
+          "id": "nine_dragons",
+          "name": "原初之海・混沌黑潮",
+          "warningTime": 3.0,
+          "voiceLine": "提亞瑪特：原初之海・混沌黑潮！",
+          "description": "九核心齊射九色混沌彈幕狂瀾",
+          "damage": 2
+        },
+        {
+          "id": "field_inversion",
+          "name": "萬龍孵化・星海寂滅",
+          "warningTime": 2.8,
+          "voiceLine": "提亞瑪特：萬龍孵化・星海寂滅！",
+          "description": "產下混沌龍卵孵化幼龍齊射，引力反轉震盪",
+          "damage": 2
+        },
+        {
+          "id": "chaos_genesis",
+          "name": "創世終焉・萬象歸虛",
+          "warningTime": 3.2,
+          "voiceLine": "提亞瑪特：創世終焉・萬象歸虛！",
+          "description": "全屏十字毀滅星光裂解空間，終極毀滅審判",
+          "damage": 3
+        }
+      ]
+    }
+  ]
+}
