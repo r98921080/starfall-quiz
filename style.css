@@ -1619,4 +1619,46 @@ canvas#gameCanvas {
   }
 }
 
+/* ============================================================
+   武器傷害評級徽章 (Damage Tier Badges: S / A / B / C)
+   ============================================================ */
+.tier-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.tier-badge.tier-s {
+  background: linear-gradient(135deg, #ff0055, #ff7700);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(255, 0, 85, 0.45);
+  border: 1px solid #ffcc00;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+.tier-badge.tier-a {
+  background: linear-gradient(135deg, #8a2be2, #00c3ff);
+  color: #fff;
+  box-shadow: 0 0 8px rgba(0, 195, 255, 0.35);
+  border: 1px solid rgba(138, 43, 226, 0.6);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+.tier-badge.tier-b {
+  background: rgba(0, 162, 255, 0.22);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.5);
+}
+.tier-badge.tier-c {
+  background: rgba(72, 229, 131, 0.18);
+  color: #48e583;
+  border: 1px solid rgba(72, 229, 131, 0.45);
+}
+
 

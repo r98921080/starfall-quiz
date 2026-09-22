@@ -1502,37 +1502,57 @@ class DataStore {
 
     const apiUrl = localStorage.getItem('starfall_gs_url') || (window.STARFALL_CONFIG && window.STARFALL_CONFIG.apiBaseUrl);
 
-    // 1. 若有設定 Google Sheet API URL，向 Google Apps Script 註冊或檢索學號
+    // 1. 若有設定 Google Sheet API URL，向 Google Apps Script 註冊或檢索學號 (雙軌道 POST + GET 容錯)
     if (apiUrl && apiUrl.startsWith('http') && !apiUrl.includes('PASTE_YOUR')) {
       if (statusEl) statusEl.textContent = '⏳ 正在與 Google Sheet 同步學員資料...';
       try {
-        const res = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'register_student', name: name, grade: grade, forceNew: forceNew })
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.ok && data.student_id) {
-            this.currentStudentId = data.student_id;
-            localStorage.setItem('starfall_student_id', data.student_id);
-            if (badgeEl) badgeEl.textContent = `序號：${data.student_id}`;
-            if (statusEl) {
-              statusEl.textContent = data.isNew 
-                ? `✅ 已建立新序號 ${data.student_id} 並如實記錄至 Google Sheet Students 表！` 
-                : `✅ 已綁定既有學號 ${data.student_id}！`;
-            }
-            this.addOrUpdateLocalStudent(data.student_id, name, grade);
-            this.updateStudentListUI();
-            const mistakes = this.getMistakeCount(data.student_id);
-            if (mistakeBadge) {
-              mistakeBadge.textContent = mistakes > 0 ? `待雪恥錯題：${mistakes} 題` : '待雪恥錯題：0 題 (新學員)';
-            }
-            if (window.__starfallGame && typeof window.__starfallGame.updatePermissionUI === 'function') {
-              window.__starfallGame.updatePermissionUI();
-            }
-            return data.student_id;
+        let data = null;
+        // 軌道 1：標準 POST 傳輸
+        try {
+          const res = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ action: 'register_student', name: name, grade: grade, forceNew: forceNew })
+          });
+          if (res.ok) {
+            data = await res.json().catch(() => null);
           }
+        } catch (postErr) {
+          console.warn('[Google Sheet] POST 註冊遇阻，切換 GET 備援管道：', postErr);
+        }
+
+        // 軌道 2：GET 備援傳輸 (繞過部分行動網路或防火牆對非標準 POST 的阻斷)
+        if (!data || !data.ok) {
+          try {
+            const getUrl = `${apiUrl}?action=register_student&name=${encodeURIComponent(name)}&grade=${encodeURIComponent(grade)}&forceNew=${forceNew ? 'true' : 'false'}`;
+            const resGet = await fetch(getUrl);
+            if (resGet.ok) {
+              data = await resGet.json().catch(() => null);
+            }
+          } catch (getErr) {
+            console.warn('[Google Sheet] GET 備援註冊亦失敗：', getErr);
+          }
+        }
+
+        if (data && data.ok && data.student_id) {
+          this.currentStudentId = data.student_id;
+          localStorage.setItem('starfall_student_id', data.student_id);
+          if (badgeEl) badgeEl.textContent = `序號：${data.student_id}`;
+          if (statusEl) {
+            statusEl.textContent = data.isNew 
+              ? `✅ 已建立新序號 ${data.student_id} 並如實記錄至 Google Sheet Students 表！` 
+              : `✅ 已綁定既有學號 ${data.student_id}！`;
+          }
+          this.addOrUpdateLocalStudent(data.student_id, name, grade);
+          this.updateStudentListUI();
+          const mistakes = this.getMistakeCount(data.student_id);
+          if (mistakeBadge) {
+            mistakeBadge.textContent = mistakes > 0 ? `待雪恥錯題：${mistakes} 題` : '待雪恥錯題：0 題 (新學員)';
+          }
+          if (window.__starfallGame && typeof window.__starfallGame.updatePermissionUI === 'function') {
+            window.__starfallGame.updatePermissionUI();
+          }
+          return data.student_id;
         }
       } catch (err) {
         console.warn('[Google Sheet] 學員同步失敗，啟用本機序列號：', err);
@@ -1701,15 +1721,41 @@ class DataStore {
     this._isSyncing = true;
     try {
       const batch = this.offlineQueue.slice(0, 10);
-      // 使用 text/plain;charset=utf-8 規避瀏覽器 CORS preflight (OPTIONS) 限制
-      const res = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'attempt_batch', attempts: batch })
-      });
-      if (res.ok) {
+      let synced = false;
+
+      // 軌道 1：POST 批次上報 (使用 text/plain 避免 CORS preflight 阻斷)
+      try {
+        const res = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'attempt_batch', attempts: batch })
+        });
+        if (res.ok) {
+          const data = await res.json().catch(() => null);
+          if (data && data.ok) synced = true;
+        }
+      } catch (postErr) {
+        console.warn('[Google Sheet] POST 同步作答失敗，嘗試切換 GET 備援：', postErr);
+      }
+
+      // 軌道 2：GET 備援批次上報 (雙重容錯保證答題不遺漏)
+      if (!synced) {
+        try {
+          const encoded = encodeURIComponent(JSON.stringify(batch));
+          const getUrl = `${apiUrl}?action=attempt_batch&attempts=${encoded}&data=${encoded}`;
+          const resGet = await fetch(getUrl);
+          if (resGet.ok) {
+            const data = await resGet.json().catch(() => null);
+            if (data && data.ok) synced = true;
+          }
+        } catch (getErr) {
+          console.warn('[Google Sheet] GET 備援同步作答亦失敗：', getErr);
+        }
+      }
+
+      if (synced) {
         this.offlineQueue.splice(0, batch.length);
-        console.log(`[Google Sheet] 成功同步 ${batch.length} 筆作答紀錄至試算表！`);
+        console.log(`[Google Sheet] ✅ 成功同步 ${batch.length} 筆作答紀錄至試算表！`);
       }
     } catch (e) {
       console.warn('[Google Sheet] 雲端同步暫時離線，紀錄保留於本機隊列：', e);
@@ -1942,22 +1988,22 @@ class DataStore {
 // 3.5 十六款神話武器完整規格型錄 (Static Catalog)
 // ============================================================
 const STARFALL_WEAPONS_CATALOG = [
-  { id: 'multishot', name: '多管神機砲', isPassive: false, icon: 'assets/icons/weapons/weapon_1.png', tag: '主動・主砲', baseDmg: 36, desc: '經典高機動速射多管機砲，連續命中目標累積裂甲破防印記（最高 +50% 傷害）。' },
-  { id: 'beam_cannon', name: '金陽聚焦光束', isPassive: false, icon: 'assets/icons/weapons/weapon_2.png', tag: '主動・穿透', baseDmg: 240, desc: '筆直貫穿全螢幕之金色光柱，「熱能融解」穿透護盾造成敵方最大生命持續灼燒。' },
-  { id: 'spirit_bullet', name: '靈能聚變核心', isPassive: true, icon: 'assets/icons/weapons/weapon_3.png', tag: '被動・聚變', baseDmg: 110, desc: '慢速向前浮游之幽藍靈核，向周遭放射電漿弧，自機靈丸蓄力速度加快 30%。' },
-  { id: 'kinetic_dart', name: '超空泡穿甲鏢', isPassive: false, icon: 'assets/icons/weapons/weapon_4.png', tag: '主動・穿刺', baseDmg: 68, desc: '極高速藍色超空泡標槍，100% 貫穿所有敵人，每穿透一名目標傷害遞增 20%。' },
-  { id: 'homing_missile', name: '烈陽核融導彈', isPassive: false, icon: 'assets/icons/weapons/weapon_5.png', tag: '主動・索敵', baseDmg: 58, desc: '巡弋微型核融飛彈，自動尋標最危險敵機，命中引發大範圍熱核爆轟與火環。' },
-  { id: 'jade_chakram', name: '青玉風雷飛輪', isPassive: false, icon: 'assets/icons/weapons/weapon_6.png', tag: '主動・削彈', baseDmg: 80, desc: '向前拋射的旋轉碧玉刃輪，在空中超高速旋轉，直接削碎切斷接觸的敵方子彈！' },
-  { id: 'combat_wingman', name: '神鳥隨行僚機', isPassive: true, icon: 'assets/icons/weapons/weapon_7.png', tag: '被動・僚機', baseDmg: 40, desc: '雙聯神鳥僚機伴隨兩翼，形成極致扇形綠色雷射交叉火網，持續壓制前線。' },
-  { id: 'prism_wingman', name: '虹光折射星核', isPassive: true, icon: 'assets/icons/weapons/weapon_8.png', tag: '被動・折射', baseDmg: 60, desc: '高科技浮游稜鏡，折射主砲光束，形成多角度偏折射線鎖定多重目標。' },
-  { id: 'grenade_launcher', name: '熾陽熔岩噴射核', isPassive: false, icon: 'assets/icons/weapons/weapon_9.png', tag: '主動・地熱', baseDmg: 150, desc: '拋物線熔岩榴彈，引爆留下 5 秒半徑 75px 熔岩領域，焚毀進入敵機並蒸發敵彈。' },
-  { id: 'singularity_core', name: '虛空重力奇點', isPassive: true, icon: 'assets/icons/weapons/weapon_10.png', tag: '被動・黑洞', baseDmg: 80, desc: '重力黑洞漩渦，停留在戰場中產生強大引力，吸引雜兵並吞噬途經敵彈。' },
-  { id: 'quantum_shield', name: '量子偏折護盾', isPassive: true, icon: 'assets/icons/weapons/weapon_11.png', tag: '被動・神盾', baseDmg: 75, desc: '微型能量護盾環繞自機，每 8 秒自動刷新一次致命衝擊抵禦並反彈光刃。' },
-  { id: 'taiji_array', name: '陰陽太極法陣', isPassive: false, icon: 'assets/icons/weapons/weapon_12.png', tag: '主動・法陣', baseDmg: 75, desc: '旋轉的陰陽八卦符印，對目標附加五行震懾，使其攻擊力與移速降低 30%。' },
-  { id: 'cryo_spire', name: '玄天冰魄凌柱', isPassive: true, icon: 'assets/icons/weapons/weapon_13.png', tag: '被動・天降', baseDmg: 160, desc: '天頂隨機垂降巨大永凍冰魄尖塔，下墜轟擊目標造成大範圍霜寒凍結與高額穿透，無須手動裝備。' },
-  { id: 'emerald_spring', name: '翡翠靈泉護陣', isPassive: true, icon: 'assets/icons/weapons/weapon_14.png', tag: '被動・光環', baseDmg: 65, desc: '週期性向外擴散綠色靈能修復波，清除近身彈幕，並有 15% 機率修復戰機裝甲。' },
-  { id: 'time_dilation', name: '躍遷時空擴張', isPassive: true, icon: 'assets/icons/weapons/weapon_15.png', tag: '被動・超頻', baseDmg: 0, desc: '戰鬥空間超頻擴展，全武器冷卻縮短 12%，移速與擦彈同步半徑大幅提升。' },
-  { id: 'sonic_cannon', name: '超聲震盪重砲', isPassive: false, icon: 'assets/icons/weapons/weapon_16.png', tag: '主動・音波', baseDmg: 125, desc: '放射半圓弧音波震盪圈，擊退敵人並抵銷路徑上的所有敵方常規子彈。' }
+  { id: 'multishot', name: '多管神機砲', isPassive: false, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_1.png', tag: '主動・主砲', baseDmg: 36, desc: '經典高機動速射多管機砲，連續命中目標累積裂甲破防印記（最高 +50% 傷害）。' },
+  { id: 'beam_cannon', name: '金陽聚焦光束', isPassive: false, tier: 'A', tierName: 'A 級・強襲主力', icon: 'assets/icons/weapons/weapon_2.png', tag: '主動・穿透', baseDmg: 240, desc: '筆直貫穿全螢幕之金色光柱，「熱能融解」穿透護盾造成敵方最大生命持續灼燒。' },
+  { id: 'spirit_bullet', name: '靈能聚變核心', isPassive: true, tier: 'C', tierName: 'C 級・守護輔助', icon: 'assets/icons/weapons/weapon_3.png', tag: '被動・聚變', baseDmg: 110, desc: '慢速向前浮游之幽藍靈核，向周遭放射電漿弧，自機靈丸蓄力速度加快 30%。' },
+  { id: 'kinetic_dart', name: '超空泡穿甲鏢', isPassive: false, tier: 'A', tierName: 'A 級・強襲主力', icon: 'assets/icons/weapons/weapon_4.png', tag: '主動・穿刺', baseDmg: 68, desc: '極高速藍色超空泡標槍，100% 貫穿所有敵人，每穿透一名目標傷害遞增 20%。' },
+  { id: 'homing_missile', name: '烈陽核融導彈', isPassive: false, tier: 'A', tierName: 'A 級・強襲主力', icon: 'assets/icons/weapons/weapon_5.png', tag: '主動・索敵', baseDmg: 58, desc: '巡弋微型核融飛彈，自動尋標最危險敵機，命中引發大範圍熱核爆轟與火環。' },
+  { id: 'jade_chakram', name: '青玉風雷飛輪', isPassive: false, tier: 'A', tierName: 'A 級・強襲主力', icon: 'assets/icons/weapons/weapon_6.png', tag: '主動・削彈', baseDmg: 80, desc: '向前拋射的旋轉碧玉刃輪，在空中超高速旋轉，直接削碎切斷接觸的敵方子彈！' },
+  { id: 'combat_wingman', name: '神鳥隨行僚機', isPassive: true, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_7.png', tag: '被動・僚機', baseDmg: 40, desc: '雙聯神鳥僚機伴隨兩翼，形成極致扇形綠色雷射交叉火網，持續壓制前線。' },
+  { id: 'prism_wingman', name: '虹光折射星核', isPassive: true, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_8.png', tag: '被動・折射', baseDmg: 60, desc: '高科技浮游稜鏡，折射主砲光束，形成多角度偏折射線鎖定多重目標。' },
+  { id: 'grenade_launcher', name: '熾陽熔岩噴射核', isPassive: false, tier: 'S', tierName: 'S 級・毀滅神話', icon: 'assets/icons/weapons/weapon_9.png', tag: '主動・地熱', baseDmg: 150, desc: '拋物線熔岩榴彈，引爆留下 5 秒半徑 75px 熔岩領域，焚毀進入敵機並蒸發敵彈。' },
+  { id: 'singularity_core', name: '虛空重力奇點', isPassive: true, tier: 'C', tierName: 'C 級・守護輔助', icon: 'assets/icons/weapons/weapon_10.png', tag: '被動・黑洞', baseDmg: 80, desc: '重力黑洞漩渦，停留在戰場中產生強大引力，吸引雜兵並吞噬途經敵彈。' },
+  { id: 'quantum_shield', name: '量子偏折護盾', isPassive: true, tier: 'C', tierName: 'C 級・守護輔助', icon: 'assets/icons/weapons/weapon_11.png', tag: '被動・神盾', baseDmg: 75, desc: '微型能量護盾環繞自機，每 8 秒自動刷新一次致命衝擊抵禦並反彈光刃。' },
+  { id: 'taiji_array', name: '陰陽太極法陣', isPassive: false, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_12.png', tag: '主動・法陣', baseDmg: 75, desc: '旋轉的陰陽八卦符印，對目標附加五行震懾，使其攻擊力與移速降低 30%。' },
+  { id: 'cryo_spire', name: '玄天冰魄凌柱', isPassive: true, tier: 'S', tierName: 'S 級・毀滅神話', icon: 'assets/icons/weapons/weapon_13.png', tag: '被動・天降', baseDmg: 160, desc: '天頂隨機垂降巨大永凍冰魄尖塔，下墜轟擊目標造成大範圍霜寒凍結與高額穿透，無須手動裝備。' },
+  { id: 'emerald_spring', name: '翡翠靈泉護陣', isPassive: true, tier: 'C', tierName: 'C 級・守護輔助', icon: 'assets/icons/weapons/weapon_14.png', tag: '被動・光環', baseDmg: 65, desc: '週期性向外擴散綠色靈能修復波，清除近身彈幕，並有 15% 機率修復戰機裝甲。' },
+  { id: 'time_dilation', name: '躍遷時空擴張', isPassive: true, tier: 'C', tierName: 'C 級・守護輔助', icon: 'assets/icons/weapons/weapon_15.png', tag: '被動・超頻', baseDmg: 0, desc: '戰鬥空間超頻擴展，全武器冷卻縮短 12%，移速與擦彈同步半徑大幅提升。' },
+  { id: 'sonic_cannon', name: '超聲震盪重砲', isPassive: false, tier: 'S', tierName: 'S 級・毀滅神話', icon: 'assets/icons/weapons/weapon_16.png', tag: '主動・音波', baseDmg: 125, desc: '放射半圓弧音波震盪圈，擊退敵人並抵銷路徑上的所有敵方常規子彈。' }
 ];
 
 // 六大真融合武器常數定義 (雙素材 Lv.3+ 解鎖)
@@ -2041,6 +2087,9 @@ class Bullet extends Entity {
     this.pierce = 1;
     this.target = null;
     this.isCrit = false;
+    this.hitEnemies = new Set(); // 防止穿透彈每幀重複命中相同敵人造成卡頓
+    this.hitMinions = new Set(); // 防止穿透彈每幀重複命中相同 Boss 召喚物造成卡頓
+    this.lastHitBossTime = 0;   // Boss 傷害頻率節流計時 (避免每秒 60 次撞擊卡頓)
     const rankColors = {
       1: '#38bdf8', // 階級 1: 靈能天藍
       2: '#4ade80', // 階級 2: 翡翠耀綠
@@ -2631,7 +2680,7 @@ class Game {
     const selected = STARFALL_WEAPONS_CATALOG.find(w => w.id === this.selectedStartingWeapon);
     const badge = document.getElementById('startWeaponBadge');
     if (badge && selected) {
-      badge.textContent = `當前首發武裝：${selected.name} Lv.1`;
+      badge.textContent = `當前首發主武：${selected.name} (第 1 階) [${selected.tier || 'B'} 級]`;
     }
   }
 
@@ -2640,7 +2689,13 @@ class Game {
     if (!list) return;
     list.innerHTML = '';
 
-    STARFALL_WEAPONS_CATALOG.forEach(w => {
+    // 嚴格限制：一開始只能選擇第 1 階主動主武器出擊（排除所有被動輔助模組）
+    const startingCandidates = STARFALL_WEAPONS_CATALOG.filter(w => !w.isPassive);
+    if (!startingCandidates.some(w => w.id === this.selectedStartingWeapon)) {
+      this.selectedStartingWeapon = 'multishot';
+    }
+
+    startingCandidates.forEach(w => {
       const isSelected = w.id === this.selectedStartingWeapon;
       const card = document.createElement('div');
       card.className = `hangar-weapon-card ${isSelected ? 'selected' : ''}`;
@@ -2651,7 +2706,8 @@ class Game {
         <div class="hangar-info">
           <div class="hangar-name-row">
             <span class="hangar-name">${w.name}</span>
-            <span class="hangar-tag">${w.tag}</span>
+            <span class="tier-badge tier-${(w.tier || 'B').toLowerCase()}">${w.tier || 'B'} 級</span>
+            <span class="hangar-tag">第 1 階・主砲</span>
           </div>
           <p class="hangar-desc">${w.desc}</p>
         </div>
@@ -2661,8 +2717,8 @@ class Game {
         this.sound.playCrit();
         this.renderHangarWeaponsList();
         const badge = document.getElementById('startWeaponBadge');
-        if (badge) badge.textContent = `當前首發武裝：${w.name} Lv.1`;
-        this.showToast(`已選定開局首發武裝：${w.name}！`);
+        if (badge) badge.textContent = `當前首發主武：${w.name} (第 1 階) [${w.tier || 'B'} 級]`;
+        this.showToast(`已選定開局首發主武：${w.name} (第 1 階)！`);
       };
       list.appendChild(card);
     });
@@ -3468,10 +3524,9 @@ class Game {
     this.totalDamageDealt += finalDmg;
     this.score += Math.round(finalDmg * 2);
 
-    // 打擊感音效與金屬火花回饋
+    // 打擊感音效與金屬火花回饋 (保留音效與震動，移除阻斷引擎渲染之凍結幀)
     if (isCrit) {
       this.sound.playCrit();
-      this.hitStopTimer = Math.max(this.hitStopTimer, 0.035);
       this.shake(5, 0.18);
     } else {
       if (Math.random() < 0.4) this.sound.playHit();
@@ -3498,9 +3553,8 @@ class Game {
       ));
     }
 
-    // 重型打擊觸發 Hit-stop (凍結幀 45ms) 與震動
+    // 重型打擊觸發強烈音效與畫面震動 (移除 hitStopTimer 停頓以維持 60 FPS 絲滑流暢)
     if (source === 'spirit' || source === 'grenade' || finalDmg > 280) {
-      this.hitStopTimer = 0.045;
       this.sound.playExplosion(true);
       this.shake(7, 0.28);
     }
@@ -5210,6 +5264,10 @@ class Game {
       const isFusion = !!c.isFusion;
       card.className = `upgrade-card quality-${c.quality || 'tier1'} ${isFusion ? 'fusion-card' : ''}`;
 
+      const tierBadgeHtml = c.tierRating
+        ? `<span class="tier-badge tier-${c.tierRating.toLowerCase()}">${c.tierRating} 級</span>`
+        : '';
+
       const rankTagHtml = c.isPerk
         ? `<span class="upgrade-rank-tag max">生存特化</span>`
         : (isFusion
@@ -5225,6 +5283,7 @@ class Game {
         <div class="upgrade-info">
           <div class="upgrade-name-row">
             <span class="upgrade-name">${c.name}</span>
+            ${tierBadgeHtml}
             ${rankTagHtml}
           </div>
           <div class="upgrade-tier-row" style="font-size:11px; color:var(--gold); font-weight:800; margin:2px 0;">${c.tierLabel || ''}</div>
@@ -5296,12 +5355,14 @@ class Game {
       return curRank < 5;
     });
 
-    // 加權隨機抽取 3 款不重複的武器（傷害力越高的武器，出現機率越低）
+    // 加權隨機抽取 3 款不重複的武器（傷害力越高的武器、S/A評級武器，出現機率遞減）
     const chosenWpns = [];
     const pool = [...candidateWeapons];
+    const tierWeightMod = { S: 0.55, A: 0.85, B: 1.15, C: 1.40 };
     const getWeight = (w) => {
       const dmg = Math.max(30, (w.baseDmg !== undefined ? w.baseDmg : 60) || 50);
-      return Math.pow(100 / dmg, 1.4);
+      const mod = tierWeightMod[w.tier] || 1.0;
+      return Math.pow(100 / dmg, 1.4) * mod;
     };
 
     while (chosenWpns.length < Math.min(3, candidateWeapons.length) && pool.length > 0) {
@@ -5351,6 +5412,8 @@ class Game {
         weaponId: w.id,
         isPassive: !!w.isPassive,
         name: w.name,
+        tierRating: w.tier || 'B',
+        tierName: w.tierName || 'B 級・戰術壓制',
         currentRank: currentRank,
         targetRank: targetRank,
         tier: tier,
@@ -6051,19 +6114,18 @@ class Game {
         if (e.dead) return;
         const d = Math.hypot(b.x - e.x, b.y - e.y);
         if (d < b.r + e.r) {
-          if (b.type === 'sonic_wave') {
-            if (b.hitEnemies && b.hitEnemies.has(e)) return;
-            if (b.hitEnemies) b.hitEnemies.add(e);
+          if (b.hitEnemies) {
+            if (b.hitEnemies.has(e)) return;
+            b.hitEnemies.add(e);
           }
           e.hp -= b.damage;
           b.pierce--;
           if (b.pierce <= 0) b.dead = true;
 
-          // 打擊感回饋：受擊白光閃爍、擊退微震、凍結幀與方向火花
+          // 打擊感回饋：受擊白光閃爍、擊退微震與方向火花 (移除每發小怪受擊凍結幀以消除卡頓)
           e.hitFlashTimer = 0.08;
           e.flinchX = (Math.random() - 0.5) * 7;
           e.y -= Math.min(6, b.damage * 0.06);
-          this.triggerHitStop(b.damage > 70 ? 0.040 : 0.026);
           this.createHitSparks(b.x, b.y, b.vx, b.vy, '#38bdf8', 4);
 
           // 浮動傷害數字 (預設關閉以保持畫面純淨)
@@ -6103,9 +6165,9 @@ class Game {
           if (m.dead) return;
           const d = Math.hypot(b.x - m.x, b.y - m.y);
           if (d < b.r + m.r) {
-            if (b.type === 'sonic_wave') {
-              if (b.hitMinions && b.hitMinions.has(m)) return;
-              if (b.hitMinions) b.hitMinions.add(m);
+            if (b.hitMinions) {
+              if (b.hitMinions.has(m)) return;
+              b.hitMinions.add(m);
             }
             m.hp -= b.damage;
             b.pierce--;
@@ -6128,40 +6190,38 @@ class Game {
         });
       }
 
-      // 玩家子彈 vs Boss
+      // 玩家子彈 vs Boss (抗卡頓節流防護：穿透武器對 Boss 傷害間隔至少 0.18s)
       if (this.currentBoss && !this.currentBoss.dead) {
         const boss = this.currentBoss;
         const d = Math.hypot(b.x - boss.x, b.y - boss.y);
         if (d < b.r + boss.hitboxRadius) {
+          const now = this.time;
+          if (b.lastHitBossTime && (now - b.lastHitBossTime < 0.18)) {
+            return;
+          }
+          b.lastHitBossTime = now;
+
           if (b.type === 'spirit') {
-            const now = this.time;
-            if (!b.lastHitBossTime || (now - b.lastHitBossTime >= 0.22)) {
-              b.lastHitBossTime = now;
-              this.damageBoss(boss, b.damage, 'spirit', 'spirit');
-              this.createReiganShockwave(b.x, b.y, b.isMax, b.isComet);
-              b.pierce--;
-              if (b.pierce <= 0) b.dead = true;
-              if (b.isComet) {
-                this.lavaPools.push({ x: b.x, y: b.y, r: 85, life: 3.5, dps: 200 });
-                for (let k = 0; k < 4; k++) {
-                  setTimeout(() => {
-                    this.sound.playExplosion(true);
-                    this.shake(5, 0.2);
-                    this.ebullets.forEach(eb => {
-                      if (Math.hypot(eb.x - b.x, eb.y - b.y) < 130) eb.dead = true;
-                    });
-                  }, k * 120);
-                }
+            this.damageBoss(boss, b.damage, 'spirit', 'spirit');
+            this.createReiganShockwave(b.x, b.y, b.isMax, b.isComet);
+            b.pierce--;
+            if (b.pierce <= 0) b.dead = true;
+            if (b.isComet) {
+              this.lavaPools.push({ x: b.x, y: b.y, r: 85, life: 3.5, dps: 200 });
+              for (let k = 0; k < 4; k++) {
+                setTimeout(() => {
+                  this.sound.playExplosion(true);
+                  this.shake(5, 0.2);
+                  this.ebullets.forEach(eb => {
+                    if (Math.hypot(eb.x - b.x, eb.y - b.y) < 130) eb.dead = true;
+                  });
+                }, k * 120);
               }
             }
           } else if (b.type === 'sonic_wave') {
-            const now = this.time;
-            if (!b.lastHitBossTime || (now - b.lastHitBossTime >= 0.35)) {
-              b.lastHitBossTime = now;
-              this.damageBoss(boss, b.damage, 'sonic_wave', 'bullet');
-              b.pierce--;
-              if (b.pierce <= 0) b.dead = true;
-            }
+            this.damageBoss(boss, b.damage, 'sonic_wave', 'bullet');
+            b.pierce--;
+            if (b.pierce <= 0) b.dead = true;
           } else {
             this.damageBoss(boss, b.damage, b.type, 'bullet');
             b.pierce--;
@@ -7897,10 +7957,11 @@ class Game {
         <div class="inspector-title-box">
           <div class="inspector-name-row">
             <span class="inspector-name">${w.name}</span>
+            <span class="tier-badge tier-${(w.tier || 'B').toLowerCase()}">${w.tier || 'B'} 級</span>
             <span class="${w.isPassive ? 'tag-passive' : 'tag-active'}">${w.isPassive ? '被動支援' : '主動發射'}</span>
             <span class="inspector-rank">${isUnlocked ? `Lv.${ars.rank} (威力 ×${qMult.toFixed(2)})` : '未取得'}</span>
           </div>
-          <div style="font-size:11px; color:var(--cyan-bright); font-weight:700;">${w.tag} ｜ 基礎威力 ${w.baseDmg || 30}</div>
+          <div style="font-size:11px; color:var(--cyan-bright); font-weight:700;">${w.tierName || (w.tier + ' 級')} ｜ ${w.tag} ｜ 基礎威力 ${w.baseDmg || 30}</div>
         </div>
       </div>
       <div class="inspector-desc">${w.desc}</div>
@@ -8196,6 +8257,7 @@ class Game {
             <div>
               <div style="display:flex; align-items:center; gap:6px;">
                 <span class="lab-weapon-name">${w.name}</span>
+                <span class="tier-badge tier-${(w.tier || 'B').toLowerCase()}">${w.tier || 'B'} 級</span>
                 <span class="lab-weapon-tag ${tagClass}">${tagLabel}</span>
               </div>
               <div style="font-size:10px; color:var(--text-muted); line-height:1.2; margin-top:2px;">${w.desc || ''}</div>

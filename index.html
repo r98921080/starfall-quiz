@@ -164,10 +164,10 @@
       <!-- 初始武裝選擇入口 -->
       <div style="margin-top:10px; display:flex; flex-direction:column; align-items:center; gap:6px;">
         <button class="btn sm gold" id="openHangarBtn" style="min-height:38px; font-size:13px; padding:6px 16px;">
-          ⚙️ 初始武裝整備 (選擇 16 款首發武器)
+          ⚙️ 初始武裝整備 (首發第 1 階主武選擇)
         </button>
         <div id="startWeaponBadge" style="font-size:12px; color:var(--cyan-bright); font-weight:700;">
-          當前首發武裝：多管神機砲 Lv.1
+          當前首發主武：多管神機砲 (第 1 階) [B 級]
         </div>
       </div>
 
@@ -186,10 +186,10 @@
           <button class="hud-btn" id="closeHangarBtn" style="min-width:36px; min-height:36px; font-size:18px;">✕</button>
         </div>
         <p style="font-size:12px; color:var(--text-muted); padding:10px 18px 0; margin:0;">
-          請挑選 1 款作為戰機的初始首發主武裝（出擊即裝備 Lv.1）：
+          請挑選 1 款作為戰機開場出擊的第 1 階主武器（出擊即裝備第 1 階，被動輔助模組需於答題戰鬥中解鎖升級）：
         </p>
         <div class="hangar-scroll-list" id="hangarWeaponsList">
-          <!-- 動態載入 16 款武器卡片 -->
+          <!-- 動態載入 8 款第一階主動武器卡片 -->
         </div>
         <div style="padding:12px 18px; border-top:1px solid rgba(255,255,255,0.1); display:flex; justify-content:flex-end;">
           <button class="btn sm" id="confirmHangarBtn" style="min-height:40px; font-size:13px;">確認出擊配置</button>

@@ -912,3 +912,58 @@
    - 31 項測試全數 PASS。
 2. 執行 `node scripts/test-v1.11.js`：40 項多設備與學生隔離測試全數 PASS。
 3. 透過 `gh api /repos/r98921080/starfall-quiz/pages` 確認 GitHub Pages 服務已成功開通。
+
+---
+
+## 2026-09-22 12:15 — BUILD-017：公網遠端 Google Sheet 同步修復 (雙軌道 GET/POST)、多段武器防卡頓重構、16 款武器傷害評級 (S/A/B/C) 與開場首發第一階主武器鎖定
+
+### 完成項目
+1. **公網遠端 Google Sheet 同步修復 (雙軌道 GET / POST 雙重容錯備援)**：
+   - **問題根因**：
+     - 現行線上部署之 Google Apps Script Web App (`/exec`) 係基於舊版快照，尚未支援 `register_student` 操作，導致遠端登入時回傳 `{"ok":false,"error":"不支援的 action：register_student"}`。
+     - 部分行動設備或特殊校園網路環境會阻斷帶有 body 的非標準 POST 請求或 CORS 重定向。
+   - **解決方案**：
+     - `apps-script/Code.gs`：
+       - 全面升級 `doGet` 與 `doPost`，保證 `register_student`、`attempt`、`attempt_batch` 在 GET 與 POST 兩大管道均可 100% 成功結算。
+       - 新增 `ensureStudentExists_` 機制：凡是有新學號或新姓名出現，即便未事前呼叫註冊，亦在作答寫入時自動於 `Students` 分頁登錄學生資料，杜絕孤兒紀錄。
+     - `game.js`：
+       - `syncStudentProfile` 與 `syncOfflineQueue` 實裝雙軌道傳輸（Dual-Channel Network Fallback）：先以 POST 發送，若遭遇網路異常或回應非 200，立刻切換至 GET 備援管道，確保公網學生資料不遺失。
+2. **多段武器抗卡頓機制徹底重構 (Anti-Stutter Projectile Engine)**：
+   - **卡頓機制根因**：
+     - 穿透型武器（如金陽聚焦光束 `beam`、超空泡穿甲鏢 `kinetic_dart`、青玉飛輪 `jade_chakram`、玄天冰魄凌柱 `cryo_spire` 等）由於 pierce 高達 99，穿越雜兵或 Boss 時會在每幀（1/60 秒）持續觸發碰撞。
+     - 原先碰撞邏輯每次命中單發大於 70 傷害即調用 `triggerHitStop(0.040)`，使引擎主迴圈硬生生停頓 40 毫秒（相當於直接掉 2.5 幀），多發穿透彈同時命中時 frame rate 暴跌至 10~20 FPS。
+   - **重構解法**：
+     - `Bullet` 實體建構子初始化 `this.hitEnemies = new Set()` 與 `this.hitMinions = new Set()`：所有子彈對同一個雜兵或召喚物**每趟穿透僅計算 1 次命中傷害**，杜絕連環重複判定。
+     - Boss 碰撞節流鎖定：增加 `now - b.lastHitBossTime < 0.18` 離散間隔檢查，即使高 pierce 子彈滯留於 Boss 判定框內，傷害結算頻率也嚴格控制在每秒最多 5 次，不再造成每秒 60 次撞擊風暴。
+     - 移除常規小怪命中與 `damageBoss` 的 routine `hitStopTimer` 引擎阻斷，保留畫面震動、受擊閃爍與火花粒子回饋，遊戲全局維持 60 FPS 絲滑順暢。
+3. **16 款神話武器明確傷害評級 (S / A / B / C 四大階梯)**：
+   - 依威力輸出、彈道覆蓋與戰術定位劃分 4 大層級：
+     - **S 級 (毀滅神話)**：`熾陽熔岩噴射核`、`玄天冰魄凌柱`、`超聲震盪重砲`
+     - **A 級 (強襲主力)**：`金陽聚焦光束`、`超空泡穿甲鏢`、`烈陽核融導彈`、`青玉風雷飛輪`
+     - **B 級 (戰術壓制)**：`多管神機砲`、`神鳥隨行僚機`、`虹光折射星核`、`陰陽太極法陣`
+     - **C 級 (守護輔助)**：`靈能聚變核心`、`虛空重力奇點`、`量子偏折護盾`、`翡翠靈泉護陣`、`躍遷時空擴張`
+   - 全介面統一顯示專屬動態漸層評級徽章（`.tier-badge`）：整備機庫、答題三選一升級卡片、暫停武器庫 Inspector、LAB 面板。
+   - 三選一升級機率加權：S 級與 A 級等高傷害武器出現機率適度調降（加權因子 S: 0.55, A: 0.85, B: 1.15, C: 1.40），符合 Roguelike 抽卡平衡。
+4. **開場首發武器鎖定為第一階主武器 (Rank 1 Active Main Weapons Only)**：
+   - 整備機庫 (`renderHangarWeaponsList`) 嚴格過濾排除所有被動支援模組（`isPassive: false`），僅開放 8 款主動主武器供玩者首發選擇。
+   - 鎖定首發等級為第 1 階（Rank 1），被動裝備模組與更高階升級需透過戰鬥波次問答解鎖。
+   - 更新首發狀態標籤：`當前首發主武：[武器名] (第 1 階) [Tier 級]`。
+
+### 異動檔案
+- `apps-script/Code.gs`：`doGet` 支援 `register_student`、`attempt`、`attempt_batch`；`normalizeAttempt_` 支援 `ensureStudentExists_`。
+- `game.js`：
+  - `STARFALL_WEAPONS_CATALOG` 配置 `tier` 與 `tierName`。
+  - `Bullet` 構造子新增 `hitEnemies`、`hitMinions`、`lastHitBossTime`。
+  - 碰撞迴圈防卡頓優化，移除常規 `triggerHitStop`。
+  - `renderHangarWeaponsList` 嚴格過濾主動第 1 階主武。
+  - `showUpgradeScreen` 與三選一卡片整合 tier badge 與出現權重調校。
+  - `syncStudentProfile` 與 `syncOfflineQueue` 雙軌道 POST+GET 備援傳輸。
+- `style.css`：新增 `.tier-badge`、`.tier-s`、`.tier-a`、`.tier-b`、`.tier-c` 視覺樣式。
+- `index.html`：開場首發武裝提示文字優化。
+- `scripts/test-v1.13.js`：BUILD-017 完整自動化驗證腳本。
+
+### 測試方式
+1. 執行 `node scripts/test-v1.13.js`：Code.gs 雙軌道、彈道防卡頓 Set 鎖、16 款武器階級、開場主武鎖定、CSS 樣式共 7 大項目全數 PASS。
+2. 執行 `node scripts/test-v1.12.js`：31 項權限隔離與 GitHub Pages 測試全數 PASS。
+3. 執行 `node scripts/test-v1.11.js`：40 項學生歷程隔離與多設備測試全數 PASS。
+

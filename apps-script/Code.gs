@@ -54,13 +54,23 @@ function doGet(e) {
     if (action === 'questions') return jsonOutput_(getQuestions_(e && e.parameter));
     if (action === 'students') return jsonOutput_(getStudents_());
     if (action === 'student_progress') return jsonOutput_(getStudentProgressData_(e && e.parameter));
+    if (action === 'register_student') return jsonOutput_(registerStudent_(e && e.parameter));
+    if (action === 'attempt') return jsonOutput_(recordAttempt_(e && e.parameter));
+    if (action === 'attempt_batch') {
+      let attempts = [];
+      try {
+        const raw = (e && e.parameter && (e.parameter.attempts || e.parameter.data)) || '[]';
+        attempts = JSON.parse(raw);
+      } catch (err) { attempts = []; }
+      return jsonOutput_(recordAttemptBatch_({ attempts: attempts }));
+    }
     if (action === 'settings') return jsonOutput_(getSettings_());
     if (action === 'report') return jsonOutput_(getReportData_(e && e.parameter));
     return jsonOutput_({
       ok: true,
       service: 'Starfall Quiz Learning API',
-      version: '1.0.0',
-      actions: ['questions', 'students', 'student_progress', 'settings', 'report']
+      version: '1.2.0',
+      actions: ['questions', 'students', 'student_progress', 'register_student', 'attempt', 'attempt_batch', 'settings', 'report']
     });
   } catch (err) {
     return jsonOutput_({ ok: false, error: String(err.message || err) });
@@ -145,6 +155,28 @@ function registerStudent_(payload) {
     isNew: true,
     message: '新學生註冊成功，配發學號 ' + newId + '。'
   };
+}
+
+function ensureStudentExists_(ss, studentId, name, grade) {
+  if (!studentId) return;
+  const sheet = ss.getSheetByName(SHEETS.STUDENTS);
+  if (!sheet) return;
+  const rows = sheetObjects_(sheet);
+  const exists = rows.some(function(r) { return String(r.student_id).trim() === String(studentId).trim(); });
+  if (!exists) {
+    const headers = getHeaders_(sheet);
+    const newRow = {
+      student_id: String(studentId).trim(),
+      display_name: String(name || studentId).trim(),
+      grade: String(grade || '三年級').trim(),
+      pin_hash: '',
+      active: 'TRUE',
+      created_at: new Date().toISOString(),
+      notes: '作答時自動建立學籍'
+    };
+    sheet.appendRow(headers.map(function(h) { return newRow[h] !== undefined ? newRow[h] : ''; }));
+    logActivity_('AUTO_STUDENT', String(studentId).trim() + '｜' + String(name || studentId).trim());
+  }
 }
 
 function getQuestions_(params) {
@@ -267,8 +299,23 @@ function recordAttemptBatch_(payload) {
 function normalizeAttempt_(payload, ss) {
   if (!payload.student_id) throw new Error('缺少 student_id。');
   if (!payload.question_id) throw new Error('缺少 question_id。');
-  const question = findQuestion_(ss, payload.question_id);
-  if (!question) throw new Error('找不到 question_id：' + payload.question_id);
+
+  // 自動補登學生至 Students 表（避免作答紀錄遺漏學生學籍）
+  ensureStudentExists_(ss, payload.student_id, payload.student_name || payload.display_name, payload.student_grade || payload.grade);
+
+  let question = findQuestion_(ss, payload.question_id);
+  if (!question) {
+    question = {
+      question_id: payload.question_id,
+      difficulty: Number(payload.difficulty_at_time) || 1,
+      subject: payload.subject || '國語文',
+      unit: payload.unit || '',
+      skill: payload.skill || '',
+      answer: payload.selected_option || 'A',
+      target_words: payload.target_words || '',
+      concept_tags: payload.concept_tags || ''
+    };
+  }
   const selected = String(payload.selected_option || '').trim().toUpperCase();
   const correct = payload.correct === true || String(payload.correct).toUpperCase() === 'TRUE' || selected === String(question.answer).toUpperCase();
   const priorAttempts = countAttempts_(ss, payload.student_id, payload.question_id);
