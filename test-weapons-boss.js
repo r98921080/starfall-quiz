@@ -5,10 +5,10 @@ const path = require('path');
 const weaponDataPath = path.join(__dirname, 'data', 'weapon-data.json');
 const rawData = JSON.parse(fs.readFileSync(weaponDataPath, 'utf8'));
 const wList = rawData.weapons;
-console.log(`[PASS] Total weapons configured: ${wList.length}/16`);
+console.log(`[PASS] Total weapons configured: ${wList.length}/25`);
 
-if (wList.length !== 16) {
-  console.error('[FAIL] Expected 16 weapons');
+if (wList.length !== 25) {
+  console.error('[FAIL] Expected 25 weapons');
   process.exit(1);
 }
 
@@ -16,15 +16,15 @@ const wData = {};
 wList.forEach(w => { wData[w.id] = w; });
 const weaponKeys = Object.keys(wData);
 
-// 2. Check all 16 weapon icons
-for (let i = 1; i <= 16; i++) {
+// 2. Check all 25 weapon icons
+for (let i = 1; i <= 25; i++) {
   const iconPath = path.join(__dirname, 'assets', 'icons', 'weapons', `weapon_${i}.png`);
   if (!fs.existsSync(iconPath)) {
     console.error(`[FAIL] Missing weapon icon: ${iconPath}`);
     process.exit(1);
   }
 }
-console.log('[PASS] All 16 weapon icon PNG files verified!');
+console.log('[PASS] All 25 weapon icon PNG files verified!');
 
 // 3. Verify rank 1-5 structure and icon references
 for (const [id, w] of Object.entries(wData)) {
@@ -81,11 +81,11 @@ function generateUpgradeChoicesMock(arsenal, quality = 'rare') {
 let choicesA = generateUpgradeChoicesMock(mockArsenal, 'rare');
 console.log(`[PASS] Fresh game generated ${choicesA.length} choices.`);
 
-// Scenario B: Upgrade 15 weapons to Lv.5, leaving only 1 weapon at Lv.3
-weaponKeys.slice(0, 15).forEach(k => {
+// Scenario B: Upgrade 24 weapons to Lv.5, leaving only 1 weapon at Lv.3
+weaponKeys.slice(0, weaponKeys.length - 1).forEach(k => {
   mockArsenal[k].rank = 5;
 });
-const lastWeapon = weaponKeys[15];
+const lastWeapon = weaponKeys[weaponKeys.length - 1];
 mockArsenal[lastWeapon].rank = 3;
 
 let choicesB = generateUpgradeChoicesMock(mockArsenal, 'epic');
@@ -95,8 +95,10 @@ if (choicesB.some(c => c.id !== lastWeapon)) {
   process.exit(1);
 }
 
-// Scenario C: Upgrade ALL 16 weapons to Lv.5 - choices should exclude all 16 weapons
-mockArsenal[lastWeapon].rank = 5;
+// Scenario C: Upgrade ALL 25 weapons to Lv.5 - choices should exclude all 25 weapons
+weaponKeys.forEach(k => {
+  mockArsenal[k].rank = 5;
+});
 let choicesC = generateUpgradeChoicesMock(mockArsenal, 'legendary');
 console.log(`[PASS] All weapons at Lv.5: weapon choices produced = ${choicesC.length} (Expected 0 weapon choices)`);
 if (choicesC.length !== 0) {

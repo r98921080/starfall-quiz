@@ -871,6 +871,114 @@ class SoundManager {
     osc.stop(t + 0.25);
   }
 
+  // 17. 雷公天劫鏈弧：高壓電弧劈啪爆裂
+  playChainLightning() {
+    if (!this.ctx || !this.enabled) return;
+    this.ensureContext();
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(1400 + (Math.random() - 0.5) * 400, t);
+    osc.frequency.exponentialRampToValueAtTime(180, t + 0.08);
+    gain.gain.setValueAtTime(0.18, t);
+    gain.gain.exponentialRampToValueAtTime(0.005, t + 0.08);
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(t);
+    osc.stop(t + 0.08);
+  }
+
+  // 18. 熾陽破曉耀斑：熾熱日冕重核熱融音
+  playSolarFlare() {
+    if (!this.ctx || !this.enabled) return;
+    this.ensureContext();
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(420, t);
+    osc.frequency.exponentialRampToValueAtTime(120, t + 0.18);
+    gain.gain.setValueAtTime(0.24, t);
+    gain.gain.exponentialRampToValueAtTime(0.005, t + 0.18);
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(t);
+    osc.stop(t + 0.18);
+  }
+
+  // 19. 裂變等離子刃：鋒利月牙破空斬裂
+  playPlasmaBlade() {
+    if (!this.ctx || !this.enabled) return;
+    this.ensureContext();
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(860, t);
+    osc.frequency.exponentialRampToValueAtTime(240, t + 0.10);
+    gain.gain.setValueAtTime(0.17, t);
+    gain.gain.exponentialRampToValueAtTime(0.005, t + 0.10);
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(t);
+    osc.stop(t + 0.10);
+  }
+
+  // 20. 奈米蝕甲蟲群：極高頻機械蟲群蜂鳴
+  playNanoSwarm() {
+    if (!this.ctx || !this.enabled) return;
+    this.ensureContext();
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(2200, t);
+    osc.frequency.exponentialRampToValueAtTime(1100, t + 0.09);
+    gain.gain.setValueAtTime(0.10, t);
+    gain.gain.exponentialRampToValueAtTime(0.005, t + 0.09);
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(t);
+    osc.stop(t + 0.09);
+  }
+
+  // 21. 天啟破城光錐：深沉次聲凝聚爆發至高頻破空光錐
+  playPhotonLance() {
+    if (!this.ctx || !this.enabled) return;
+    this.ensureContext();
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(160, t);
+    osc.frequency.exponentialRampToValueAtTime(1850, t + 0.15);
+    gain.gain.setValueAtTime(0.28, t);
+    gain.gain.exponentialRampToValueAtTime(0.005, t + 0.15);
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(t);
+    osc.stop(t + 0.15);
+  }
+
+  // 25. 時序輪迴神鐮：時空維度撕裂迴盪泛音
+  playChronosScythe() {
+    if (!this.ctx || !this.enabled) return;
+    this.ensureContext();
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(320, t);
+    osc.frequency.exponentialRampToValueAtTime(80, t + 0.35);
+    gain.gain.setValueAtTime(0.32, t);
+    gain.gain.exponentialRampToValueAtTime(0.005, t + 0.35);
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(t);
+    osc.stop(t + 0.35);
+  }
+
   playExplosion(heavy = false) {
     if (!this.ctx || !this.enabled) return;
     this.ensureContext();
@@ -1612,6 +1720,10 @@ class DataStore {
 
   async initIndexedDB() {
     return new Promise((resolve) => {
+      if (typeof indexedDB === 'undefined') {
+        resolve(null);
+        return;
+      }
       const req = indexedDB.open(this.dbName, 2);
       req.onupgradeneeded = (e) => {
         const db = e.target.result;
@@ -1984,6 +2096,12 @@ class DataStore {
     const sid = this.currentStudentId || 'S0001';
     const sidProgress = this.getStudentProgressMap(sid);
     const pool = [...this.questionBank];
+    // 檢查題庫中是否尚有未作答新題目或尚未復仇之弱點題目
+    const hasUnmastered = pool.some(q => {
+      const p = sidProgress[q.question_id];
+      return !p || p.attempts === 0 || (p.wrong > 0 && !p.avenged);
+    });
+
     const scored = pool.map(q => {
       const p = sidProgress[q.question_id] || { attempts: 0, wrong: 0, streak: 0, avenged: false };
       let weight = 6.0;
@@ -1997,11 +2115,11 @@ class DataStore {
         weight = 15.0;
         type = 'weak';
       } else if (p.attempts > 0 && p.wrong === 0) {
-        // 已經答對的題目：大幅壓低出現機率 (趨近於 0)，避免反覆重複
-        weight = 0.05;
+        // 已經答對的題目：只要題庫尚有新題/弱點題，機率嚴格設為 0，實現完全零重複！
+        weight = hasUnmastered ? 0.0 : 0.05;
         type = 'mastered';
       } else {
-        weight = 0.4;
+        weight = hasUnmastered ? 0.05 : 0.4;
         type = 'review';
       }
       return { q, weight, type };
@@ -2050,7 +2168,16 @@ const STARFALL_WEAPONS_CATALOG = [
   { id: 'cryo_spire', name: '玄天冰魄凌柱', isPassive: true, tier: 'S', tierName: 'S 級・毀滅神話', icon: 'assets/icons/weapons/weapon_13.png', tag: '被動・天降', baseDmg: 160, desc: '天頂隨機垂降巨大永凍冰魄尖塔，下墜轟擊目標造成大範圍霜寒凍結與高額穿透，無須手動裝備。' },
   { id: 'emerald_spring', name: '翡翠靈泉護陣', isPassive: true, tier: 'C', tierName: 'C 級・守護輔助', icon: 'assets/icons/weapons/weapon_14.png', tag: '被動・光環', baseDmg: 65, desc: '週期性向外擴散綠色靈能修復波，清除近身彈幕，並有 15% 機率修復戰機裝甲。' },
   { id: 'time_dilation', name: '躍遷時空擴張', isPassive: true, tier: 'C', tierName: 'C 級・守護輔助', icon: 'assets/icons/weapons/weapon_15.png', tag: '被動・超頻', baseDmg: 0, desc: '戰鬥空間超頻擴展，全武器冷卻縮短 12%，移速與擦彈同步半徑大幅提升。' },
-  { id: 'sonic_cannon', name: '超聲震盪重砲', isPassive: false, tier: 'S', tierName: 'S 級・毀滅神話', icon: 'assets/icons/weapons/weapon_16.png', tag: '主動・音波', baseDmg: 125, desc: '放射半圓弧音波震盪圈，擊退敵人並抵銷路徑上的所有敵方常規子彈。' }
+  { id: 'sonic_cannon', name: '超聲震盪重砲', isPassive: false, tier: 'S', tierName: 'S 級・毀滅神話', icon: 'assets/icons/weapons/weapon_16.png', tag: '主動・音波', baseDmg: 125, desc: '放射半圓弧音波震盪圈，擊退敵人並抵銷路徑上的所有敵方常規子彈。' },
+  { id: 'chain_lightning', name: '雷公天劫鏈弧', isPassive: false, tier: 'A', tierName: 'A 級・強襲主力', icon: 'assets/icons/weapons/weapon_17.png', tag: '主動・連鎖', baseDmg: 88, desc: '發射高壓天劫電弧，在敵機群間連鎖彈跳最多 4 次，附加電漿麻痺與高額破盾。' },
+  { id: 'solar_flare', name: '熾陽破曉耀斑', isPassive: false, tier: 'A', tierName: 'A 級・強襲主力', icon: 'assets/icons/weapons/weapon_18.png', tag: '主動・灼熱', baseDmg: 115, desc: '射出高溫破曉日冕日珥，貫穿路徑上所有敵機與反彈魔鏡，引發連續太陽耀斑焚燒。' },
+  { id: 'plasma_blade', name: '裂變等離子刃', isPassive: false, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_19.png', tag: '主動・弧刃', baseDmg: 92, desc: '向前橫掃雙聯高能等離子月牙光刃，強力斬裂切碎前方敵陣並劈消敵方子彈。' },
+  { id: 'nano_swarm', name: '奈米蝕甲蟲群', isPassive: true, tier: 'A', tierName: 'A 級・強襲主力', icon: 'assets/icons/weapons/weapon_20.png', tag: '被動・蝕甲', baseDmg: 45, desc: '釋放自律奈米機械蟲群，主動附著敵機持續腐蝕裝甲，使目標承受傷害增加 30%。' },
+  { id: 'photon_lance', name: '天啟破城光錐', isPassive: false, tier: 'S', tierName: 'S 級・毀滅神話', icon: 'assets/icons/weapons/weapon_21.png', tag: '主動・貫穿', baseDmg: 280, desc: '凝聚超相對論光子尖錐，無視護盾防禦全屏直線貫穿，並粉碎所有沿途魔鏡障壁！' },
+  { id: 'laser_array', name: '星陣軌道壁壘', isPassive: true, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_22.png', tag: '被動・環衛', baseDmg: 52, desc: '雙聯浮游衛星雷射環繞機體，對接近的外環目標自動鎖定發射交織聚焦光束。' },
+  { id: 'hyper_thruster', name: '疾風超導噴流', isPassive: true, tier: 'C', tierName: 'C 級・守護輔助', icon: 'assets/icons/weapons/weapon_23.png', tag: '被動・機動', baseDmg: 0, desc: '超導向量推進引擎，機體移動速度大幅提升 25%，擦彈判定半徑擴大 15px。' },
+  { id: 'aegis_reflector', name: '神聖防衛折光稜鏡', isPassive: true, tier: 'A', tierName: 'A 級・強襲主力', icon: 'assets/icons/weapons/weapon_24.png', tag: '被動・偏折', baseDmg: 60, desc: '懸浮於兩翼之防禦折射晶體，週期性將靠近戰機的敵方子彈轉化為同步能量或偏折反彈。' },
+  { id: 'chronos_scythe', name: '時序輪迴神鐮', isPassive: false, tier: 'S', tierName: 'S 級・毀滅神話', icon: 'assets/icons/weapons/weapon_25.png', tag: '主動・時空', baseDmg: 260, desc: '時空裂隙凝聚之命運死神巨鐮，橫跨戰場劃過造成極大範圍斬擊，並使周遭敵速減緩 50%。' }
 ];
 
 // 六大真融合武器常數定義 (雙素材 Lv.3+ 解鎖)
@@ -2278,7 +2405,16 @@ class Game {
       cryo_spire: { id: 'cryo_spire', rank: 0, quality: 'common', timer: 0 },
       emerald_spring: { id: 'emerald_spring', rank: 0, quality: 'common', timer: 0 },
       time_dilation: { id: 'time_dilation', rank: 0, quality: 'common', timer: 0 },
-      sonic_cannon: { id: 'sonic_cannon', rank: 0, quality: 'common', timer: 0 }
+      sonic_cannon: { id: 'sonic_cannon', rank: 0, quality: 'common', timer: 0 },
+      chain_lightning: { id: 'chain_lightning', rank: 0, quality: 'common', timer: 0 },
+      solar_flare: { id: 'solar_flare', rank: 0, quality: 'common', timer: 0 },
+      plasma_blade: { id: 'plasma_blade', rank: 0, quality: 'common', timer: 0 },
+      nano_swarm: { id: 'nano_swarm', rank: 0, quality: 'common', timer: 0 },
+      photon_lance: { id: 'photon_lance', rank: 0, quality: 'common', timer: 0 },
+      laser_array: { id: 'laser_array', rank: 0, quality: 'common', timer: 0 },
+      hyper_thruster: { id: 'hyper_thruster', rank: 0, quality: 'common', timer: 0 },
+      aegis_reflector: { id: 'aegis_reflector', rank: 0, quality: 'common', timer: 0 },
+      chronos_scythe: { id: 'chronos_scythe', rank: 0, quality: 'common', timer: 0 }
     };
 
     // 主動裝備槽 (嚴格限制同時最多裝備 3 個主動武器，被動武器獨立常駐運作)
@@ -2977,15 +3113,38 @@ class Game {
     let dmg = 85 * (dmgMultipliers[tier] || 1.0);
     if (isComet) dmg *= 1.6;
 
+    const isGrazeEmp = (this.player.grazeSync >= 100);
+    if (isGrazeEmp) {
+      this.player.grazeSync = 0;
+      dmg *= 2.5;
+      this.cancelAllEnemyBullets('⚡【100% 擦彈同步過載 EMP】全屏彈幕消解！破除魔王絕境神盾！');
+      this.sound.playCrit();
+    }
+
     const b = new Bullet(this.player.x, this.player.y - 20, 0, isComet ? -820 : -720, true, dmg, 'spirit');
-    b.pierce = (tier >= 5 || isComet) ? 12 : (tier >= 4 ? 3 : (tier >= 3 ? 2 : 1));
-    b.r = isComet ? 26 : (9 + tier * 4.5);
+    b.pierce = (tier >= 5 || isComet || isGrazeEmp) ? 12 : (tier >= 4 ? 3 : (tier >= 3 ? 2 : 1));
+    b.r = isComet ? 26 : (isGrazeEmp ? 32 : (9 + tier * 4.5));
     b.isMax = isMax;
     b.isComet = isComet;
+    b.isGrazeEmp = isGrazeEmp;
     b.lastHitBossTime = 0;
     this.bullets.push(b);
 
-    this.shake(isComet ? 10 : (isMax ? 7 : 3), 0.25);
+    this.shake(isGrazeEmp ? 15 : (isComet ? 10 : (isMax ? 7 : 3)), isGrazeEmp ? 0.35 : 0.25);
+  }
+
+  // 擦彈過載全屏消彈與破防衝擊波
+  cancelAllEnemyBullets(toastMsg = '彈幕全屏消解！') {
+    if (this.ebullets && this.ebullets.length > 0) {
+      this.ebullets.forEach(eb => {
+        for (let i = 0; i < 2; i++) {
+          this.particles.push(new Particle(eb.x, eb.y, (Math.random() - 0.5) * 90, (Math.random() - 0.5) * 90, '#67ffff', 2.5, 0.22));
+        }
+      });
+      this.score += this.ebullets.length * 20;
+      this.ebullets = [];
+    }
+    if (toastMsg) this.showToast(toastMsg);
   }
 
   // 靈丸擊中目標爆發之純白外擴衝擊波與星芒粒子 (幽遊白書經典視覺)
@@ -3197,6 +3356,80 @@ class Game {
       if (sn.timer >= 1.05 / rateMult) {
         sn.timer = 0;
         this.fireSonicCannon(sn.rank, sn.quality);
+      }
+    }
+
+    // 17. 雷公天劫鏈弧 (chain_lightning: 主動)
+    const cl = this.arsenal.chain_lightning;
+    if (cl && cl.rank > 0 && this.isWeaponActiveEquipped('chain_lightning')) {
+      cl.timer += dt;
+      if (cl.timer >= 0.55 / rateMult) {
+        cl.timer = 0;
+        this.fireChainLightning(cl.rank, cl.quality);
+      }
+    }
+
+    // 18. 熾陽破曉耀斑 (solar_flare: 主動)
+    const sf = this.arsenal.solar_flare;
+    if (sf && sf.rank > 0 && this.isWeaponActiveEquipped('solar_flare')) {
+      sf.timer += dt;
+      if (sf.timer >= 0.75 / rateMult) {
+        sf.timer = 0;
+        this.fireSolarFlare(sf.rank, sf.quality);
+      }
+    }
+
+    // 19. 裂變等離子刃 (plasma_blade: 主動)
+    const pb = this.arsenal.plasma_blade;
+    if (pb && pb.rank > 0 && this.isWeaponActiveEquipped('plasma_blade')) {
+      pb.timer += dt;
+      if (pb.timer >= 0.60 / rateMult) {
+        pb.timer = 0;
+        this.firePlasmaBlade(pb.rank, pb.quality);
+      }
+    }
+
+    // 20. 奈米蝕甲蟲群 (nano_swarm: 被動)
+    const ns = this.arsenal.nano_swarm;
+    if (ns && ns.rank > 0) {
+      this.updateNanoSwarm(ns.rank, ns.quality, dt);
+    }
+
+    // 21. 天啟破城光錐 (photon_lance: 主動)
+    const pl = this.arsenal.photon_lance;
+    if (pl && pl.rank > 0 && this.isWeaponActiveEquipped('photon_lance')) {
+      pl.timer += dt;
+      if (pl.timer >= 1.20 / rateMult) {
+        pl.timer = 0;
+        this.firePhotonLance(pl.rank, pl.quality);
+      }
+    }
+
+    // 22. 星陣軌道壁壘 (laser_array: 被動)
+    const la = this.arsenal.laser_array;
+    if (la && la.rank > 0) {
+      this.updateLaserArray(la.rank, la.quality, dt);
+    }
+
+    // 23. 疾風超導噴流 (hyper_thruster: 被動)
+    const ht = this.arsenal.hyper_thruster;
+    if (ht && ht.rank > 0) {
+      this.updateHyperThruster(ht.rank, ht.quality);
+    }
+
+    // 24. 神聖防衛折光稜鏡 (aegis_reflector: 被動)
+    const ar = this.arsenal.aegis_reflector;
+    if (ar && ar.rank > 0) {
+      this.updateAegisReflector(ar.rank, ar.quality, dt);
+    }
+
+    // 25. 時序輪迴神鐮 (chronos_scythe: 主動)
+    const cs2 = this.arsenal.chronos_scythe;
+    if (cs2 && cs2.rank > 0 && this.isWeaponActiveEquipped('chronos_scythe')) {
+      cs2.timer += dt;
+      if (cs2.timer >= 1.40 / rateMult) {
+        cs2.timer = 0;
+        this.fireChronosScythe(cs2.rank, cs2.quality);
       }
     }
   }
@@ -3547,6 +3780,166 @@ class Game {
     this.shake(4, 0.18);
   }
 
+  // 17. 雷公天劫鏈弧 (chain_lightning)
+  fireChainLightning(rank, quality = 'common') {
+    const qMult = this.getQualityMultiplier(quality);
+    const dmg = (68 + rank * 24) * qMult;
+    const b = new Bullet(this.player.x, this.player.y - 18, 0, -820, true, dmg, 'chain_lightning', rank);
+    b.r = 6 + rank * 1.0;
+    b.color = '#38bdf8';
+    b.chainCount = 2 + rank;
+    b.pierce = 3;
+    this.bullets.push(b);
+    this.sound.playChainLightning();
+  }
+
+  // 18. 熾陽破曉耀斑 (solar_flare)
+  fireSolarFlare(rank, quality = 'common') {
+    const qMult = this.getQualityMultiplier(quality);
+    const dmg = (88 + rank * 30) * qMult;
+    const b = new Bullet(this.player.x, this.player.y - 20, 0, -680, true, dmg, 'solar_flare', rank);
+    b.r = 12 + rank * 2;
+    b.pierce = 99; // 貫穿一切，不被反彈魔鏡阻擋
+    b.color = '#ff7a29';
+    b.isSolar = true;
+    b.hitEnemies = new Set();
+    b.hitMinions = new Set();
+    this.bullets.push(b);
+    this.sound.playSolarFlare();
+  }
+
+  // 19. 裂變等離子刃 (plasma_blade)
+  firePlasmaBlade(rank, quality = 'common') {
+    const qMult = this.getQualityMultiplier(quality);
+    const dmg = (72 + rank * 25) * qMult;
+    const angles = [-0.22, 0.22];
+    angles.forEach(ang => {
+      const vx = Math.sin(ang) * 620;
+      const vy = -Math.cos(ang) * 620;
+      const b = new Bullet(this.player.x + (ang > 0 ? 14 : -14), this.player.y - 12, vx, vy, true, dmg, 'plasma_blade', rank);
+      b.r = 14 + rank * 2;
+      b.pierce = 4 + rank;
+      b.shred = true;
+      b.color = '#48e583';
+      this.bullets.push(b);
+    });
+    this.sound.playPlasmaBlade();
+  }
+
+  // 20. 奈米蝕甲蟲群 (nano_swarm)
+  updateNanoSwarm(rank, quality = 'common', dt) {
+    const ns = this.arsenal.nano_swarm;
+    ns.timer = (ns.timer || 0) + dt;
+    if (ns.timer >= Math.max(1.2, 2.8 - rank * 0.3)) {
+      ns.timer = 0;
+      const qMult = this.getQualityMultiplier(quality);
+      const dmg = (32 + rank * 12) * qMult;
+      const count = 2 + Math.min(3, rank);
+      for (let i = 0; i < count; i++) {
+        const ang = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
+        const b = new Bullet(
+          this.player.x + Math.cos(ang) * 22,
+          this.player.y + Math.sin(ang) * 22,
+          Math.cos(ang) * 160,
+          Math.sin(ang) * 160 - 220,
+          true, dmg, 'nano_swarm', rank
+        );
+        b.r = 5;
+        b.color = '#a855f7';
+        b.pierce = 2;
+        this.bullets.push(b);
+      }
+      this.sound.playNanoSwarm();
+    }
+  }
+
+  // 21. 天啟破城光錐 (photon_lance)
+  firePhotonLance(rank, quality = 'common') {
+    const qMult = this.getQualityMultiplier(quality);
+    const dmg = (220 + rank * 75) * qMult;
+    const b = new Bullet(this.player.x, this.player.y - 24, 0, -1020, true, dmg, 'photon_lance', rank);
+    b.r = 16 + rank * 3;
+    b.pierce = 99; // 絕對貫穿
+    b.color = '#ffd700';
+    b.hitEnemies = new Set();
+    b.hitMinions = new Set();
+    this.bullets.push(b);
+    this.sound.playPhotonLance();
+    this.shake(9, 0.24);
+  }
+
+  // 22. 星陣軌道壁壘 (laser_array)
+  updateLaserArray(rank, quality = 'common', dt) {
+    const la = this.arsenal.laser_array;
+    la.rot = (la.rot || 0) + dt * 2.8;
+    la.timer = (la.timer || 0) + dt;
+    if (la.timer >= Math.max(0.22, 0.55 - rank * 0.07)) {
+      la.timer = 0;
+      const qMult = this.getQualityMultiplier(quality);
+      const dmg = (26 + rank * 9) * qMult;
+      const orbits = [la.rot, la.rot + Math.PI];
+      orbits.forEach(ang => {
+        const sx = this.player.x + Math.cos(ang) * 46;
+        const sy = this.player.y + Math.sin(ang) * 46;
+        const b = new Bullet(sx, sy, 0, -750, true, dmg, 'satellite_laser', rank);
+        b.r = 4;
+        b.color = '#38bdf8';
+        this.bullets.push(b);
+      });
+      this.sound.playLaser(1150);
+    }
+  }
+
+  // 23. 疾風超導噴流 (hyper_thruster)
+  updateHyperThruster(rank, quality = 'common') {
+    this.player.moveSpeedMultiplier = Math.max(this.player.moveSpeedMultiplier || 1.0, 1.22 + rank * 0.06);
+    this.player.grazeRadius = 56 + rank * 5;
+  }
+
+  // 24. 神聖防衛折光稜鏡 (aegis_reflector)
+  updateAegisReflector(rank, quality = 'common', dt) {
+    const ar = this.arsenal.aegis_reflector;
+    ar.timer = (ar.timer || 0) + dt;
+    const cd = Math.max(1.6, 3.8 - rank * 0.45);
+    if (ar.timer >= cd) {
+      ar.timer = 0;
+      let deflected = 0;
+      if (this.ebullets && this.ebullets.length > 0) {
+        this.ebullets.forEach(eb => {
+          const dist = Math.hypot(eb.x - this.player.x, eb.y - this.player.y);
+          if (dist < 80 && !eb.deflected) {
+            eb.deflected = true;
+            eb.vy = -Math.abs(eb.vy) * 1.3;
+            eb.vx = (Math.random() - 0.5) * 140;
+            eb.player = true;
+            eb.color = '#38bdf8';
+            deflected++;
+          }
+        });
+      }
+      if (deflected > 0) {
+        this.sound.playLaser(1400);
+        this.showToast(`🛡️【神聖折光稜鏡】偏折了 ${deflected} 發敵彈！`);
+      }
+    }
+  }
+
+  // 25. 時序輪迴神鐮 (chronos_scythe)
+  fireChronosScythe(rank, quality = 'common') {
+    const qMult = this.getQualityMultiplier(quality);
+    const dmg = (195 + rank * 60) * qMult;
+    const b = new Bullet(this.player.x, this.player.y - 28, (Math.random() - 0.5) * 60, -420, true, dmg, 'chronos_scythe', rank);
+    b.r = 30 + rank * 5;
+    b.pierce = 99;
+    b.color = '#ffd700';
+    b.isScythe = true;
+    b.hitEnemies = new Set();
+    b.hitMinions = new Set();
+    this.bullets.push(b);
+    this.sound.playChronosScythe();
+    this.shake(10, 0.28);
+  }
+
   getQualityMultiplier(quality) {
     if (typeof quality === 'number') {
       const tierMap = [1.0, 1.0, 1.45, 2.1, 3.2, 5.0];
@@ -3595,7 +3988,18 @@ class Game {
   // 統一傷害入口 damageBoss() (徹底修復 Boss 無法消滅與護盾 Bug)
   // ============================================================
   damageBoss(boss, damage, type = 'normal', source = 'bullet') {
-    if (!boss || boss.dead || boss.invulnerable) return;
+    if (!boss || boss.dead) return;
+    if (boss.invulnerable) {
+      if (source === 'spirit' && type === 'spirit' && (this.lastEmpFired || damage > 500)) {
+        boss.invulnerable = false;
+        boss.desperationActive = false;
+        boss.stunTimer = 3.0;
+        this.bossMinions = this.bossMinions.filter(m => m.type !== 'garuda_feather_anchor' && m.type !== 'thunder_drum_anchor' && m.type !== 'gorgon_hex_mirror');
+        this.showToast('⚡【100% 擦彈過載 EMP】強行擊穿魔王絕境神盾！魔王陷入 3.0 秒癱瘓！');
+      } else {
+        return;
+      }
+    }
 
     // 暴擊判定
     const critRank = this.equipped.passive2.rank;
@@ -3653,6 +4057,12 @@ class Game {
     boss.hitFlash = 0.08;
     this.totalDamageDealt += finalDmg;
     this.score += Math.round(finalDmg * 2);
+
+    // 1-3 關魔王背水一戰機制 (HP <= 15% 時觸發絕境機制，鎖血保底防止純暴力秒殺跳過機制)
+    if ((boss.stage === 1 || boss.stage === 2 || boss.stage === 3) && boss.hp <= boss.maxHp * 0.15 && !boss.desperationTriggered && !boss.isMini) {
+      boss.hp = Math.max(1, Math.min(boss.hp, Math.floor(boss.maxHp * 0.14)));
+      this.triggerBossDesperation(boss);
+    }
 
     // 打擊感音效與金屬火花回饋 (保留音效與震動，移除阻斷引擎渲染之凍結幀)
     if (isCrit) {
@@ -3859,6 +4269,80 @@ class Game {
     this.sound.playBossEntranceSiren();
     this.showToast(`🌌【${boss.name}】第三型態：混沌原初創世終極神格降臨！`);
     this.shake(14, 0.5);
+  }
+
+  // 1-3 關魔王絕境背水一戰機制 (Desperation Overload)
+  triggerBossDesperation(b) {
+    if (!b || b.dead || b.dying || b.desperationTriggered || b.isMini) return;
+    b.desperationTriggered = true;
+    b.desperationActive = true;
+    const bx = (b.x !== undefined) ? b.x : (this.W ? this.W * 0.5 : 240);
+    const by = (b.y !== undefined) ? b.y : 150;
+    const w = this.W || 480;
+    this.ebullets = [];
+    this.sound.playWarningAlert();
+
+    if (b.stage === 1) {
+      b.invulnerable = true;
+      b.invulnTimer = 7.0;
+      this.sound.playLaser(1400);
+      this.shake(10, 0.35);
+      this.showToast('⚠️【迦樓羅・涅槃金羽陣】進入 7 秒無敵！擊破 4 處金羽錨點或以 100% 擦彈靈丸破盾！');
+      for (let i = 0; i < 4; i++) {
+        const ang = (i / 4) * Math.PI * 2;
+        this.bossMinions.push({
+          type: 'garuda_feather_anchor',
+          name: '涅槃金羽錨點',
+          x: bx + Math.cos(ang) * 85,
+          y: by + Math.sin(ang) * 85,
+          r: 18,
+          hp: 800,
+          maxHp: 800,
+          angle: ang
+        });
+      }
+    } else if (b.stage === 2) {
+      b.invulnerable = true;
+      b.invulnTimer = 7.0;
+      this.sound.playLaser(1600);
+      this.shake(10, 0.35);
+      this.showToast('⚠️【雷公・天劫囚籠】無敵磁暴激活！摧毀任一天雷法鼓或釋放 100% 擦彈 EMP 瓦解力場！');
+      this.bossMinions.push({
+        type: 'thunder_drum_anchor',
+        name: '天雷法鼓・左',
+        x: w * 0.22,
+        y: by + 30,
+        r: 22,
+        hp: 1200,
+        maxHp: 1200
+      });
+      this.bossMinions.push({
+        type: 'thunder_drum_anchor',
+        name: '天雷法鼓・右',
+        x: w * 0.78,
+        y: by + 30,
+        r: 22,
+        hp: 1200,
+        maxHp: 1200
+      });
+    } else if (b.stage === 3) {
+      this.sound.playLaser(900);
+      this.shake(8, 0.3);
+      this.showToast('⚠️【美杜莎・蛇髮魔鏡】鏡面反彈常規子彈！使用貫穿光束、破壞魔鏡或釋放 100% 擦彈破盾！');
+      for (let i = 0; i < 3; i++) {
+        const ang = (i / 3) * Math.PI * 2;
+        this.bossMinions.push({
+          type: 'gorgon_hex_mirror',
+          name: '蛇髮魔鏡',
+          x: bx + Math.cos(ang) * 95,
+          y: by + Math.sin(ang) * 95,
+          r: 20,
+          hp: 1000,
+          maxHp: 1000,
+          angle: ang
+        });
+      }
+    }
   }
 
   startBossDefeatCinematic(boss) {
@@ -4472,8 +4956,58 @@ class Game {
           }
         }
       }
+
+      // 迦樓羅金羽錨點旋轉護衛
+      if (m.type === 'garuda_feather_anchor' && !m.dead) {
+        m.angle = (m.angle || 0) + dt * 1.6;
+        m.x = b.x + Math.cos(m.angle) * 85;
+        m.y = b.y + Math.sin(m.angle) * 85;
+      }
+
+      // 美杜莎蛇髮魔鏡旋轉反彈壁壘
+      if (m.type === 'gorgon_hex_mirror' && !m.dead) {
+        m.angle = (m.angle || 0) + dt * 1.5;
+        m.x = b.x + Math.cos(m.angle) * 95;
+        m.y = b.y + Math.sin(m.angle) * 95;
+      }
     });
     this.bossMinions = this.bossMinions.filter(m => !m.dead);
+
+    // 檢查 1-3 關魔王背水一戰機制是否被瓦解
+    if (b.desperationActive) {
+      if (b.stage === 1) {
+        const anchors = this.bossMinions.filter(m => m.type === 'garuda_feather_anchor');
+        if (anchors.length === 0) {
+          b.desperationActive = false;
+          b.invulnerable = false;
+          b.stunTimer = 2.5;
+          this.sound.playExplosion(true);
+          this.shake(12, 0.4);
+          this.showToast('💥 金羽錨點全數破除！迦樓羅神盾瓦解，陷入 2.5 秒大癱瘓！');
+        }
+      } else if (b.stage === 2) {
+        const drums = this.bossMinions.filter(m => m.type === 'thunder_drum_anchor');
+        if (drums.length < 2) {
+          b.desperationActive = false;
+          b.invulnerable = false;
+          b.hp = Math.max(1, b.hp - b.maxHp * 0.05);
+          b.stunTimer = 2.0;
+          this.bossMinions = this.bossMinions.filter(m => m.type !== 'thunder_drum_anchor');
+          this.sound.playExplosion(true);
+          this.shake(14, 0.4);
+          this.showToast('💥 天雷法鼓崩壞！雷公受到 5% 電荷反噬並癱瘓 2.0 秒！');
+        }
+      } else if (b.stage === 3) {
+        const mirrors = this.bossMinions.filter(m => m.type === 'gorgon_hex_mirror');
+        if (mirrors.length === 0) {
+          b.desperationActive = false;
+          b.stunTimer = 3.0;
+          this.sound.playExplosion(true);
+          this.shake(12, 0.4);
+          this.showToast('💥 三座蛇髮魔鏡全數粉碎！美杜莎陷入 3.0 秒重度眩暈！');
+        }
+      }
+    }
 
     b.skillTimer += dt;
     b.ultimateTimer += dt;
@@ -5810,17 +6344,17 @@ class Game {
           ? `<span class="upgrade-rank-tag max" style="background:var(--gold); color:#000; font-weight:900;">真・融合解鎖</span>`
           : `<span class="upgrade-rank-tag ${c.targetRank === 5 ? 'max' : ''}">${c.currentRank === 0 ? '新解鎖 Lv.1' : `Lv.${c.currentRank} → Lv.${c.targetRank} (MAX 5)`}</span>`);
 
-      // 融合素材標註 (可以融合的武器，在3選1時特別標註)
+      // 融合素材標註 (緊湊單行膠囊)
       let fusionHtml = '';
       if (c.fusionHints && c.fusionHints.length > 0) {
         fusionHtml = c.fusionHints.map(hint => {
           if (hint.hasPartner) {
-            return `<div class="upgrade-fusion-indicator partner-owned">
-              <span>✨【真融合素材】搭檔已持有！可與《${hint.partnerName}》融合成【${hint.fusionName}】</span>
+            return `<div class="upgrade-fusion-pill partner-owned">
+              <span>✨ 可與《${hint.partnerName}》融合為【${hint.fusionName}】(搭檔已持有)</span>
             </div>`;
           } else {
-            return `<div class="upgrade-fusion-indicator">
-              <span>🔗【真融合素材】可與《${hint.partnerName}》融合成【${hint.fusionName}】</span>
+            return `<div class="upgrade-fusion-pill">
+              <span>🔗 可與《${hint.partnerName}》融合成【${hint.fusionName}】</span>
             </div>`;
           }
         }).join('');
@@ -5835,13 +6369,13 @@ class Game {
         <div class="upgrade-info">
           <div class="upgrade-name-row">
             <span class="upgrade-name ${nameClass}">${c.name}</span>
-            ${typeBadgeHtml}
-            ${tierBadgeHtml}
-            ${rankTagHtml}
+            <div class="upgrade-badges-group">
+              ${typeBadgeHtml}
+              ${tierBadgeHtml}
+              ${rankTagHtml}
+            </div>
           </div>
-          <div class="upgrade-tier-row" style="font-size:11px; color:var(--gold); font-weight:800; margin:2px 0;">${c.tierLabel || ''}</div>
-          <div class="upgrade-effect-tag">${c.specialEffect || ''}</div>
-          <p class="upgrade-desc">${c.desc}</p>
+          <div class="upgrade-stats-line">${c.statProgression || c.specialEffect || ''}</div>
           ${fusionHtml}
         </div>
       `;
@@ -5855,9 +6389,18 @@ class Game {
 
   generateUpgradeChoices(correctCount = 3) {
     const list = [];
-    const wpns = (this.dataStore && this.dataStore.weaponData && this.dataStore.weaponData.length > 0)
+    const rawWpns = (this.dataStore && this.dataStore.weaponData && this.dataStore.weaponData.length > 0)
       ? this.dataStore.weaponData
       : STARFALL_WEAPONS_CATALOG;
+    const wpns = rawWpns.map(w => {
+      const cat = STARFALL_WEAPONS_CATALOG.find(c => c.id === w.id) || {};
+      return {
+        ...cat,
+        ...w,
+        tier: w.tier || cat.tier || 'C',
+        tierName: w.tierName || cat.tierName || 'C 級・基礎武裝'
+      };
+    });
 
     // 情況 A：答對 0 題（嚴格不提供武器！僅提供三項微幅生存特化）
     if (correctCount === 0) {
@@ -5987,6 +6530,16 @@ class Game {
         };
       });
 
+      const baseDmg = w.baseDmg || 50;
+      const currentDmg = Math.round(baseDmg * (1 + currentRank * 0.28) * mult);
+      const targetDmg = Math.round(baseDmg * (1 + targetRank * 0.28) * mult);
+      let statSummary = '';
+      if (w.isPassive) {
+        statSummary = `🛡️ ${w.tag || '被動常駐'} ｜ 增益強化至 Lv.${targetRank}`;
+      } else {
+        statSummary = `⚡ 威力: ${currentRank === 0 ? targetDmg : `${currentDmg} ➔ ${targetDmg}`} ｜ ${w.tag || '主動火控'}`;
+      }
+
       list.push({
         isFusion: false,
         weaponId: w.id,
@@ -6003,6 +6556,7 @@ class Game {
         specialEffect: targetRank === 5
           ? `【MAX 終極特化】威力大幅昇華，已達最高階！`
           : `${w.tag || '常規裝備'}｜提升至 Lv.${targetRank}`,
+        statProgression: statSummary,
         desc: `${w.desc}（升至 Lv.${targetRank}）`,
         fusionHints: fusionHints
       });
@@ -6036,6 +6590,7 @@ class Game {
         icon: 'assets/icons/weapons/weapon_3.png',
         tierLabel: '★【雙素材 Lv.3 覺醒真融合】★',
         specialEffect: f.resonance ? `${f.resonance.name}：${f.resonance.effect}` : '雙武器共鳴終極特化',
+        statProgression: f.resonance ? `🔥 ${f.resonance.name}：${f.resonance.effect}` : '雙武器共鳴終極特化',
         desc: `${f.description}（結合兩大武裝終極威力）`
       };
       if (list.length >= 3) {
@@ -6054,6 +6609,7 @@ class Game {
           name: '緊急奈米修復栓',
           icon: 'assets/icons/weapons/weapon_14.png',
           specialEffect: '戰機裝甲修復 +1 HP',
+          statProgression: '🛡️ 戰機裝甲修復 +1 HP（上限 3 HP）',
           desc: '微型奈米醫療注劑，小幅修復戰機受損結構，恢復 1 點生命值。'
         },
         {
@@ -6062,6 +6618,7 @@ class Game {
           name: '全武裝高能超頻陣列',
           icon: 'assets/icons/weapons/weapon_1.png',
           specialEffect: '戰機移動速度 +6%，靈丸蓄力微幅加快',
+          statProgression: '⚡ 機動速度 +6% ｜ 靈丸蓄力微幅加快',
           desc: '戰機供能導軌超頻加速，提高機動性與靈丸充能反應速度。'
         },
         {
@@ -6070,6 +6627,7 @@ class Game {
           name: '虛空阻尼波形發生器',
           icon: 'assets/icons/weapons/weapon_10.png',
           specialEffect: '敵方彈幕速度 -5%',
+          statProgression: '🌀 敵方彈幕飛行速度 -5%',
           desc: '釋放空間相位偏轉波，使所有敵機發射之子彈減速 5%。'
         }
       ];
@@ -6774,17 +7332,33 @@ class Game {
           if (m.dead) return;
           const d = Math.hypot(b.x - m.x, b.y - m.y);
           if (d < b.r + m.r) {
+            // 美杜莎蛇髮魔鏡：反彈常規子彈（金陽光束、破曉耀斑、破城光錐與 EMP 靈丸可穿透或擊碎）
+            if (m.type === 'gorgon_hex_mirror') {
+              if (b.type !== 'beam' && b.type !== 'photon_lance' && b.type !== 'solar_flare' && !b.isGrazeEmp) {
+                b.dead = true;
+                const angToPlayer = Math.atan2(this.player.y - m.y, this.player.x - m.x);
+                const eb = new Bullet(m.x, m.y, Math.cos(angToPlayer) * 260, Math.sin(angToPlayer) * 260, false, 1, 'reflected');
+                eb.color = '#c054ff'; eb.r = 6;
+                this.ebullets.push(eb);
+                this.sound.playLaser(950);
+                this.particles.push(new Particle(m.x, m.y, (Math.random() - 0.5) * 60, (Math.random() - 0.5) * 60, '#c054ff', 4, 0.3));
+                return;
+              }
+            }
+
             if (b.hitMinions) {
               if (b.hitMinions.has(m)) return;
               b.hitMinions.add(m);
             }
-            m.hp -= b.damage;
+            // 100% 擦彈 EMP 靈丸對絕境機制實體造成 500% 超載粉碎傷害
+            const dmg = b.isGrazeEmp ? b.damage * 5 : b.damage;
+            m.hp -= dmg;
             b.pierce--;
             if (b.pierce <= 0) b.dead = true;
             this.sound.playHit();
             this.particles.push(new Particle(b.x, b.y, (Math.random() - 0.5) * 80, (Math.random() - 0.5) * 80, '#f5bc38', 2.5, 0.25));
             if (this.showDamageNumbers) {
-              this.damageNumbers.push(new DamageNumber(m.x + (Math.random() - 0.5) * 20, m.y - 12, Math.round(b.damage), false));
+              this.damageNumbers.push(new DamageNumber(m.x + (Math.random() - 0.5) * 20, m.y - 12, Math.round(dmg), false));
             }
             if (b.type === 'spirit') {
               this.createReiganShockwave(b.x, b.y, b.isMax, b.isComet);
@@ -6809,6 +7383,14 @@ class Game {
             return;
           }
           b.lastHitBossTime = now;
+
+          if (b.isGrazeEmp && boss.invulnerable) {
+            boss.invulnerable = false;
+            boss.desperationActive = false;
+            boss.stunTimer = 3.0;
+            this.bossMinions = this.bossMinions.filter(m => m.type !== 'garuda_feather_anchor' && m.type !== 'thunder_drum_anchor' && m.type !== 'gorgon_hex_mirror');
+            this.showToast('⚡【EMP 擦彈過載】靈丸強行擊穿無敵神盾！魔王癱瘓 3.0 秒！');
+          }
 
           if (b.type === 'spirit') {
             this.damageBoss(boss, b.damage, 'spirit', 'spirit');
@@ -7523,6 +8105,78 @@ class Game {
         ctx.fillRect(b.x - 1.5, b.y - 14, 3, 28);
         ctx.fillStyle = '#33e0e0';
         ctx.fillRect(b.x - 3, b.y - 6, 6, 12);
+      } else if (b.type === 'chain_lightning') {
+        // 雷公天劫電弧
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 3;
+        ctx.shadowColor = '#67ffff';
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.moveTo(b.x, b.y - 12);
+        ctx.lineTo(b.x + (Math.random() - 0.5) * 8, b.y - 4);
+        ctx.lineTo(b.x - (Math.random() - 0.5) * 8, b.y + 4);
+        ctx.lineTo(b.x, b.y + 12);
+        ctx.stroke();
+      } else if (b.type === 'solar_flare') {
+        // 熾陽日珥耀斑
+        ctx.fillStyle = '#ff7a29';
+        ctx.shadowColor = '#ff4766';
+        ctx.shadowBlur = 16;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r * 0.45, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (b.type === 'plasma_blade') {
+        // 等離子月牙光刃
+        ctx.save();
+        ctx.translate(b.x, b.y);
+        ctx.rotate(Math.atan2(b.vy, b.vx) + Math.PI / 2);
+        ctx.strokeStyle = '#48e583';
+        ctx.lineWidth = 4;
+        ctx.shadowColor = '#4ade80';
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.arc(0, 0, b.r, -Math.PI * 0.6, -Math.PI * 0.4);
+        ctx.stroke();
+        ctx.restore();
+      } else if (b.type === 'nano_swarm') {
+        // 奈米蟲群晶核
+        ctx.fillStyle = '#a855f7';
+        ctx.shadowColor = '#c084fc';
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (b.type === 'photon_lance') {
+        // 天啟破城光錐
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = '#ffd700';
+        ctx.shadowBlur = 20;
+        ctx.fillRect(b.x - 3, b.y - 30, 6, 60);
+        ctx.fillStyle = '#f59e0b';
+        ctx.fillRect(b.x - 6, b.y - 15, 12, 30);
+      } else if (b.type === 'chronos_scythe') {
+        // 時序輪迴神鐮
+        ctx.save();
+        ctx.translate(b.x, b.y);
+        ctx.rotate(this.time * 6);
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 4.5;
+        ctx.shadowColor = '#ffd700';
+        ctx.shadowBlur = 18;
+        ctx.beginPath();
+        ctx.arc(0, 0, b.r, 0, Math.PI * 1.2);
+        ctx.stroke();
+        ctx.restore();
+      } else if (b.type === 'satellite_laser') {
+        // 軌道衛星雷射
+        ctx.fillStyle = '#38bdf8';
+        ctx.shadowColor = '#38bdf8';
+        ctx.shadowBlur = 8;
+        ctx.fillRect(b.x - 1.5, b.y - 10, 3, 20);
       } else {
         ctx.fillStyle = b.color || '#33e0e0';
         ctx.beginPath();
@@ -7944,6 +8598,29 @@ class Game {
           label = '🌌 混沌原初龍卵';
           barColor = '#b359ff';
           glowColor = '#67ffff';
+        } else if (m.type === 'garuda_feather_anchor') {
+          // 迦樓羅涅槃金羽錨點
+          spriteImg = this.images.fx_feather_shard;
+          spriteW = 42; spriteH = 42;
+          label = '🪶 涅槃金羽錨點 (破盾擊破)';
+          barColor = '#ffd700';
+          glowColor = '#ff9138';
+          ctx.rotate(this.time * 3);
+        } else if (m.type === 'thunder_drum_anchor') {
+          // 雷公天劫法鼓錨點
+          spriteImg = this.images.minion_thunder_drum;
+          spriteW = 48; spriteH = 48;
+          label = '🥁 天雷法鼓 (過載核心)';
+          barColor = '#38bdf8';
+          glowColor = '#38bdf8';
+        } else if (m.type === 'gorgon_hex_mirror') {
+          // 美杜莎蛇髮魔鏡
+          spriteImg = this.images.minion_gorgon_shadow;
+          spriteW = 44; spriteH = 44;
+          label = '🪞 蛇髮魔鏡 (彈幕反彈)';
+          barColor = '#c054ff';
+          glowColor = '#c054ff';
+          ctx.rotate(this.time * 2);
         }
 
         // 1. 繪製精美 Sprite 貼圖 (若貼圖存在)

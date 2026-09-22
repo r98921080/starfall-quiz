@@ -47,7 +47,11 @@
           "damage": 65,
           "effect": "【MAX 終極特化】啟動超頻狂暴，常駐暴擊率 +20%，破甲達 50%"
         }
-      ]
+      ],
+      "tier": "C",
+      "tierName": "C 級・基礎主砲",
+      "isPassive": false,
+      "tag": "主動・主砲"
     },
     {
       "id": "beam_cannon",
@@ -96,13 +100,17 @@
           "dps": 750,
           "effect": "【MAX 終極特化】日蝕雙聯聚焦，全屏折射高能光屑"
         }
-      ]
+      ],
+      "tier": "A",
+      "tierName": "A 級・強襲主力",
+      "isPassive": false,
+      "tag": "主動・穿透"
     },
     {
       "id": "spirit_bullet",
       "name": "靈能聚變核心",
       "icon": "assets/icons/weapons/weapon_3.png",
-      "slot": "main",
+      "slot": "passive",
       "type": "charge",
       "description": "慢速向前浮游的幽藍巨型靈核，向周遭放射靈能電漿弧，自機靈丸蓄力速度加快 30%。",
       "maxRank": 5,
@@ -145,13 +153,17 @@
           "radius": 110,
           "effect": "【MAX 終極特化】雙子靈核並出，釋放全屏震撼靈能風暴"
         }
-      ]
+      ],
+      "tier": "C",
+      "tierName": "C 級・守護輔助",
+      "isPassive": true,
+      "tag": "被動・聚變"
     },
     {
       "id": "kinetic_dart",
       "name": "超空泡穿甲鏢",
       "icon": "assets/icons/weapons/weapon_4.png",
-      "slot": "sub",
+      "slot": "main",
       "type": "dart",
       "description": "極高速藍色超空泡標槍，100% 貫穿所有敵人，每穿透一名目標傷害遞增 20%。",
       "maxRank": 5,
@@ -194,13 +206,17 @@
           "damage": 150,
           "effect": "【MAX 終極特化】穿透時觸發空泡音爆，引發直線連環衝擊波"
         }
-      ]
+      ],
+      "tier": "B",
+      "tierName": "B 級・戰術壓制",
+      "isPassive": false,
+      "tag": "主動・穿刺"
     },
     {
       "id": "homing_missile",
       "name": "烈陽核融導彈",
       "icon": "assets/icons/weapons/weapon_5.png",
-      "slot": "sub",
+      "slot": "main",
       "type": "homing",
       "description": "螺旋尾焰巡弋微型核融飛彈，自動尋標最危險敵機，命中引發大範圍熱核爆轟與火環。",
       "maxRank": 5,
@@ -243,13 +259,17 @@
           "damage": 135,
           "effect": "【MAX 終極特化】彈頭子母分裂，造成二次破片巨型連環核爆"
         }
-      ]
+      ],
+      "tier": "B",
+      "tierName": "B 級・戰術壓制",
+      "isPassive": false,
+      "tag": "主動・索敵"
     },
     {
       "id": "jade_chakram",
       "name": "青玉風雷飛輪",
       "icon": "assets/icons/weapons/weapon_6.png",
-      "slot": "sub",
+      "slot": "main",
       "type": "chakram",
       "description": "向前拋出飛旋青玉輪刃，在敵陣盤旋後迴旋返航，飛行路徑直接粉碎碰觸到的普通敵彈！",
       "maxRank": 5,
@@ -292,13 +312,17 @@
           "damage": 155,
           "effect": "【MAX 終極特化】迴旋生成青玉風暴，吸收敵彈並釋放雷刃"
         }
-      ]
+      ],
+      "tier": "B",
+      "tierName": "B 級・戰術壓制",
+      "isPassive": false,
+      "tag": "主動・削彈"
     },
     {
       "id": "combat_wingman",
       "name": "神鳥天翼隨行僚機",
       "icon": "assets/icons/weapons/weapon_7.png",
-      "slot": "support",
+      "slot": "passive",
       "type": "drone",
       "description": "神話羽翼造型僚機伴隨自機，協同齊射羽刃；擊殺敵機累積羽刃能量觸發全屏橫掃。",
       "maxRank": 5,
@@ -341,13 +365,17 @@
           "damage": 66,
           "effect": "【MAX 終極特化】神鳥天罰：自主釋放追蹤金色羽劍雨"
         }
-      ]
+      ],
+      "tier": "B",
+      "tierName": "B 級・戰術壓制",
+      "isPassive": true,
+      "tag": "被動・僚機"
     },
     {
       "id": "prism_wingman",
       "name": "虹光折射星核",
       "icon": "assets/icons/weapons/weapon_8.png",
-      "slot": "support",
+      "slot": "passive",
       "type": "prism",
       "description": "發射七彩水晶光束，命中後折射至周圍 2~4 名敵機，形成持續 1.2 秒的交叉斬切光網。",
       "maxRank": 5,
@@ -395,13 +423,17 @@
           "refracts": 5,
           "effect": "【MAX 終極特化】光束穿透敵方護盾，生成全場立體極光網"
         }
-      ]
+      ],
+      "tier": "A",
+      "tierName": "A 級・強襲主力",
+      "isPassive": true,
+      "tag": "被動・折射"
     },
     {
       "id": "grenade_launcher",
       "name": "熾陽熔岩噴射核",
       "icon": "assets/icons/weapons/weapon_9.png",
-      "slot": "sub",
+      "slot": "main",
       "type": "explosive",
       "description": "高溫拋射重裝熔岩火球，著彈生成持續高溫熔岩燃燒池，灼燒敵機並降低移速 40%。",
       "maxRank": 5,
@@ -444,13 +476,17 @@
           "damage": 310,
           "effect": "【MAX 終極特化】高溫熔岩池可直接燒熔並消解途經之敵彈"
         }
-      ]
+      ],
+      "tier": "S",
+      "tierName": "S 級・毀滅神話",
+      "isPassive": false,
+      "tag": "主動・地熱"
     },
     {
       "id": "singularity_core",
       "name": "虛空重力奇點",
       "icon": "assets/icons/weapons/weapon_10.png",
-      "slot": "sub",
+      "slot": "passive",
       "type": "singularity",
       "description": "發射一枚暗紫色量子重力球，在敵陣停駐展開為引力微型黑洞，牽引並撕裂雜兵與小型敵彈。",
       "maxRank": 5,
@@ -493,13 +529,17 @@
           "damage": 260,
           "effect": "【MAX 終極特化】黑洞終結時引發重力大爆炸，全屏震退敵機"
         }
-      ]
+      ],
+      "tier": "C",
+      "tierName": "C 級・守護輔助",
+      "isPassive": true,
+      "tag": "被動・黑洞"
     },
     {
       "id": "quantum_shield",
       "name": "埃癸斯神盾力場",
       "icon": "assets/icons/weapons/weapon_11.png",
-      "slot": "sub",
+      "slot": "passive",
       "type": "orbital",
       "description": "環繞自機旋轉的綠金符文力場護盾，抵擋靠近自機之敵彈；每格擋 8 發敵彈釋放環形偏折衝擊波。",
       "maxRank": 5,
@@ -546,13 +586,17 @@
           "damage": 120,
           "effect": "【MAX 終極特化】格擋傷害時為自機生成一層微型過載護盾"
         }
-      ]
+      ],
+      "tier": "C",
+      "tierName": "C 級・守護輔助",
+      "isPassive": true,
+      "tag": "被動・神盾"
     },
     {
       "id": "taiji_array",
       "name": "五行太極陣盤",
       "icon": "assets/icons/weapons/weapon_12.png",
-      "slot": "sub",
+      "slot": "main",
       "type": "elemental",
       "description": "陣盤飛速運轉，輪換射出金(破甲)/木(汲取)/水(減速)/火(爆轟)/土(眩暈)五色法彈。",
       "maxRank": 5,
@@ -590,7 +634,11 @@
           "damage": 160,
           "effect": "【MAX 終極特化】五色神光齊聚，每次射擊五顆法彈呈環形迸發"
         }
-      ]
+      ],
+      "tier": "B",
+      "tierName": "B 級・戰術壓制",
+      "isPassive": false,
+      "tag": "主動・法陣"
     },
     {
       "id": "cryo_spire",
@@ -640,13 +688,16 @@
           "effect": "【MAX 終極特化】冰爆引發絕對零度，瞬間凍結周遭敵機 1.5 秒"
         }
       ],
-      "isPassive": true
+      "isPassive": true,
+      "tier": "S",
+      "tierName": "S 級・毀滅神話",
+      "tag": "被動・天降"
     },
     {
       "id": "emerald_spring",
       "name": "地脈翡翠仙泉",
       "icon": "assets/icons/weapons/weapon_14.png",
-      "slot": "support",
+      "slot": "passive",
       "type": "holy",
       "description": "週期性在自機周遭綻放翡翠神聖生機光環，淨化周圍彈幕；擊敗敵機機率掉落甘露修復裝甲。",
       "maxRank": 5,
@@ -689,7 +740,11 @@
           "damage": 270,
           "effect": "【MAX 終極特化】每 15 秒主動為自機生成一層翡翠庇護神盾"
         }
-      ]
+      ],
+      "tier": "C",
+      "tierName": "C 級・守護輔助",
+      "isPassive": true,
+      "tag": "被動・光環"
     },
     {
       "id": "time_dilation",
@@ -736,13 +791,17 @@
           "critBonus": 0.35,
           "effect": "【MAX 終極特化】全場敵彈常態減速 65%，武器冷卻時間縮短 25%"
         }
-      ]
+      ],
+      "tier": "C",
+      "tierName": "C 級・守護輔助",
+      "isPassive": true,
+      "tag": "被動・超頻"
     },
     {
       "id": "sonic_cannon",
       "name": "裂變音浪重砲",
       "icon": "assets/icons/weapons/weapon_16.png",
-      "slot": "sub",
+      "slot": "main",
       "type": "sonic",
       "description": "向前噴發巨大的月牙形超音波衝擊波，強大推力震碎行進中的普通敵彈，並使敵機短暫癱瘓。",
       "maxRank": 5,
@@ -784,6 +843,442 @@
           "damage": 320,
           "width": 190,
           "effect": "【MAX 終極特化】全屏覆蓋雙重音浪，徹底湮滅所經路徑全部小型敵彈"
+        }
+      ],
+      "tier": "S",
+      "tierName": "S 級・毀滅神話",
+      "isPassive": false,
+      "tag": "主動・音波"
+    },
+    {
+      "id": "chain_lightning",
+      "name": "雷公天劫鏈弧",
+      "icon": "assets/icons/weapons/weapon_17.png",
+      "slot": "main",
+      "isPassive": false,
+      "tier": "A",
+      "tierName": "A 級・強襲主力",
+      "tag": "主動・連鎖",
+      "type": "lightning",
+      "description": "高壓電漿闪電在敵群間狂暴連鎖跳躍，命中附加感電易傷效果。",
+      "maxRank": 5,
+      "baseDamage": 110,
+      "fireRate": 2.2,
+      "specialEffect": "跳躍連鎖 4 次，命中目標受到所有傷害 +25%",
+      "ranks": [
+        {
+          "rank": 1,
+          "name": "雷弧初現",
+          "damage": 110,
+          "effect": "連鎖 3 個目標，每次連鎖衰減 15%"
+        },
+        {
+          "rank": 2,
+          "name": "天劫奔雷",
+          "damage": 145,
+          "effect": "連鎖增至 4 目標，衰減降至 10%"
+        },
+        {
+          "rank": 3,
+          "name": "九天雷暴",
+          "damage": 190,
+          "effect": "連鎖增至 5 目標，附加感電易傷 +25%"
+        },
+        {
+          "rank": 4,
+          "name": "滅世雷殛",
+          "damage": 250,
+          "effect": "連鎖 6 目標，電弧爆炸消滅周圍輕型子彈"
+        },
+        {
+          "rank": 5,
+          "name": "神威天劫鏈",
+          "damage": 330,
+          "effect": "【MAX 終極特化】連鎖無限次數直至敵全滅，暴擊率 +30%"
+        }
+      ]
+    },
+    {
+      "id": "solar_flare",
+      "name": "熾陽破曉耀斑",
+      "icon": "assets/icons/weapons/weapon_18.png",
+      "slot": "main",
+      "isPassive": false,
+      "tier": "A",
+      "tierName": "A 級・強襲主力",
+      "tag": "主動・範圍",
+      "type": "energy",
+      "description": "投擲熱核耀斑信標，週期性引爆全屏微日冕衝擊波，蒸發子彈並灼燒敵群。",
+      "maxRank": 5,
+      "baseDamage": 135,
+      "fireRate": 1.8,
+      "specialEffect": "爆發日冕衝擊波，消散敵彈並留下高溫等離子火圈",
+      "ranks": [
+        {
+          "rank": 1,
+          "name": "微型耀斑",
+          "damage": 135,
+          "effect": "釋放 80px 日冕爆發，消解中心敵彈"
+        },
+        {
+          "rank": 2,
+          "name": "日珥噴發",
+          "damage": 175,
+          "effect": "範圍擴增至 110px，持續燃燒 2 秒"
+        },
+        {
+          "rank": 3,
+          "name": "破曉恆星核",
+          "damage": 225,
+          "effect": "衝擊波範圍 140px，消解半徑內全量彈幕"
+        },
+        {
+          "rank": 4,
+          "name": "超新星耀斑",
+          "damage": 295,
+          "effect": "雙信標同時引爆，造成引力震懾"
+        },
+        {
+          "rank": 5,
+          "name": "太古熾陽狂怒",
+          "damage": 380,
+          "effect": "【MAX 終極特化】全螢幕耀斑大清屏，灼燒每秒造成 120 傷害"
+        }
+      ]
+    },
+    {
+      "id": "plasma_blade",
+      "name": "裂變等離子刃",
+      "icon": "assets/icons/weapons/weapon_19.png",
+      "slot": "main",
+      "isPassive": false,
+      "tier": "B",
+      "tierName": "B 級・戰術壓制",
+      "tag": "主動・近戰",
+      "type": "melee_projectile",
+      "description": "向前連續揮砍雙月等離子弧刃，切削穿透敵陣並直接切斷敵方子彈。",
+      "maxRank": 5,
+      "baseDamage": 85,
+      "fireRate": 3.5,
+      "specialEffect": "近身切削消彈，對近距離目標造成雙倍重擊傷害",
+      "ranks": [
+        {
+          "rank": 1,
+          "name": "等離子光刃",
+          "damage": 85,
+          "effect": "單發月牙光刃，切削前方路徑敵彈"
+        },
+        {
+          "rank": 2,
+          "name": "雙月連斬",
+          "damage": 115,
+          "effect": "左右交替雙月光刃，刃面寬度 +30%"
+        },
+        {
+          "rank": 3,
+          "name": "裂變旋風斬",
+          "damage": 155,
+          "effect": "扇形三道光刃，近身目標爆發裂甲"
+        },
+        {
+          "rank": 4,
+          "name": "神聖裂解劍陣",
+          "damage": 205,
+          "effect": "射程加長 50%，消除所有中型彈幕"
+        },
+        {
+          "rank": 5,
+          "name": "太虛滅絕神刃",
+          "damage": 275,
+          "effect": "【MAX 終極特化】全方位光刃風暴，近距傷害 x2.5"
+        }
+      ]
+    },
+    {
+      "id": "nano_swarm",
+      "name": "奈米蝕甲蟲群",
+      "icon": "assets/icons/weapons/weapon_20.png",
+      "slot": "passive",
+      "isPassive": true,
+      "tier": "A",
+      "tierName": "A 級・強襲主力",
+      "tag": "被動・吞噬",
+      "type": "swarm",
+      "description": "微型機械奈米蟲群自動附著在敵機表面，持續腐蝕機甲造成無視防禦的真實傷害。",
+      "maxRank": 5,
+      "baseDamage": 90,
+      "fireRate": 4,
+      "specialEffect": "附著蝕甲，持續造成無視護盾的真實腐蝕傷害",
+      "ranks": [
+        {
+          "rank": 1,
+          "name": "奈米毒蟲",
+          "damage": 90,
+          "effect": "放出一組奈米蟲群，持續啃噬目標 3 秒"
+        },
+        {
+          "rank": 2,
+          "name": "殖裝擴散",
+          "damage": 120,
+          "effect": "蟲群擴增至 2 組，目標死亡分裂至鄰近敵機"
+        },
+        {
+          "rank": 3,
+          "name": "蝕甲狂潮",
+          "damage": 160,
+          "effect": "蟲群使目標防禦力永久下降 35%"
+        },
+        {
+          "rank": 4,
+          "name": "病毒轉化",
+          "damage": 210,
+          "effect": "蟲群同時汲取敵機能量，為自機提供護盾充能"
+        },
+        {
+          "rank": 5,
+          "name": "黑死病災厄",
+          "damage": 280,
+          "effect": "【MAX 終極特化】全場自動蔓延， Boss 護盾每秒被吞噬 2%"
+        }
+      ]
+    },
+    {
+      "id": "photon_lance",
+      "name": "天啟破城光錐",
+      "icon": "assets/icons/weapons/weapon_21.png",
+      "slot": "main",
+      "isPassive": false,
+      "tier": "S",
+      "tierName": "S 級・毀滅神話",
+      "tag": "主動・破盾",
+      "type": "heavy_lance",
+      "description": "超重型神聖破甲光錐，無視 Boss 神話護盾造成 300% 破盾衝擊與貫穿核損。",
+      "maxRank": 5,
+      "baseDamage": 320,
+      "fireRate": 1.2,
+      "specialEffect": "貫穿全屏，無視 Boss 護盾直接摧毀神話機制實體",
+      "ranks": [
+        {
+          "rank": 1,
+          "name": "天啟金矛",
+          "damage": 320,
+          "effect": "超長貫穿光錐，對護盾造成 150% 傷害"
+        },
+        {
+          "rank": 2,
+          "name": "聖耀穿星錐",
+          "damage": 410,
+          "effect": "槍尖引發震波，破盾傷害提升至 200%"
+        },
+        {
+          "rank": 3,
+          "name": "神罰滅都槍",
+          "damage": 520,
+          "effect": "無視 Boss 護盾直接造成本體穿透傷害"
+        },
+        {
+          "rank": 4,
+          "name": "天崩弒神矛",
+          "damage": 650,
+          "effect": "命中引發光之十字大爆發，消解全屏敵彈"
+        },
+        {
+          "rank": 5,
+          "name": "創世天啟終焉錐",
+          "damage": 820,
+          "effect": "【MAX 終極特化】300% 破盾傷害，破盾瞬間癱瘓 Boss 3 秒"
+        }
+      ]
+    },
+    {
+      "id": "laser_array",
+      "name": "星陣軌道壁壘",
+      "icon": "assets/icons/weapons/weapon_22.png",
+      "slot": "passive",
+      "isPassive": true,
+      "tier": "B",
+      "tierName": "B 級・戰術壓制",
+      "tag": "被動・防禦",
+      "type": "orbital",
+      "description": "生成幾何神聖防禦光環環繞戰機，持續攔截並抵銷接觸到的所有敵方彈幕。",
+      "maxRank": 5,
+      "baseDamage": 70,
+      "fireRate": 3,
+      "specialEffect": "旋轉光球主動撞毀敵彈，每攔截 3 枚反彈一枚光刃",
+      "ranks": [
+        {
+          "rank": 1,
+          "name": "雙子星環",
+          "damage": 70,
+          "effect": "2 枚光子球環繞戰機攔截消彈"
+        },
+        {
+          "rank": 2,
+          "name": "三元星陣",
+          "damage": 95,
+          "effect": "增至 3 枚光子球，旋轉半徑與速度 +20%"
+        },
+        {
+          "rank": 3,
+          "name": "極性力場環",
+          "damage": 130,
+          "effect": "攔截敵彈時反彈追蹤光刃"
+        },
+        {
+          "rank": 4,
+          "name": "天罡四象壁",
+          "damage": 175,
+          "effect": "增至 4 枚光子球，形成幾乎無死角防禦圈"
+        },
+        {
+          "rank": 5,
+          "name": "永恆埃癸斯光環",
+          "damage": 230,
+          "effect": "【MAX 終極特化】5 枚星環，每秒自動修復裝甲"
+        }
+      ]
+    },
+    {
+      "id": "hyper_thruster",
+      "name": "疾風超導噴流",
+      "icon": "assets/icons/weapons/weapon_23.png",
+      "slot": "passive",
+      "isPassive": true,
+      "tier": "C",
+      "tierName": "C 級・守護輔助",
+      "tag": "被動・機動",
+      "type": "utility",
+      "description": "超音速等離子噴流引擎，大幅提升戰機機動性，擦彈時產生衝擊波震開周圍敵彈。",
+      "maxRank": 5,
+      "baseDamage": 45,
+      "fireRate": 2,
+      "specialEffect": "移動速度 +15%，擦彈判定半徑擴大 35%",
+      "ranks": [
+        {
+          "rank": 1,
+          "name": "輔助增壓噴嘴",
+          "damage": 45,
+          "effect": "移動速度 +15%，擦彈半徑 +20%"
+        },
+        {
+          "rank": 2,
+          "name": "離子雙渦輪",
+          "damage": 60,
+          "effect": "移速 +25%，擦彈時產生小幅音爆推開敵彈"
+        },
+        {
+          "rank": 3,
+          "name": "曲速衝壓引擎",
+          "damage": 80,
+          "effect": "移速 +35%，擦彈同步值獲取量 +50%"
+        },
+        {
+          "rank": 4,
+          "name": "時空裂變推進",
+          "damage": 105,
+          "effect": "移動時留下等離子殘影，殘影可抵擋一次彈幕"
+        },
+        {
+          "rank": 5,
+          "name": "極限超音速神驅",
+          "damage": 140,
+          "effect": "【MAX 終極特化】移速 +50%，每次擦彈發動全屏微型清彈"
+        }
+      ]
+    },
+    {
+      "id": "aegis_reflector",
+      "name": "神聖防衛折光稜鏡",
+      "icon": "assets/icons/weapons/weapon_24.png",
+      "slot": "passive",
+      "isPassive": true,
+      "tier": "A",
+      "tierName": "A 級・強襲主力",
+      "tag": "被動・偏折",
+      "type": "deflector",
+      "description": "六角神聖結晶稜鏡，受擊時折射反衝並發射強大金色復仇光束打擊最強敵機。",
+      "maxRank": 5,
+      "baseDamage": 95,
+      "fireRate": 2.5,
+      "specialEffect": "受擊或擦彈時折射 3 道高能反制光束反擊目標",
+      "ranks": [
+        {
+          "rank": 1,
+          "name": "折光晶片",
+          "damage": 95,
+          "effect": "每次擦彈發射 1 道反擊光束"
+        },
+        {
+          "rank": 2,
+          "name": "多棱鏡面",
+          "damage": 130,
+          "effect": "擦彈反擊增至 2 道光束，傷害提升 25%"
+        },
+        {
+          "rank": 3,
+          "name": "神聖折射陣",
+          "damage": 175,
+          "effect": "受擊時抵消 50% 傷害並爆發 6 道反擊射線"
+        },
+        {
+          "rank": 4,
+          "name": "光子偏折護甲",
+          "damage": 230,
+          "effect": "受擊後無敵時間延長 1.0 秒"
+        },
+        {
+          "rank": 5,
+          "name": "神聖鏡域天照",
+          "damage": 300,
+          "effect": "【MAX 終極特化】將吸收的所有傷害 x200% 轉化為全屏光子暴風"
+        }
+      ]
+    },
+    {
+      "id": "chronos_scythe",
+      "name": "時序輪迴神鐮",
+      "icon": "assets/icons/weapons/weapon_25.png",
+      "slot": "main",
+      "isPassive": false,
+      "tier": "S",
+      "tierName": "S 級・毀滅神話",
+      "tag": "主動・時序",
+      "type": "time_scythe",
+      "description": "撕裂時空的紫金神鐮，揮出巨型時空半月波斬，重度延滯全場時間並秒殺殘血雜兵。",
+      "maxRank": 5,
+      "baseDamage": 280,
+      "fireRate": 1.5,
+      "specialEffect": "巨型半屏紫金鐮芒，降低命中目標移速 50%，秒殺 20% 生命以下非 Boss 敵機",
+      "ranks": [
+        {
+          "rank": 1,
+          "name": "時間裂片",
+          "damage": 280,
+          "effect": "揮出 140px 時空弧光，減速敵人 30%"
+        },
+        {
+          "rank": 2,
+          "name": "命運輪迴斬",
+          "damage": 360,
+          "effect": "弧光擴展至 200px，斬殺 15% 生命以下雜兵"
+        },
+        {
+          "rank": 3,
+          "name": "時序因果律",
+          "damage": 460,
+          "effect": "命中 Boss 凍結其技能冷卻計時 2 秒"
+        },
+        {
+          "rank": 4,
+          "name": "萬劫斷魂波",
+          "damage": 580,
+          "effect": "全螢幕紫金巨鐮橫掃，斬殺 25% 生命以下雜兵"
+        },
+        {
+          "rank": 5,
+          "name": "終焉時間吞噬者",
+          "damage": 750,
+          "effect": "【MAX 終極特化】全場時間靜止 1.5 秒，鐮刃暴擊傷害 x3"
         }
       ]
     }
