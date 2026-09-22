@@ -1988,14 +1988,14 @@ class DataStore {
 // 3.5 十六款神話武器完整規格型錄 (Static Catalog)
 // ============================================================
 const STARFALL_WEAPONS_CATALOG = [
-  { id: 'multishot', name: '多管神機砲', isPassive: false, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_1.png', tag: '主動・主砲', baseDmg: 36, desc: '經典高機動速射多管機砲，連續命中目標累積裂甲破防印記（最高 +50% 傷害）。' },
+  { id: 'multishot', name: '多管神機砲', isPassive: false, tier: 'C', tierName: 'C 級・基礎主砲', icon: 'assets/icons/weapons/weapon_1.png', tag: '主動・主砲', baseDmg: 36, desc: '經典高機動速射多管機砲，連續命中目標累積裂甲破防印記（最高 +50% 傷害）。' },
   { id: 'beam_cannon', name: '金陽聚焦光束', isPassive: false, tier: 'A', tierName: 'A 級・強襲主力', icon: 'assets/icons/weapons/weapon_2.png', tag: '主動・穿透', baseDmg: 240, desc: '筆直貫穿全螢幕之金色光柱，「熱能融解」穿透護盾造成敵方最大生命持續灼燒。' },
   { id: 'spirit_bullet', name: '靈能聚變核心', isPassive: true, tier: 'C', tierName: 'C 級・守護輔助', icon: 'assets/icons/weapons/weapon_3.png', tag: '被動・聚變', baseDmg: 110, desc: '慢速向前浮游之幽藍靈核，向周遭放射電漿弧，自機靈丸蓄力速度加快 30%。' },
-  { id: 'kinetic_dart', name: '超空泡穿甲鏢', isPassive: false, tier: 'A', tierName: 'A 級・強襲主力', icon: 'assets/icons/weapons/weapon_4.png', tag: '主動・穿刺', baseDmg: 68, desc: '極高速藍色超空泡標槍，100% 貫穿所有敵人，每穿透一名目標傷害遞增 20%。' },
-  { id: 'homing_missile', name: '烈陽核融導彈', isPassive: false, tier: 'A', tierName: 'A 級・強襲主力', icon: 'assets/icons/weapons/weapon_5.png', tag: '主動・索敵', baseDmg: 58, desc: '巡弋微型核融飛彈，自動尋標最危險敵機，命中引發大範圍熱核爆轟與火環。' },
-  { id: 'jade_chakram', name: '青玉風雷飛輪', isPassive: false, tier: 'A', tierName: 'A 級・強襲主力', icon: 'assets/icons/weapons/weapon_6.png', tag: '主動・削彈', baseDmg: 80, desc: '向前拋射的旋轉碧玉刃輪，在空中超高速旋轉，直接削碎切斷接觸的敵方子彈！' },
+  { id: 'kinetic_dart', name: '超空泡穿甲鏢', isPassive: false, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_4.png', tag: '主動・穿刺', baseDmg: 68, desc: '極高速藍色超空泡標槍，100% 貫穿所有敵人，每穿透一名目標傷害遞增 20%。' },
+  { id: 'homing_missile', name: '烈陽核融導彈', isPassive: false, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_5.png', tag: '主動・索敵', baseDmg: 58, desc: '巡弋微型核融飛彈，自動尋標最危險敵機，命中引發大範圍熱核爆轟與火環。' },
+  { id: 'jade_chakram', name: '青玉風雷飛輪', isPassive: false, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_6.png', tag: '主動・削彈', baseDmg: 80, desc: '向前拋射的旋轉碧玉刃輪，在空中超高速旋轉，直接削碎切斷接觸的敵方子彈！' },
   { id: 'combat_wingman', name: '神鳥隨行僚機', isPassive: true, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_7.png', tag: '被動・僚機', baseDmg: 40, desc: '雙聯神鳥僚機伴隨兩翼，形成極致扇形綠色雷射交叉火網，持續壓制前線。' },
-  { id: 'prism_wingman', name: '虹光折射星核', isPassive: true, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_8.png', tag: '被動・折射', baseDmg: 60, desc: '高科技浮游稜鏡，折射主砲光束，形成多角度偏折射線鎖定多重目標。' },
+  { id: 'prism_wingman', name: '虹光折射星核', isPassive: true, tier: 'A', tierName: 'A 級・強襲主力', icon: 'assets/icons/weapons/weapon_8.png', tag: '被動・折射', baseDmg: 60, desc: '高科技浮游稜鏡，折射主砲光束，形成多角度偏折射線鎖定多重目標。' },
   { id: 'grenade_launcher', name: '熾陽熔岩噴射核', isPassive: false, tier: 'S', tierName: 'S 級・毀滅神話', icon: 'assets/icons/weapons/weapon_9.png', tag: '主動・地熱', baseDmg: 150, desc: '拋物線熔岩榴彈，引爆留下 5 秒半徑 75px 熔岩領域，焚毀進入敵機並蒸發敵彈。' },
   { id: 'singularity_core', name: '虛空重力奇點', isPassive: true, tier: 'C', tierName: 'C 級・守護輔助', icon: 'assets/icons/weapons/weapon_10.png', tag: '被動・黑洞', baseDmg: 80, desc: '重力黑洞漩渦，停留在戰場中產生強大引力，吸引雜兵並吞噬途經敵彈。' },
   { id: 'quantum_shield', name: '量子偏折護盾', isPassive: true, tier: 'C', tierName: 'C 級・守護輔助', icon: 'assets/icons/weapons/weapon_11.png', tag: '被動・神盾', baseDmg: 75, desc: '微型能量護盾環繞自機，每 8 秒自動刷新一次致命衝擊抵禦並反彈光刃。' },
@@ -2680,7 +2680,7 @@ class Game {
     const selected = STARFALL_WEAPONS_CATALOG.find(w => w.id === this.selectedStartingWeapon);
     const badge = document.getElementById('startWeaponBadge');
     if (badge && selected) {
-      badge.textContent = `當前首發主武：${selected.name} (第 1 階) [${selected.tier || 'B'} 級]`;
+      badge.textContent = `當前首發主武：${selected.name} (第 1 階) [${selected.tier || 'C'} 級]`;
     }
   }
 
@@ -2689,8 +2689,8 @@ class Game {
     if (!list) return;
     list.innerHTML = '';
 
-    // 嚴格限制：一開始只能選擇第 1 階主動主武器出擊（排除所有被動輔助模組）
-    const startingCandidates = STARFALL_WEAPONS_CATALOG.filter(w => !w.isPassive);
+    // 嚴格限制：一開始只能選擇 B 級或 C 級第 1 階主動主武器出擊（排除 S 級、A 級與所有被動輔助模組）
+    const startingCandidates = STARFALL_WEAPONS_CATALOG.filter(w => !w.isPassive && (w.tier === 'B' || w.tier === 'C'));
     if (!startingCandidates.some(w => w.id === this.selectedStartingWeapon)) {
       this.selectedStartingWeapon = 'multishot';
     }
@@ -2706,7 +2706,7 @@ class Game {
         <div class="hangar-info">
           <div class="hangar-name-row">
             <span class="hangar-name">${w.name}</span>
-            <span class="tier-badge tier-${(w.tier || 'B').toLowerCase()}">${w.tier || 'B'} 級</span>
+            <span class="tier-badge tier-${(w.tier || 'C').toLowerCase()}">${w.tier || 'C'} 級</span>
             <span class="hangar-tag">第 1 階・主砲</span>
           </div>
           <p class="hangar-desc">${w.desc}</p>
@@ -2717,7 +2717,7 @@ class Game {
         this.sound.playCrit();
         this.renderHangarWeaponsList();
         const badge = document.getElementById('startWeaponBadge');
-        if (badge) badge.textContent = `當前首發主武：${w.name} (第 1 階) [${w.tier || 'B'} 級]`;
+        if (badge) badge.textContent = `當前首發主武：${w.name} (第 1 階) [${w.tier || 'C'} 級]`;
         this.showToast(`已選定開局首發主武：${w.name} (第 1 階)！`);
       };
       list.appendChild(card);
@@ -3832,8 +3832,14 @@ class Game {
     this.screenFlashAlpha = 0;
     this.waveTimer = 0;
 
-    // 武裝庫初始化：所有武器重置為 0 階，並啟用玩者自選之首發武器 (Rank 1)
-    const startWep = this.selectedStartingWeapon || 'multishot';
+    // 武裝庫初始化：所有武器重置為 0 階，並啟用玩者自選之首發武器 (限定 B/C 級主動武器，Rank 1)
+    const validCandidates = STARFALL_WEAPONS_CATALOG.filter(w => !w.isPassive && (w.tier === 'B' || w.tier === 'C'));
+    let startWep = this.selectedStartingWeapon || 'multishot';
+    if (!validCandidates.some(w => w.id === startWep)) {
+      startWep = 'multishot';
+      this.selectedStartingWeapon = 'multishot';
+    }
+
     if (this.arsenal) {
       Object.keys(this.arsenal).forEach(key => {
         this.arsenal[key].rank = 0;
@@ -3847,11 +3853,11 @@ class Game {
     }
 
     const selObj = STARFALL_WEAPONS_CATALOG.find(w => w.id === startWep);
-    if (selObj && !selObj.isPassive) {
+    if (selObj && !selObj.isPassive && (selObj.tier === 'B' || selObj.tier === 'C')) {
       this.equippedActiveWeapons = [startWep];
     } else {
       this.equippedActiveWeapons = ['multishot'];
-      if (this.arsenal.multishot) {
+      if (this.arsenal && this.arsenal.multishot) {
         this.arsenal.multishot.rank = 1;
         this.arsenal.multishot.quality = 'common';
       }

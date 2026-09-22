@@ -73,10 +73,15 @@ console.log(`   - C Tier (${cTier.length}): ${cTier.map(w => w.name).join(', ')}
 assert(sTier.length > 0 && aTier.length > 0 && bTier.length > 0 && cTier.length > 0, 'All tiers must be populated');
 console.log('✅ 3. Weapon Damage Tiers: 16 weapons mapped to S/A/B/C ratings.');
 
-// 4. Check Hangar Filtering
-assert(gameJs.includes('const startingCandidates = STARFALL_WEAPONS_CATALOG.filter(w => !w.isPassive);'), 'renderHangarWeaponsList must strictly filter out passives');
+// 4. Check Hangar Filtering & Starting Candidates (Strictly B/C Tier Active Main Weapons)
+assert(gameJs.includes("const startingCandidates = STARFALL_WEAPONS_CATALOG.filter(w => !w.isPassive && (w.tier === 'B' || w.tier === 'C'));"), 'renderHangarWeaponsList must strictly filter for B or C tier active weapons');
+const startingCandidates = catalog.filter(w => !w.isPassive && (w.tier === 'B' || w.tier === 'C'));
+assert.strictEqual(startingCandidates.length, 5, 'Must have exactly 5 starting weapons (1 C-tier + 4 B-tier)');
+assert(startingCandidates.every(w => !w.isPassive), 'All starting candidates must be active main weapons');
+assert(startingCandidates.every(w => w.tier === 'B' || w.tier === 'C'), 'All starting candidates must be B or C tier');
+assert(!startingCandidates.some(w => w.tier === 'S' || w.tier === 'A'), 'No S or A tier weapons allowed as starting weapons');
 assert(gameJs.includes('當前首發主武：'), 'Hangar badge must display 當前首發主武');
-console.log('✅ 4. Starting Weapon Lock: Starting hangar strictly limited to 8 active main weapons at Rank 1.');
+console.log(`✅ 4. Starting Weapon Lock: Starting hangar strictly limited to 5 B/C tier active main weapons: ${startingCandidates.map(w => `${w.name} [${w.tier}]`).join(', ')}`);
 
 // 5. Check Dual-channel Network Sync in game.js
 assert(gameJs.includes(`action=register_student&name=`), 'syncStudentProfile must have GET fallback');
@@ -99,7 +104,8 @@ console.log('✅ 6. CSS Styling: .tier-badge, .tier-s, .tier-a, .tier-b, .tier-c
 const indexHtmlPath = path.join(__dirname, '..', 'index.html');
 assert(fs.existsSync(indexHtmlPath), 'index.html must exist');
 const indexHtml = fs.readFileSync(indexHtmlPath, 'utf8');
-assert(indexHtml.includes('當前首發主武：多管神機砲 (第 1 階) [B 級]'), 'index.html must display starting weapon badge with tier');
-console.log('✅ 7. UI Template: index.html starting weapon elements verified.');
+assert(indexHtml.includes('當前首發主武：多管神機砲 (第 1 階) [C 級]'), 'index.html must display starting weapon badge with C tier');
+assert(indexHtml.includes('首發 B/C 級主武選擇'), 'index.html must mention B/C tier starting weapons');
+console.log('✅ 7. UI Template: index.html starting weapon elements and B/C labels verified.');
 
-console.log('\n🎉 ALL BUILD-017 / v1.13 TESTS PASSED SUCCESSFULLY! 🚀');
+console.log('\n🎉 ALL BUILD-018 TESTS PASSED SUCCESSFULLY! 🚀');
