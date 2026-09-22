@@ -4,7 +4,7 @@
     "name": "星宿巡察艦・前哨神械",
     "title": "先鋒精英機甲",
     "asset": "assets/bosses/boss_mini.png",
-    "baseHp": 50000,
+    "baseHp": 30000,
     "width": 140,
     "height": 140,
     "hitboxRadius": 42,
@@ -38,7 +38,7 @@
       "name": "迦樓羅・裂空王",
       "title": "金黑機械神鳥",
       "asset": "assets/bosses/boss_1_garuda.png",
-      "baseHp": 120000,
+      "baseHp": 72000,
       "width": 190,
       "height": 190,
       "hitboxRadius": 48,
@@ -62,6 +62,14 @@
           "voiceLine": "迦樓羅：一飛沖天・滅世羽嵐！",
           "description": "急速掠空俯衝並留下滯空 3 秒定時引爆金羽",
           "damage": 2
+        },
+        {
+          "id": "storm_beak",
+          "name": "暴風神喙・萬里穿雲擊",
+          "warningTime": 2.7,
+          "voiceLine": "迦樓羅：暴風神喙・萬里穿雲擊！",
+          "description": "狂暴雙側風牆封鎖戰場，穿雲衝刺爆發八向裂空風刃",
+          "damage": 2
         }
       ]
     },
@@ -71,7 +79,7 @@
       "name": "雷公・震霄",
       "title": "雷鼓機神",
       "asset": "assets/bosses/boss_2_leigong.png",
-      "baseHp": 135000,
+      "baseHp": 81000,
       "width": 190,
       "height": 190,
       "hitboxRadius": 50,
@@ -95,6 +103,14 @@
           "voiceLine": "雷公：九天雷霆萬鈞・十連絕滅！",
           "description": "天頂驚雷十連劈，巨型白色閃電直貫全場",
           "damage": 2
+        },
+        {
+          "id": "overcharge_nova",
+          "name": "乾坤雷煞・雷暴核心超載",
+          "warningTime": 2.6,
+          "voiceLine": "雷公：乾坤雷煞・雷暴核心超載！",
+          "description": "放射高壓環狀雷球電弧，引爆四道十字落雷裂隙",
+          "damage": 2
         }
       ]
     },
@@ -104,7 +120,7 @@
       "name": "美杜莎・返照",
       "title": "蛇鏡反射機神",
       "asset": "assets/bosses/boss_3_medusa.png",
-      "baseHp": 155000,
+      "baseHp": 93000,
       "width": 190,
       "height": 190,
       "hitboxRadius": 48,
@@ -127,6 +143,14 @@
           "warningTime": 2.6,
           "voiceLine": "美杜莎：顧影自憐・蛇鏡天幕！",
           "description": "召喚蛇髮鏡像分身折射高能雷射光網",
+          "damage": 2
+        },
+        {
+          "id": "abyss_petrify",
+          "name": "邪眼凝視・深淵石化射線",
+          "warningTime": 2.8,
+          "voiceLine": "美杜莎：邪眼凝視・深淵石化射線！",
+          "description": "扇形深淵紫色石化光錐覆蓋半屏，掠過處引爆毒晶碎屑",
           "damage": 2
         }
       ]
@@ -161,6 +185,14 @@
           "voiceLine": "饕餮：噬天吞地・萬獸狂食！",
           "description": "狂暴召喚暴食傀儡吞噬回復裝甲並釋放熔火腐蝕彈",
           "damage": 2
+        },
+        {
+          "id": "magma_vomit",
+          "name": "暴食狂宴・混沌嘔火熔流",
+          "warningTime": 2.8,
+          "voiceLine": "饕餮：暴食狂宴・混沌嘔火熔流！",
+          "description": "巨口噴吐重力高爆熔漿彈，於地面留存高溫熔岩領域",
+          "damage": 2
         }
       ]
     },
@@ -193,6 +225,14 @@
           "warningTime": 2.6,
           "voiceLine": "阿特拉斯：群星墜落・蒼穹傾覆！",
           "description": "引力投擲巨型隕石核心碎裂擴散",
+          "damage": 2
+        },
+        {
+          "id": "meteor_shower",
+          "name": "墜星天罰・億萬流星雨",
+          "warningTime": 2.7,
+          "voiceLine": "阿特拉斯：墜星天罰・億萬流星雨！",
+          "description": "天頂引召巨型泰坦天外隕石，半空中殉爆分裂為 16 枚破片",
           "damage": 2
         }
       ]
@@ -227,6 +267,14 @@
           "voiceLine": "雅典娜：長槍貫日・以矛破盾！",
           "description": "凝聚神聖光束長槍貫穿全場",
           "damage": 2
+        },
+        {
+          "id": "cross_sanction",
+          "name": "智慧法陣・聖光十字誅絕",
+          "warningTime": 2.8,
+          "voiceLine": "雅典娜：智慧法陣・聖光十字誅絕！",
+          "description": "戰場展開金色雙十字神聖預警光輝，爆發向外擴散之璀璨星環",
+          "damage": 2
         }
       ]
     },
@@ -259,6 +307,14 @@
           "warningTime": 2.8,
           "voiceLine": "許德拉：萬毒弒神・死灰復燃！",
           "description": "蛇首分裂出動，全屏游移獵殺",
+          "damage": 2
+        },
+        {
+          "id": "corrosive_tsunami",
+          "name": "九首齊鳴・滅世腐蝕毒濤",
+          "warningTime": 2.8,
+          "voiceLine": "許德拉：九首齊鳴・滅世腐蝕毒濤！",
+          "description": "九蛇首同時噴射交叉正弦毒波，腐蝕毒浪覆蓋全域",
           "damage": 2
         }
       ]
@@ -293,6 +349,14 @@
           "voiceLine": "獨眼巨人：赫菲斯托斯・滅世掃蕩！",
           "description": "獨眼核聚變 360 度旋轉天爐光束掃射全場",
           "damage": 3
+        },
+        {
+          "id": "ground_slam_eruption",
+          "name": "巨神重錘・震地熔岩碎裂波",
+          "warningTime": 2.9,
+          "voiceLine": "獨眼巨人：巨神重錘・震地熔岩碎裂波！",
+          "description": "巨神鋼錘轟擊天頂，地面猛烈噴發四道垂直熔火柱與高溫火星",
+          "damage": 2
         }
       ]
     },
@@ -325,6 +389,14 @@
           "warningTime": 2.6,
           "voiceLine": "玉藻前：殺生石封・天狐裂變！",
           "description": "召喚殺生石共鳴法陣，放射全域魅惑螺旋彈幕",
+          "damage": 2
+        },
+        {
+          "id": "shadow_slashes",
+          "name": "殺生結界・八面魅影幻滅",
+          "warningTime": 2.8,
+          "voiceLine": "玉藻前：殺生結界・八面魅影幻滅！",
+          "description": "召喚四具妖狐殘影分身，同步釋放交錯幽冥狐火光刃",
           "damage": 2
         }
       ]
@@ -366,6 +438,14 @@
           "warningTime": 3.2,
           "voiceLine": "提亞瑪特：創世終焉・萬象歸虛！",
           "description": "全屏十字毀滅星光裂解空間，終極毀滅審判",
+          "damage": 3
+        },
+        {
+          "id": "twin_black_holes",
+          "name": "虛數深淵・維度坍縮黑星",
+          "warningTime": 3.0,
+          "voiceLine": "提亞瑪特：虛數深淵・維度坍縮黑星！",
+          "description": "召喚雙子引力坍縮黑洞，撕裂空間拋射反物質泯滅碎星",
           "damage": 3
         }
       ]

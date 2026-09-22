@@ -1338,8 +1338,12 @@ class DataStore {
     this.questionBank = [];
     this.bossData = null;
     this.weaponData = null;
-    this.fusionData = null;
-    this.offlineQueue = [];
+    try {
+      const q = localStorage.getItem('starfall_offline_attempt_queue_v1');
+      this.offlineQueue = q ? JSON.parse(q) : [];
+    } catch (e) {
+      this.offlineQueue = [];
+    }
     // 嚴格依學生 ID 分區記錄錯題進度: { [student_id]: { [question_id]: progressItem } }
     this.allStudentProgress = {};
     this.sheetStudents = [];
@@ -1710,8 +1714,44 @@ class DataStore {
       }
     }
 
-    this.offlineQueue.push(attempt);
-    this.syncOfflineQueue();
+    // 立即發送單題直連 GET 請求 (免受 302 POST 重定向遺失 body 影響)
+    const apiUrl = localStorage.getItem('starfall_gs_url') || (window.STARFALL_CONFIG && window.STARFALL_CONFIG.apiBaseUrl);
+    let syncedImmediately = false;
+    if (apiUrl && apiUrl.startsWith('http') && !apiUrl.includes('PASTE_YOUR')) {
+      try {
+        const params = new URLSearchParams({
+          action: 'attempt',
+          student_id: sid,
+          student_name: attempt.student_name,
+          student_grade: attempt.student_grade,
+          question_id: qid,
+          selected_option: attempt.selected_option || '',
+          correct: attempt.correct ? 'true' : 'false',
+          stage: String(attempt.stage || 1),
+          boss_name: attempt.boss_name || '',
+          is_review: attempt.is_review ? 'true' : 'false',
+          timestamp: attempt.timestamp || new Date().toISOString()
+        });
+        const res = await fetch(`${apiUrl}?${params.toString()}`);
+        if (res.ok) {
+          const data = await res.json().catch(() => null);
+          if (data && data.ok && (data.attempt || data.count !== undefined)) {
+            syncedImmediately = true;
+            console.log(`[Google Sheet] ✅ 單題即時直連記錄成功！學號：${sid}，題目：${qid}`);
+          }
+        }
+      } catch (e) {
+        console.warn('[Google Sheet] 單題即時上報失敗，加入離線隊列：', e);
+      }
+    }
+
+    if (!syncedImmediately) {
+      this.offlineQueue.push(attempt);
+      try {
+        localStorage.setItem('starfall_offline_attempt_queue_v1', JSON.stringify(this.offlineQueue));
+      } catch (e) {}
+      this.syncOfflineQueue();
+    }
   }
 
   async syncOfflineQueue() {
@@ -1723,38 +1763,45 @@ class DataStore {
       const batch = this.offlineQueue.slice(0, 10);
       let synced = false;
 
-      // 軌道 1：POST 批次上報 (使用 text/plain 避免 CORS preflight 阻斷)
+      // 軌道 1：GET 優先批次上報 (雙重容錯，URL 傳參免受 302 重定向影響)
       try {
-        const res = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'attempt_batch', attempts: batch })
-        });
-        if (res.ok) {
-          const data = await res.json().catch(() => null);
-          if (data && data.ok) synced = true;
+        const encoded = encodeURIComponent(JSON.stringify(batch));
+        const getUrl = `${apiUrl}?action=attempt_batch&attempts=${encoded}&data=${encoded}`;
+        const resGet = await fetch(getUrl);
+        if (resGet.ok) {
+          const data = await resGet.json().catch(() => null);
+          if (data && data.ok && (data.count !== undefined || data.attempt !== undefined)) {
+            synced = true;
+          }
         }
-      } catch (postErr) {
-        console.warn('[Google Sheet] POST 同步作答失敗，嘗試切換 GET 備援：', postErr);
+      } catch (getErr) {
+        console.warn('[Google Sheet] GET 批次同步失敗，嘗試 POST 備援：', getErr);
       }
 
-      // 軌道 2：GET 備援批次上報 (雙重容錯保證答題不遺漏)
+      // 軌道 2：POST 批次備援上報
       if (!synced) {
         try {
-          const encoded = encodeURIComponent(JSON.stringify(batch));
-          const getUrl = `${apiUrl}?action=attempt_batch&attempts=${encoded}&data=${encoded}`;
-          const resGet = await fetch(getUrl);
-          if (resGet.ok) {
-            const data = await resGet.json().catch(() => null);
-            if (data && data.ok) synced = true;
+          const res = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ action: 'attempt_batch', attempts: batch })
+          });
+          if (res.ok) {
+            const data = await res.json().catch(() => null);
+            if (data && data.ok && (data.count !== undefined || data.attempt !== undefined)) {
+              synced = true;
+            }
           }
-        } catch (getErr) {
-          console.warn('[Google Sheet] GET 備援同步作答亦失敗：', getErr);
+        } catch (postErr) {
+          console.warn('[Google Sheet] POST 備援同步作答亦失敗：', postErr);
         }
       }
 
       if (synced) {
         this.offlineQueue.splice(0, batch.length);
+        try {
+          localStorage.setItem('starfall_offline_attempt_queue_v1', JSON.stringify(this.offlineQueue));
+        } catch (e) {}
         console.log(`[Google Sheet] ✅ 成功同步 ${batch.length} 筆作答紀錄至試算表！`);
       }
     } catch (e) {
@@ -3988,7 +4035,7 @@ class Game {
   }
 
   spawnMiniBoss() {
-    const hp = 50000;
+    const hp = (this.stage && this.stage <= 3) ? 30000 : 50000;
     this.currentBoss = {
       isBoss: true,
       isMini: true,
@@ -4020,7 +4067,7 @@ class Game {
         this.sound.bgm.setStage(stage);
       }
     }
-    const baseHps = [0, 120000, 135000, 155000, 175000, 195000, 215000, 235000, 255000, 240000, 480000];
+    const baseHps = [0, 72000, 81000, 93000, 175000, 195000, 215000, 235000, 255000, 240000, 480000];
     const fallbackBossNames = [
       '', '迦樓羅・裂空王', '雷公・震霄', '美杜莎・返照', '饕餮・萬喰',
       '阿特拉斯・墜星', '雅典娜・神盾', '許德拉・再生', '獨眼巨人・天爐',
@@ -4033,7 +4080,10 @@ class Game {
       introVoice: '降臨！'
     };
 
-    const hp = bData.baseHp || baseHps[stage] || 120000;
+    let hp = bData.baseHp || baseHps[stage] || 72000;
+    if (stage <= 3 && hp > 100000) {
+      hp = Math.round(hp * 0.6); // 1-3 關難度實質調降 40%
+    }
     this.currentBoss = {
       isBoss: true,
       isMini: false,
@@ -4322,8 +4372,11 @@ class Game {
     const ultCooldown = 14.0;
     if (b.ultimateTimer >= ultCooldown - 2.8 && !b.warningActive) {
       b.warningActive = true;
+      b.ultVariant = (b.ultVariant === undefined ? 0 : (b.ultVariant + 1));
       const fallbackSkill = (b.name || '領主') + '・神格超載天罰';
-      const ult = b.ultimates && b.ultimates.length > 0 ? b.ultimates[b.phase - 1] || b.ultimates[0] : { name: fallbackSkill, voiceLine: '' };
+      const ult = (b.ultimates && b.ultimates.length > 0)
+        ? b.ultimates[b.ultVariant % b.ultimates.length]
+        : { name: fallbackSkill, voiceLine: '' };
       this.showUltimateWarning(ult.name, ult.voiceLine);
     }
     if (b.ultimateTimer >= ultCooldown) {
@@ -4911,59 +4964,352 @@ class Game {
     this.sound.playBossUltimateCast(s);
     this.shake(12, 0.45);
     this.screenFlashAlpha = 0.55;
+    const variant = (boss.ultVariant !== undefined) ? (boss.ultVariant % 2) : 0;
 
     switch (s) {
-      case 1: { // 迦樓羅・羽化流星天罰 (漫天金羽瀑布 + 4 枚滯空金羽炸彈)
-        const featherCount = 26;
-        for (let i = 0; i < featherCount; i++) {
-          setTimeout(() => {
-            if (!boss || boss.dead) return;
-            const x = 30 + Math.random() * (this.W - 60);
-            const eb = new Bullet(x, boss.y + 20, (Math.random() - 0.5) * 40, 240 + Math.random() * 60, false, 1, 'feather_storm');
-            eb.color = '#ffd700';
-            eb.driftPhase = Math.random() * Math.PI * 2;
-            this.ebullets.push(eb);
-          }, i * 60);
-        }
-        // 4 枚滯空金羽炸彈 (3秒倒數原地爆炸)
-        for (let k = 0; k < 4; k++) {
-          const fx = 60 + k * 80;
-          const fy = 200 + (k % 2) * 120;
-          const fb = new Bullet(fx, fy, 0, 0, false, 1, 'floating_feather');
-          fb.detonateTimer = 3.0;
-          this.ebullets.push(fb);
-        }
-        break;
-      }
-      case 2: { // 雷公・九天雷霆萬鈞 (全屏天頂交錯雷網 + 五芒星雷爆)
-        for (let k = 0; k < 4; k++) {
-          const ly = 140 + k * 110;
+      case 1: { // 迦樓羅
+        if (variant === 0) {
+          // 大招 1：羽化流星天罰 (漫天金羽瀑布 + 4 枚滯空金羽炸彈)
+          const featherCount = 24;
+          for (let i = 0; i < featherCount; i++) {
+            setTimeout(() => {
+              if (!boss || boss.dead) return;
+              const x = 30 + Math.random() * (this.W - 60);
+              const eb = new Bullet(x, boss.y + 20, (Math.random() - 0.5) * 40, 200 + Math.random() * 50, false, 1, 'feather_storm');
+              eb.color = '#ffd700';
+              eb.driftPhase = Math.random() * Math.PI * 2;
+              this.ebullets.push(eb);
+            }, i * 60);
+          }
+          for (let k = 0; k < 4; k++) {
+            const fx = 60 + k * 80;
+            const fy = 200 + (k % 2) * 120;
+            const fb = new Bullet(fx, fy, 0, 0, false, 1, 'floating_feather');
+            fb.detonateTimer = 3.0;
+            this.ebullets.push(fb);
+          }
+        } else {
+          // 新增大招 2：暴風神喙・萬里穿雲擊 (左右風暴封鎖 + 穿雲俯衝風刃爆發)
           this.hazardTelegraphs.push({
-            type: 'line', x1: 0, y1: ly, x2: this.W, y2: ly,
-            life: 1.0, width: 22, color: 'rgba(56, 189, 248, 0.65)'
+            type: 'line', x1: 30, y1: 0, x2: 30, y2: this.H,
+            life: 1.2, width: 36, color: 'rgba(255, 215, 0, 0.5)'
+          });
+          this.hazardTelegraphs.push({
+            type: 'line', x1: this.W - 30, y1: 0, x2: this.W - 30, y2: this.H,
+            life: 1.2, width: 36, color: 'rgba(255, 215, 0, 0.5)'
+          });
+          const targetX = this.player.x;
+          this.hazardTelegraphs.push({
+            type: 'line', x1: targetX, y1: 0, x2: targetX, y2: this.H,
+            life: 1.0, width: 50, color: 'rgba(255, 71, 102, 0.65)'
           });
           setTimeout(() => {
-            for (let x = 20; x < this.W; x += 45) {
-              const eb = new Bullet(x, ly, 0, 240, false, 1, 'thunder_bolt');
-              eb.color = '#67ffff'; eb.r = 6;
+            if (!boss || boss.dead) return;
+            this.sound.playLaser(1300);
+            this.shake(14, 0.5);
+            for (let a = 0; a < 8; a++) {
+              const ang = (a / 8) * Math.PI * 2;
+              const eb = new Bullet(targetX, 250, Math.cos(ang) * 240, Math.sin(ang) * 240, false, 1, 'feather');
+              eb.color = '#ffd700'; eb.r = 8;
               this.ebullets.push(eb);
             }
           }, 1000);
         }
-        for (let i = 0; i < 24; i++) {
-          const ang = (i / 24) * Math.PI * 2;
-          const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 230, Math.sin(ang) * 230, false, 1, 'thunder');
-          eb.color = '#38bdf8'; eb.r = 7;
-          this.ebullets.push(eb);
+        break;
+      }
+      case 2: { // 雷公
+        if (variant === 0) {
+          // 大招 1：九天雷霆萬鈞 (全屏天頂交錯雷網 + 五芒星雷爆)
+          for (let k = 0; k < 4; k++) {
+            const ly = 140 + k * 110;
+            this.hazardTelegraphs.push({
+              type: 'line', x1: 0, y1: ly, x2: this.W, y2: ly,
+              life: 1.0, width: 22, color: 'rgba(56, 189, 248, 0.65)'
+            });
+            setTimeout(() => {
+              for (let x = 20; x < this.W; x += 45) {
+                const eb = new Bullet(x, ly, 0, 220, false, 1, 'thunder_bolt');
+                eb.color = '#67ffff'; eb.r = 6;
+                this.ebullets.push(eb);
+              }
+            }, 1000);
+          }
+          for (let i = 0; i < 20; i++) {
+            const ang = (i / 20) * Math.PI * 2;
+            const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 210, Math.sin(ang) * 210, false, 1, 'thunder');
+            eb.color = '#38bdf8'; eb.r = 7;
+            this.ebullets.push(eb);
+          }
+        } else {
+          // 新增大招 2：乾坤雷煞・雷暴核心超載 (環狀雷球電弧 + 4 道十字落雷裂隙)
+          const cx = boss.x, cy = boss.y;
+          this.hazardTelegraphs.push({
+            type: 'line', x1: cx, y1: 0, x2: cx, y2: this.H,
+            life: 1.2, width: 30, color: 'rgba(56, 189, 248, 0.7)'
+          });
+          this.hazardTelegraphs.push({
+            type: 'line', x1: 0, y1: cy, x2: this.W, y2: cy,
+            life: 1.2, width: 30, color: 'rgba(56, 189, 248, 0.7)'
+          });
+          setTimeout(() => {
+            if (!boss || boss.dead) return;
+            this.sound.playLaser(1400);
+            this.shake(14, 0.5);
+            for (let a = 0; a < 16; a++) {
+              const ang = (a / 16) * Math.PI * 2;
+              const eb = new Bullet(cx, cy, Math.cos(ang) * 230, Math.sin(ang) * 230, false, 1, 'thunder');
+              eb.color = '#ffffff'; eb.r = 7;
+              this.ebullets.push(eb);
+            }
+          }, 1200);
         }
         break;
       }
-      case 3: { // 美杜莎・顧影自憐・萬蛇鏡界
-        for (let i = 0; i < 20; i++) {
-          const ang = (i / 20) * Math.PI * 2;
-          const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 210, Math.sin(ang) * 210, false, 1, 'petrify_beam');
-          eb.color = '#d991ff'; eb.r = 8;
-          this.ebullets.push(eb);
+      case 3: { // 美杜莎
+        if (variant === 0) {
+          // 大招 1：顧影自憐・萬蛇鏡界 (20 發紫色旋轉鏡面光束)
+          for (let i = 0; i < 20; i++) {
+            const ang = (i / 20) * Math.PI * 2;
+            const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 190, Math.sin(ang) * 190, false, 1, 'petrify_beam');
+            eb.color = '#d991ff'; eb.r = 7.5;
+            this.ebullets.push(eb);
+          }
+        } else {
+          // 新增大招 2：邪眼凝視・深淵石化射線 (巨幅紫色石化預警光錐 + 毒晶碎屑)
+          this.hazardTelegraphs.push({
+            type: 'circle', x: this.player.x, y: this.player.y, r: 80,
+            life: 1.3, color: 'rgba(179, 89, 255, 0.55)'
+          });
+          setTimeout(() => {
+            if (!boss || boss.dead) return;
+            this.sound.playCrit();
+            for (let k = 0; k < 14; k++) {
+              const ang = (k / 14) * Math.PI * 2;
+              const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 210, Math.sin(ang) * 210, false, 1, 'petrify_beam');
+              eb.color = '#c054ff'; eb.r = 7;
+              this.ebullets.push(eb);
+            }
+          }, 1300);
+        }
+        break;
+      }
+      case 4: { // 饕餮
+        if (variant === 0) {
+          // 大招 1：萬物同喰・噬天黑洞 (中心強大引力吸引戰機並環形射出 16 顆重力黑洞彈)
+          this.singularities.push({
+            x: this.W / 2, y: 220, r: 40, pullRadius: 260, duration: 4.5, maxDuration: 4.5, isPlayer: false
+          });
+          for (let i = 0; i < 16; i++) {
+            const ang = (i / 16) * Math.PI * 2;
+            const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 190, Math.sin(ang) * 190, false, 1, 'fireball');
+            eb.color = '#ff9138'; eb.r = 8;
+            this.ebullets.push(eb);
+          }
+        } else {
+          // 新增大招 2：暴食狂宴・混沌嘔火熔流 (3 波重力熔岩彈 + 地面遺留高溫熔岩領域)
+          for (let wave = 0; wave < 3; wave++) {
+            setTimeout(() => {
+              if (!boss || boss.dead) return;
+              this.sound.playExplosion(false);
+              for (let i = -2; i <= 2; i++) {
+                const ang = Math.PI / 2 + (i / 2) * 0.4;
+                const eb = new Bullet(boss.x, boss.y + 20, Math.cos(ang) * 220, Math.sin(ang) * 220, false, 1, 'fireball');
+                eb.color = '#ff4766'; eb.r = 8.5;
+                this.ebullets.push(eb);
+              }
+            }, wave * 350);
+          }
+          this.lavaPools.push({ x: this.player.x, y: this.H - 120, r: 65, duration: 4.0, maxDuration: 4.0, isPlayer: false });
+        }
+        break;
+      }
+      case 5: { // 阿特拉斯
+        if (variant === 0) {
+          // 大招 1：泰坦重壓・地動山搖 (全屏重力壓頂 + 12 塊巨岩碎屑)
+          this.shake(16, 0.6);
+          for (let i = 0; i < 12; i++) {
+            const x = 30 + Math.random() * (this.W - 60);
+            const eb = new Bullet(x, 40, (Math.random() - 0.5) * 50, 220 + Math.random() * 60, false, 1, 'boulder');
+            eb.color = '#f5bc38'; eb.r = 10;
+            this.ebullets.push(eb);
+          }
+        } else {
+          // 新增大招 2：墜星天罰・億萬流星雨 (召喚天外巨型隕石於半空中殉爆)
+          for (let m = 0; m < 2; m++) {
+            const mx = (m === 0 ? this.W * 0.35 : this.W * 0.65);
+            const meteor = new Bullet(mx, 20, 0, 160, false, 1, 'boulder');
+            meteor.r = 24; meteor.color = '#ff9138';
+            this.ebullets.push(meteor);
+            setTimeout(() => {
+              if (!meteor.dead) {
+                meteor.dead = true;
+                this.sound.playExplosion(true);
+                this.shake(14, 0.4);
+                for (let k = 0; k < 16; k++) {
+                  const ang = (k / 16) * Math.PI * 2;
+                  const frag = new Bullet(meteor.x, meteor.y, Math.cos(ang) * 210, Math.sin(ang) * 210, false, 1, 'rock_shard');
+                  frag.color = '#f5bc38'; frag.r = 6;
+                  this.ebullets.push(frag);
+                }
+              }
+            }, 1000);
+          }
+        }
+        break;
+      }
+      case 6: { // 雅典娜
+        if (variant === 0) {
+          // 大招 1：長槍貫日・絕對聖裁 (金色長槍神光 + 浮游砲齊射)
+          const px = this.player.x;
+          this.hazardTelegraphs.push({
+            type: 'line', x1: px, y1: 0, x2: px, y2: this.H,
+            life: 1.1, width: 34, color: 'rgba(255, 215, 0, 0.75)'
+          });
+          setTimeout(() => {
+            if (!boss || boss.dead) return;
+            this.sound.playLaser(1300);
+            for (let y = 50; y < this.H; y += 40) {
+              const eb = new Bullet(px, y, 0, 360, false, 1, 'holy_spear');
+              eb.color = '#ffd700'; eb.r = 7.5;
+              this.ebullets.push(eb);
+            }
+          }, 1100);
+        } else {
+          // 新增大招 2：智慧法陣・聖光十字誅絕 (金色雙十字預警 + 神聖星環爆發)
+          const cx = this.W / 2, cy = 240;
+          this.hazardTelegraphs.push({
+            type: 'line', x1: cx, y1: 0, x2: cx, y2: this.H,
+            life: 1.2, width: 28, color: 'rgba(255, 215, 0, 0.7)'
+          });
+          this.hazardTelegraphs.push({
+            type: 'line', x1: 0, y1: cy, x2: this.W, y2: cy,
+            life: 1.2, width: 28, color: 'rgba(255, 215, 0, 0.7)'
+          });
+          setTimeout(() => {
+            if (!boss || boss.dead) return;
+            this.sound.playCrit();
+            for (let a = 0; a < 20; a++) {
+              const ang = (a / 20) * Math.PI * 2;
+              const eb = new Bullet(cx, cy, Math.cos(ang) * 220, Math.sin(ang) * 220, false, 1, 'divine_ring');
+              eb.color = '#ffffff'; eb.r = 7;
+              this.ebullets.push(eb);
+            }
+          }, 1200);
+        }
+        break;
+      }
+      case 7: { // 許德拉
+        if (variant === 0) {
+          // 大招 1：九首死靈・毒沼暴湧 (8 團深淵劇毒酸泡落地擴散)
+          for (let i = 0; i < 8; i++) {
+            const ang = (i / 8) * Math.PI * 2;
+            const eb = new Bullet(boss.x, boss.y + 20, Math.cos(ang) * 180, Math.sin(ang) * 180, false, 1, 'venom');
+            eb.color = '#48e583'; eb.r = 8;
+            this.ebullets.push(eb);
+          }
+        } else {
+          // 新增大招 2：九首齊鳴・滅世腐蝕毒濤 (九蛇首同時噴射 18 道交叉正弦毒波)
+          for (let i = 0; i < 18; i++) {
+            setTimeout(() => {
+              if (!boss || boss.dead) return;
+              const ang = Math.PI / 2 + Math.sin(i * 0.45) * 0.6;
+              const eb = new Bullet(boss.x, boss.y + 25, Math.cos(ang) * 210, Math.sin(ang) * 210, false, 1, 'venom');
+              eb.color = '#22c55e'; eb.r = 7.5;
+              this.ebullets.push(eb);
+            }, i * 70);
+          }
+        }
+        break;
+      }
+      case 8: { // 獨眼巨人
+        if (variant === 0) {
+          // 大招 1：赫菲斯托斯・滅世掃蕩 (360 度旋轉天爐光束)
+          for (let i = 0; i < 22; i++) {
+            const ang = (i / 22) * Math.PI * 2;
+            const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 220, Math.sin(ang) * 220, false, 1, 'magma');
+            eb.color = '#ff4766'; eb.r = 7;
+            this.ebullets.push(eb);
+          }
+        } else {
+          // 新增大招 2：巨神重錘・震地熔岩碎裂波 (地面猛烈噴發 4 道垂直熔火柱)
+          for (let col = 0; col < 4; col++) {
+            const fx = 45 + col * (this.W - 90) / 3;
+            this.hazardTelegraphs.push({
+              type: 'line', x1: fx, y1: this.H, x2: fx, y2: 0,
+              life: 1.1, width: 28, color: 'rgba(255, 71, 102, 0.7)'
+            });
+            setTimeout(() => {
+              if (!boss || boss.dead) return;
+              this.sound.playLaser(1100);
+              for (let y = this.H; y > 150; y -= 50) {
+                const eb = new Bullet(fx, y, (Math.random() - 0.5) * 40, -280, false, 1, 'slag');
+                eb.color = '#ff9138'; eb.r = 8;
+                this.ebullets.push(eb);
+              }
+            }, 1100);
+          }
+        }
+        break;
+      }
+      case 9: { // 玉藻前
+        if (variant === 0) {
+          // 大招 1：九尾妖火・媚影迷蹤 (18 發粉紫狐火迴旋)
+          for (let i = 0; i < 18; i++) {
+            const ang = (i / 18) * Math.PI * 2;
+            const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 200, Math.sin(ang) * 200, false, 1, 'foxfire');
+            eb.color = '#e0409a'; eb.r = 7;
+            this.ebullets.push(eb);
+          }
+        } else {
+          // 新增大招 2：殺生結界・八面魅影幻滅 (召喚 4 具殘影交錯齊射幽冥狐火光刃)
+          const offsets = [
+            { x: 50, y: 150 }, { x: this.W - 50, y: 150 },
+            { x: 70, y: 320 }, { x: this.W - 70, y: 320 }
+          ];
+          offsets.forEach(pt => {
+            this.hazardTelegraphs.push({
+              type: 'circle', x: pt.x, y: pt.y, r: 35, life: 1.2, color: 'rgba(224, 64, 154, 0.6)'
+            });
+          });
+          setTimeout(() => {
+            if (!boss || boss.dead) return;
+            this.sound.playLaser(1250);
+            offsets.forEach(pt => {
+              const ang = Math.atan2(this.player.y - pt.y, this.player.x - pt.x);
+              for (let d = -1; d <= 1; d++) {
+                const eb = new Bullet(pt.x, pt.y, Math.cos(ang + d * 0.25) * 240, Math.sin(ang + d * 0.25) * 240, false, 1, 'foxfire');
+                eb.color = '#f472b6'; eb.r = 7;
+                this.ebullets.push(eb);
+              }
+            });
+          }, 1200);
+        }
+        break;
+      }
+      case 10: { // 提亞瑪特
+        if (variant === 0) {
+          // 大招 1：創世終焉・萬象歸虛 (全屏十字毀滅星光 + 24 發五彩混沌龍息)
+          for (let i = 0; i < 24; i++) {
+            const ang = (i / 24) * Math.PI * 2;
+            const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 220, Math.sin(ang) * 220, false, 1, 'chaos');
+            eb.color = ['#67ffff', '#ff4766', '#f5bc38', '#48e583', '#b359ff'][i % 5];
+            eb.r = 8;
+            this.ebullets.push(eb);
+          }
+        } else {
+          // 新增大招 2：虛數深淵・維度坍縮黑星 (召喚 2 顆雙子黑洞拋射反物質泯滅碎星)
+          this.singularities.push({
+            x: this.W * 0.3, y: 200, r: 36, pullRadius: 220, duration: 4.0, maxDuration: 4.0, isPlayer: false
+          });
+          this.singularities.push({
+            x: this.W * 0.7, y: 200, r: 36, pullRadius: 220, duration: 4.0, maxDuration: 4.0, isPlayer: false
+          });
+          for (let i = 0; i < 20; i++) {
+            const ang = (i / 20) * Math.PI * 2;
+            const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 210, Math.sin(ang) * 210, false, 1, 'chaos');
+            eb.color = '#a855f7'; eb.r = 8;
+            this.ebullets.push(eb);
+          }
         }
         break;
       }
@@ -5251,15 +5597,15 @@ class Game {
     const correct = Math.max(0, Math.min(5, this.quizCorrectCount || 0));
     document.getElementById('upgradeCorrectCount').textContent = `${correct}/5`;
 
-    const tierLabels = [
-      '0 題答對 (應急生存補給)',
-      '1 題答對 // 強度 1 (1.00x 基礎)',
-      '2 題答對 // 強度 2 (1.45x 戰術)',
-      '3 題答對 // 強度 3 (2.10x 菁英)',
-      '4 題答對 // 強度 4 (3.20x 史詩)',
-      '5 題滿分 // 強度 5 (5.00x 神話特化)'
+    const tierHeaderLabels = [
+      '0 題答對 // 應急生存補給 (無解鎖武器)',
+      '1 題答對 // 解鎖【C 級】基礎裝備庫',
+      '2 題答對 // 解鎖【C 級】基礎裝備庫',
+      '3 題答對 // 解鎖【B 級】裝備庫 (保障 1 款 B 級)',
+      '4 題答對 // 解鎖【A 級】主力裝備庫 (保障 1 款 A 級)',
+      '5 題滿分 // 解鎖【S 級】神話裝備庫 (保障 1 款 S 級神兵)'
     ];
-    document.getElementById('upgradeQualityBadge').textContent = tierLabels[correct] || tierLabels[1];
+    document.getElementById('upgradeQualityBadge').textContent = tierHeaderLabels[correct] || tierHeaderLabels[1];
 
     const grid = document.getElementById('upgradeCardsGrid');
     grid.innerHTML = '';
@@ -5268,17 +5614,48 @@ class Game {
     choices.forEach(c => {
       const card = document.createElement('div');
       const isFusion = !!c.isFusion;
-      card.className = `upgrade-card quality-${c.quality || 'tier1'} ${isFusion ? 'fusion-card' : ''}`;
+      const tierClass = c.tierRating ? `tier-${c.tierRating.toLowerCase()}` : '';
+      card.className = `upgrade-card ${c.quality || 'quality-good'} ${tierClass} ${isFusion ? 'fusion-card' : ''}`;
 
+      // 主被動標籤 (明顯呈現)
+      let typeBadgeHtml = '';
+      if (isFusion) {
+        typeBadgeHtml = `<span class="type-badge type-fusion">🔥 終極・真融合</span>`;
+      } else if (c.isPerk) {
+        typeBadgeHtml = `<span class="type-badge type-perk">🛡️ 生存・特化</span>`;
+      } else if (c.isPassive) {
+        typeBadgeHtml = `<span class="type-badge type-passive">🛡️ 被動・常駐</span>`;
+      } else {
+        typeBadgeHtml = `<span class="type-badge type-active">⚡ 主動・主武</span>`;
+      }
+
+      // 評級標籤 (S/A/B/C 級)
       const tierBadgeHtml = c.tierRating
         ? `<span class="tier-badge tier-${c.tierRating.toLowerCase()}">${c.tierRating} 級</span>`
         : '';
 
+      // 等級標籤
       const rankTagHtml = c.isPerk
         ? `<span class="upgrade-rank-tag max">生存特化</span>`
         : (isFusion
           ? `<span class="upgrade-rank-tag max" style="background:var(--gold); color:#000; font-weight:900;">真・融合解鎖</span>`
           : `<span class="upgrade-rank-tag ${c.targetRank === 5 ? 'max' : ''}">${c.currentRank === 0 ? '新解鎖 Lv.1' : `Lv.${c.currentRank} → Lv.${c.targetRank} (MAX 5)`}</span>`);
+
+      // 融合素材標註 (可以融合的武器，在3選1時特別標註)
+      let fusionHtml = '';
+      if (c.fusionHints && c.fusionHints.length > 0) {
+        fusionHtml = c.fusionHints.map(hint => {
+          if (hint.hasPartner) {
+            return `<div class="upgrade-fusion-indicator partner-owned">
+              <span>✨【真融合素材】搭檔已持有！可與《${hint.partnerName}》融合成【${hint.fusionName}】</span>
+            </div>`;
+          } else {
+            return `<div class="upgrade-fusion-indicator">
+              <span>🔗【真融合素材】可與《${hint.partnerName}》融合成【${hint.fusionName}】</span>
+            </div>`;
+          }
+        }).join('');
+      }
 
       const iconHtml = c.icon
         ? `<img src="${c.icon}" class="upgrade-icon-img" alt="${c.name}" onerror="this.style.display='none'; this.parentNode.textContent='⚔️';" />`
@@ -5289,12 +5666,14 @@ class Game {
         <div class="upgrade-info">
           <div class="upgrade-name-row">
             <span class="upgrade-name">${c.name}</span>
+            ${typeBadgeHtml}
             ${tierBadgeHtml}
             ${rankTagHtml}
           </div>
           <div class="upgrade-tier-row" style="font-size:11px; color:var(--gold); font-weight:800; margin:2px 0;">${c.tierLabel || ''}</div>
           <div class="upgrade-effect-tag">${c.specialEffect || ''}</div>
           <p class="upgrade-desc">${c.desc}</p>
+          ${fusionHtml}
         </div>
       `;
       card.onclick = () => {
@@ -5341,19 +5720,6 @@ class Game {
       ];
     }
 
-    // 情況 B：答對 1~5 題，產生三張卡片
-    // 規則：前兩張固定為強度 k (k = correctCount)，第三張有 30% 機率跳一階 (70% k, 21% k+1, 9% k+2)
-    const baseTier = Math.max(1, Math.min(5, correctCount));
-    const tierMultipliers = [1.0, 1.0, 1.45, 2.1, 3.2, 5.0];
-    const tierLabels = [
-      '',
-      '強度 1 (1.00x 基礎)',
-      '強度 2 (1.45x 戰術)',
-      '強度 3 (2.10x 菁英)',
-      '強度 4 (3.20x 史詩)',
-      '強度 5 (5.00x 神話特化)'
-    ];
-
     // 候選武器池：排除已經升至 5 階 (MAX) 的武器
     const candidateWeapons = wpns.filter(w => {
       const eq = this.findEquippedWeapon(w.id);
@@ -5361,84 +5727,119 @@ class Game {
       return curRank < 5;
     });
 
-    // 加權隨機抽取 3 款不重複的武器（傷害力越高的武器、S/A評級武器，出現機率遞減）
-    const chosenWpns = [];
-    const pool = [...candidateWeapons];
-    const tierWeightMod = { S: 0.55, A: 0.85, B: 1.15, C: 1.40 };
-    const getWeight = (w) => {
-      const dmg = Math.max(30, (w.baseDmg !== undefined ? w.baseDmg : 60) || 50);
-      const mod = tierWeightMod[w.tier] || 1.0;
-      return Math.pow(100 / dmg, 1.4) * mod;
+    // 輔助函式：從池中隨機抽取指定數量不重複元素
+    const pickRandom = (pool, count) => {
+      const picked = [];
+      const temp = [...pool];
+      while (picked.length < count && temp.length > 0) {
+        const idx = Math.floor(Math.random() * temp.length);
+        picked.push(temp[idx]);
+        temp.splice(idx, 1);
+      }
+      return picked;
     };
 
-    while (chosenWpns.length < Math.min(3, candidateWeapons.length) && pool.length > 0) {
-      const totalWeight = pool.reduce((sum, w) => sum + getWeight(w), 0);
-      let rand = Math.random() * totalWeight;
-      let selectedIdx = 0;
-      for (let i = 0; i < pool.length; i++) {
-        rand -= getWeight(pool[i]);
-        if (rand <= 0) {
-          selectedIdx = i;
-          break;
-        }
+    // 依照答對題數限制武器評級庫 (Tier)
+    // 答對 1 或 2 題：只有 C 級武器
+    // 答對 3 題：B 級及以下（B 或 C 級），保障 1 個 B 級
+    // 答對 4 題：A 級及以下（A, B, C 級），保障 1 個 A 級
+    // 答對 5 題：S 級及以下（S, A, B, C 級），保障 1 個 S 級
+    const chosenWpns = [];
+
+    if (correctCount === 1 || correctCount === 2) {
+      const cPool = candidateWeapons.filter(w => w.tier === 'C');
+      chosenWpns.push(...pickRandom(cPool, 3));
+    } else if (correctCount === 3) {
+      const bPool = candidateWeapons.filter(w => w.tier === 'B');
+      if (bPool.length > 0) {
+        const guaranteed = bPool[Math.floor(Math.random() * bPool.length)];
+        chosenWpns.push(guaranteed);
       }
-      chosenWpns.push(pool[selectedIdx]);
-      pool.splice(selectedIdx, 1);
+      const remainPool = candidateWeapons.filter(w => (w.tier === 'B' || w.tier === 'C') && !chosenWpns.some(cw => cw.id === w.id));
+      chosenWpns.push(...pickRandom(remainPool, 3 - chosenWpns.length));
+    } else if (correctCount === 4) {
+      const aPool = candidateWeapons.filter(w => w.tier === 'A');
+      if (aPool.length > 0) {
+        const guaranteed = aPool[Math.floor(Math.random() * aPool.length)];
+        chosenWpns.push(guaranteed);
+      }
+      const remainPool = candidateWeapons.filter(w => (w.tier === 'A' || w.tier === 'B' || w.tier === 'C') && !chosenWpns.some(cw => cw.id === w.id));
+      chosenWpns.push(...pickRandom(remainPool, 3 - chosenWpns.length));
+    } else if (correctCount >= 5) {
+      const sPool = candidateWeapons.filter(w => w.tier === 'S');
+      if (sPool.length > 0) {
+        const guaranteed = sPool[Math.floor(Math.random() * sPool.length)];
+        chosenWpns.push(guaranteed);
+      }
+      const remainPool = candidateWeapons.filter(w => (w.tier === 'S' || w.tier === 'A' || w.tier === 'B' || w.tier === 'C') && !chosenWpns.some(cw => cw.id === w.id));
+      chosenWpns.push(...pickRandom(remainPool, 3 - chosenWpns.length));
     }
 
-    // 決定三張卡的 Tier
-    // 卡片 1: baseTier
-    // 卡片 2: baseTier
-    // 卡片 3: 30% 機率跳階 (70% baseTier, 21% baseTier + 1, 9% baseTier + 2)
-    const r = Math.random();
-    let card3Tier = baseTier;
-    let card3Jumped = false;
-    if (r >= 0.70 && r < 0.91) {
-      card3Tier = Math.min(5, baseTier + 1);
-      if (card3Tier > baseTier) card3Jumped = true;
-    } else if (r >= 0.91) {
-      card3Tier = Math.min(5, baseTier + 2);
-      if (card3Tier > baseTier) card3Jumped = true;
-    }
+    const tierQualityMap = {
+      S: 'quality-legendary',
+      A: 'quality-epic',
+      B: 'quality-rare',
+      C: 'quality-good'
+    };
 
-    const assignedTiers = [baseTier, baseTier, card3Tier];
+    const tierQualityMultiplier = {
+      S: 2.2,
+      A: 1.8,
+      B: 1.4,
+      C: 1.1
+    };
 
-    chosenWpns.forEach((w, idx) => {
+    // 取得真融合定義庫以分析融合搭檔
+    const fusions = (this.dataStore && this.dataStore.fusionData && this.dataStore.fusionData.fusions && this.dataStore.fusionData.fusions.length > 0)
+      ? this.dataStore.fusionData.fusions
+      : STARFALL_FUSIONS;
+
+    chosenWpns.forEach((w) => {
       const eq = this.findEquippedWeapon(w.id);
       const currentRank = eq ? eq.rank : 0;
       const targetRank = currentRank + 1;
-      const tier = assignedTiers[idx];
-      const mult = tierMultipliers[tier];
-      const tierQuality = `tier${tier}`;
+      const tierRating = w.tier || 'C';
+      const qualityClass = tierQualityMap[tierRating] || 'quality-good';
+      const mult = tierQualityMultiplier[tierRating] || 1.2;
 
-      const jumpPrefix = (idx === 2 && card3Jumped) ? '★【30% 機率跳階！】' : '';
+      // 檢查此武器是否為真融合武器素材
+      const relatedFusions = fusions.filter(f => f.ingredients && f.ingredients.includes(w.id));
+      const fusionHints = relatedFusions.map(f => {
+        const partnerId = f.ingredients.find(id => id !== w.id);
+        const partnerW = (this.dataStore && this.dataStore.weaponData && this.dataStore.weaponData.find(x => x.id === partnerId))
+          || STARFALL_WEAPONS_CATALOG.find(x => x.id === partnerId);
+        const partnerEquipped = this.findEquippedWeapon(partnerId);
+        const hasPartner = !!(partnerEquipped && partnerEquipped.rank > 0);
+        return {
+          fusionName: f.name,
+          partnerName: partnerW ? partnerW.name : partnerId,
+          partnerId: partnerId,
+          hasPartner: hasPartner
+        };
+      });
 
       list.push({
         isFusion: false,
         weaponId: w.id,
         isPassive: !!w.isPassive,
         name: w.name,
-        tierRating: w.tier || 'B',
-        tierName: w.tierName || 'B 級・戰術壓制',
+        tierRating: tierRating,
+        tierName: w.tierName || `${tierRating} 級裝備`,
         currentRank: currentRank,
         targetRank: targetRank,
-        tier: tier,
-        quality: tierQuality,
+        quality: qualityClass,
         qualityMultiplier: mult,
         icon: w.icon || `assets/icons/weapons/weapon_1.png`,
-        tierLabel: `${jumpPrefix}${tierLabels[tier]}`,
+        tierLabel: `【${tierRating} 級・${w.tierName ? w.tierName.split('・')[1] || w.tierName : '裝備'}】`,
         specialEffect: targetRank === 5
-          ? `【MAX 終極特化】威力 ×${mult.toFixed(2)}，已達上限並自池中移出！`
-          : `${w.tag}｜威力 ×${mult.toFixed(2)}`,
-        desc: `${w.desc}（升至 Lv.${targetRank}）`
+          ? `【MAX 終極特化】威力大幅昇華，已達最高階！`
+          : `${w.tag || '常規裝備'}｜提升至 Lv.${targetRank}`,
+        desc: `${w.desc}（升至 Lv.${targetRank}）`,
+        fusionHints: fusionHints
       });
     });
 
     // 檢查是否有符合條件的真融合武器 (兩項特定素材武器均達到 Rank >= 3，且尚未激活該真融合)
-    const fusions = (this.dataStore && this.dataStore.fusionData && this.dataStore.fusionData.fusions && this.dataStore.fusionData.fusions.length > 0)
-      ? this.dataStore.fusionData.fusions
-      : STARFALL_FUSIONS;
-
     const availableFusions = [];
     if (fusions && fusions.length > 0) {
       fusions.forEach(f => {
@@ -5461,8 +5862,7 @@ class Game {
         isFusion: true,
         fusionId: f.id,
         name: `【真・融合】${f.name}`,
-        tier: 5,
-        quality: 'tier5',
+        quality: 'quality-legendary',
         qualityMultiplier: 5.0,
         icon: 'assets/icons/weapons/weapon_3.png',
         tierLabel: '★【雙素材 Lv.3 覺醒真融合】★',

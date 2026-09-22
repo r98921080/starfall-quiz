@@ -1007,4 +1007,66 @@
 2. 執行 `node scripts/test-v1.12.js`：31 項測試全數 PASS。
 3. 執行 `node scripts/test-v1.11.js`：40 項測試全數 PASS。
 
+---
+
+## 2026-09-22 14:00 — BUILD-019：答題題數映射武器評級、主被動標籤、1-3關難度-40%、十大Boss新專屬大招、作答全量持久同步與融合素材標註
+
+### 完成項目
+1. **答對題數映射至武器評級庫 (Weapon Tier Mapping)**：
+   - 答對 0 題：提供 3 款應急生存特化補給（修復 1 HP、姿態推進速度 +6%、敵彈減速 5%），嚴格不給武器。
+   - 答對 1~2 題：解鎖【C 級】基礎裝備庫（僅限 C 級武器；不足以生存特化補足）。
+   - 答對 3 題：解鎖【B 級】裝備庫（B 級與 C 級武器，保障至少 1 款 B 級武器）。
+   - 答對 4 題：解鎖【A 級】主力裝備庫（A 級、B 級與 C 級武器，保障至少 1 款 A 級武器）。
+   - 答對 5 題：解鎖【S 級】神話裝備庫（S 級、A 級、B 級與 C 級武器，保障至少 1 款 S 級神兵）。
+   - 三選一品質標籤動態更新對應評級庫解鎖說明。
+2. **三選一主被動標籤明顯呈現**：
+   - 卡片頂部新增高對比醒目標記：
+     - `[⚡ 主動・主武]`：亮橙金漸層發光標籤（`.type-badge.type-active`）。
+     - `[🛡️ 被動・常駐]`：神秘紫青漸層標籤（`.type-badge.type-passive`）。
+     - `[🛡️ 生存・特化]`：翠綠漸層標籤（`.type-badge.type-perk`）。
+     - `[🔥 終極・真融合]`：傳奇金燦光輝標籤（`.type-badge.type-fusion`）。
+3. **1~3 關 Boss 難度實質調降 40%**：
+   - 迦樓羅・裂空王（第 1 關）：HP 120,000 ➔ 72,000 (-40%)。
+   - 雷公・震霄（第 2 關）：HP 135,000 ➔ 81,000 (-40%)。
+   - 美杜莎・返照（第 3 關）：HP 155,000 ➔ 93,000 (-40%)。
+   - 前哨小 Boss（1~3 關）：HP 50,000 ➔ 30,000 (-40%)。
+4. **10 位神話 Boss 各新增專屬屬性大招 (`releaseBossUltimate`)**：
+   - Stage 1 迦樓羅：`暴風神喙・萬里穿雲擊`（狂暴雙側風牆 + 穿雲俯衝爆發風刃）。
+   - Stage 2 雷公：`乾坤雷煞・雷暴核心超載`（環狀雷球電弧 + 4 道十字落雷裂隙）。
+   - Stage 3 美杜莎：`邪眼凝視・深淵石化射線`（巨幅紫色石化光錐 + 毒晶碎屑爆發）。
+   - Stage 4 饕餮：`暴食狂宴・混沌嘔火熔流`（3 波連射重力高爆彈 + 地面遺留 4 秒高溫熔岩領域）。
+   - Stage 5 阿特拉斯：`墜星天罰・億萬流星雨`（天頂召喚巨型隕石於空中殉爆，漫射 16 塊重力碎屑）。
+   - Stage 6 雅典娜：`智慧法陣・聖光十字誅絕`（巨型雙十字神聖預警光輝 + 外擴神聖星環）。
+   - Stage 7 許德拉：`九首齊鳴・滅世腐蝕毒濤`（九首全開噴射交叉毒浪，正弦覆蓋全場）。
+   - Stage 8 獨眼巨人：`巨神重錘・震地熔岩碎裂波`（巨錘砸擊天頂，地面猛烈噴發 4 道垂直熔火柱）。
+   - Stage 9 玉藻前：`殺生結界・八面魅影幻滅`（4 具殘影幻身同步釋放交錯幽冥狐火光刃）。
+   - Stage 10 提亞瑪特：`虛數深淵・維度坍縮黑星`（召喚 2 顆互相環繞之黑洞，拋射反物質泯滅碎星）。
+   - `showUltimateWarning` 大招預警橫幅自動於新舊大招間交替輪替。
+5. **網頁玩家作答即時記錄加固 (`DataStore`)**：
+   - `recordAttempt` 每次作答立即發出單筆 GET 直連請求 (`action=attempt&...`)，防範 Google Apps Script 302 重定向遺失 POST body。
+   - 本地離線隊列存入 `localStorage` (`starfall_offline_attempt_queue_v1`)，斷網或切換分頁永不遺失。
+   - `syncOfflineQueue` 強化驗證，嚴格檢查 `(data.count !== undefined || data.attempt !== undefined)`，防止誤判。
+6. **融合武器素材於三選一特別標註**：
+   - 遍歷三選一候選卡片，分析 `STARFALL_FUSIONS` 融合組合：
+     - 未持有搭檔：`🔗【真融合素材】可與《[搭檔名]》融合成【[真融合名]】`。
+     - 已持有搭檔：`✨【真融合素材】搭檔已持有！可與《[搭檔名]》融合成【[真融合名]】`（帶金色微光呼吸動畫 `.partner-owned`）。
+
+### 異動檔案
+- `data/boss-data.json`：更新 1~3 關 Boss 與小 Boss HP（-40%），各 Boss 擴充全新神話大招定義。
+- `game.js`：
+  - `DataStore`：加固 `recordAttempt` 單題 GET 直連與 `localStorage` 離線隊列持久化。
+  - `spawnMiniBoss` & `spawnMajorBoss`：實裝 1~3 關 HP 降調 40%。
+  - `showUltimateWarning` & `releaseBossUltimate`：實裝 10 位 Boss 新增屬性大招輪替與彈幕機制。
+  - `generateUpgradeChoices`：重構答對題數映射武器評級庫（C / B / A / S 評級池與保障機制）及融合搭檔關聯分析。
+  - `openUpgradeScreen`：渲染主被動標籤（`.type-badge`）與真融合素材指示列（`.upgrade-fusion-indicator`）。
+- `style.css`：新增 `.type-badge`（主動/被動/特化/真融合）與 `.upgrade-fusion-indicator`（`.partner-owned` 脈衝發光）。
+- `scripts/test-v1.14.js`：BUILD-019 專屬全自動化測試套件（10 大項目全數通過）。
+- `docs/BUILD-LOG.md`：記錄 BUILD-019 異動與實測結果。
+
+### 測試方式
+1. 執行 `node scripts/test-v1.14.js`：驗證評級庫抽取（1-2題純C、3題保底B、4題保底A、5題保底S）、主被動標籤、1-3關難度-40%、10位Boss新大招、作答持久隊列與融合標記全數 PASS。
+2. 執行 `node scripts/test-v1.13.js`：驗證起始主武 B/C 級限定與抗卡頓機制全數 PASS。
+3. 執行 `node scripts/test-v1.12.js`：31 項 S0001 權限隔離與公網環境測試全數 PASS。
+4. 執行 `node scripts/test-v1.11.js`：40 項學生歷程獨立性測試全數 PASS。
+
 
