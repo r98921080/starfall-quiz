@@ -2446,6 +2446,9 @@ class Game {
     let lastTouchY = 0;
 
     const onPointerDown = (e) => {
+      if (document.activeElement && typeof document.activeElement.blur === 'function') {
+        document.activeElement.blur();
+      }
       if (this.state !== 'playing') return;
       this.sound.ensureContext();
       touchDragging = true;
@@ -2520,6 +2523,11 @@ class Game {
     window.addEventListener('pointercancel', onPointerUp);
 
     window.addEventListener('keydown', (e) => {
+      const isGameKey = e.key === ' ' || e.code === 'Space' ||
+        ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key);
+      if (this.state === 'playing' && isGameKey) {
+        e.preventDefault();
+      }
       if (this.state === 'playing') {
         if (this.player.stunTimer && this.player.stunTimer > 0) return;
         const slowFactor = this.player.gorgonSlowActive ? 0.5 : 1.0;
@@ -2530,7 +2538,7 @@ class Game {
         if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') this.player.targetY += step;
         this.player.targetX = Math.max(24, Math.min(this.W - 24, this.player.targetX));
         this.player.targetY = Math.max(30, Math.min(this.H - 36, this.player.targetY));
-        if (e.key === ' ' && !this.spiritCharge.isCharging) {
+        if ((e.key === ' ' || e.code === 'Space') && !this.spiritCharge.isCharging) {
           this.startSpiritCharge();
         }
       }
@@ -2540,8 +2548,13 @@ class Game {
     });
 
     window.addEventListener('keyup', (e) => {
-      if (e.key === ' ' && this.spiritCharge.isCharging) {
-        this.releaseSpiritCharge();
+      if (e.key === ' ' || e.code === 'Space') {
+        if (this.state === 'playing') {
+          e.preventDefault();
+        }
+        if (this.spiritCharge.isCharging) {
+          this.releaseSpiritCharge();
+        }
       }
     });
 
@@ -2671,18 +2684,31 @@ class Game {
     }
 
     // UI 按鈕安全綁定
-    setClick('startPlayBtn', async () => {
-      const isNew = studentSelect && studentSelect.value === '__new__';
-      const name = (nameInput && nameInput.value.trim()) || '學員';
-      const grade = (gradeSelect && gradeSelect.value) || '三年級';
-      await this.dataStore.syncStudentProfile(name, grade, isNew);
-      this.updatePermissionUI();
+    setClick('startPlayBtn', async (e) => {
+      if (e && e.preventDefault) e.preventDefault();
+      const btn = document.getElementById('startPlayBtn');
+      if (btn) {
+        btn.disabled = true;
+        btn.blur();
+      }
+      if (document.activeElement && typeof document.activeElement.blur === 'function') {
+        document.activeElement.blur();
+      }
+      try {
+        const isNew = studentSelect && studentSelect.value === '__new__';
+        const name = (nameInput && nameInput.value.trim()) || '學員';
+        const grade = (gradeSelect && gradeSelect.value) || '三年級';
+        await this.dataStore.syncStudentProfile(name, grade, isNew);
+        this.updatePermissionUI();
 
-      const select = document.getElementById('startStageSelect');
-      const s = (select && parseInt(select.value)) || 1;
-      this.startNewGame(s);
-      if (this.sound.bgm && !this.sound.bgm.isPlaying) {
-        this.sound.bgm.start();
+        const select = document.getElementById('startStageSelect');
+        const s = (select && parseInt(select.value)) || 1;
+        this.startNewGame(s);
+        if (this.sound.bgm && !this.sound.bgm.isPlaying) {
+          this.sound.bgm.start();
+        }
+      } finally {
+        if (btn) btn.disabled = false;
       }
     });
     setClick('pauseBtn', () => this.togglePause());
@@ -2692,11 +2718,21 @@ class Game {
       this.togglePause();
       this.openGoogleSheetModal();
     });
-    setClick('restartBtn', () => {
+    setClick('restartBtn', (e) => {
+      if (e && e.preventDefault) e.preventDefault();
+      if (document.activeElement && typeof document.activeElement.blur === 'function') {
+        document.activeElement.blur();
+      }
       this.togglePause();
       this.startNewGame(1);
     });
-    setClick('playAgainBtn', () => this.startNewGame(1));
+    setClick('playAgainBtn', (e) => {
+      if (e && e.preventDefault) e.preventDefault();
+      if (document.activeElement && typeof document.activeElement.blur === 'function') {
+        document.activeElement.blur();
+      }
+      this.startNewGame(1);
+    });
     setClick('labBtn', () => this.openLab());
     setClick('pauseLabBtn', () => {
       this.togglePause();
@@ -3925,6 +3961,15 @@ class Game {
   // 波次推進與神話 Boss 生成 (平衡 HP 與專屬多元機制)
   // ============================================================
   startNewGame(stage = 1) {
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
+    if (this.canvas) {
+      this.canvas.tabIndex = 1;
+      if (typeof this.canvas.focus === 'function') {
+        try { this.canvas.focus(); } catch(err) {}
+      }
+    }
     this.state = 'playing';
     this.stage = stage;
     this.wave = 1;
@@ -4128,6 +4173,7 @@ class Game {
       invulnTimer: 0,
       shieldType: 'none',
       skillTimer: 0,
+      ultimateTimer: 0,
       assetKey: 'boss_mini'
     };
     this.showBossHUD(this.currentBoss);
@@ -6171,7 +6217,7 @@ class Game {
       if (p.gorgonPurgeTimer <= 0) {
         p.gorgonPurgeTimer = 0;
         // 若美杜莎還在 Phase 2，石化領域再次生效
-        const medusa = this.bosses.find(b => b.stage === 3 && b.phase >= 2 && !b.dead && !b.dying);
+        const medusa = (this.currentBoss && this.currentBoss.stage === 3 && this.currentBoss.phase >= 2 && !this.currentBoss.dead && !this.currentBoss.dying) ? this.currentBoss : null;
         if (medusa) p.gorgonSlowActive = true;
       }
     }
