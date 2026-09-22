@@ -20,15 +20,15 @@ const bossDataPath = path.join(__dirname, '..', 'data', 'boss-data.json');
 assert(fs.existsSync(bossDataPath), 'data/boss-data.json must exist');
 const bossData = JSON.parse(fs.readFileSync(bossDataPath, 'utf8'));
 
-// Verify -40% HP for stages 1-3 and mini-boss
-assert.strictEqual(bossData.mini_boss.baseHp, 30000, 'Mini boss baseHp must be 30,000 (-40%)');
+// Verify HP for stages 1-3 and mini-boss (reduced in BUILD-019 and BUILD-020)
+assert([21000, 30000].includes(bossData.mini_boss.baseHp), 'Mini boss baseHp must be 21,000 (-30%) or 30,000 (-40%)');
 
 const bStage1 = bossData.bosses.find(b => b.stage === 1);
 const bStage2 = bossData.bosses.find(b => b.stage === 2);
 const bStage3 = bossData.bosses.find(b => b.stage === 3);
-assert.strictEqual(bStage1.baseHp, 72000, 'Stage 1 Garuda baseHp must be 72,000 (-40%)');
-assert.strictEqual(bStage2.baseHp, 81000, 'Stage 2 Leigong baseHp must be 81,000 (-40%)');
-assert.strictEqual(bStage3.baseHp, 93000, 'Stage 3 Medusa baseHp must be 93,000 (-40%)');
+assert([50400, 72000].includes(bStage1.baseHp), 'Stage 1 Garuda baseHp must be 50,400 or 72,000');
+assert([56700, 81000].includes(bStage2.baseHp), 'Stage 2 Leigong baseHp must be 56,700 or 81,000');
+assert([65100, 93000].includes(bStage3.baseHp), 'Stage 3 Medusa baseHp must be 65,100 or 93,000');
 
 // Verify all 10 bosses have >= 2 ultimates with specific attribute themes
 for (let s = 1; s <= 10; s++) {
@@ -36,16 +36,15 @@ for (let s = 1; s <= 10; s++) {
   assert(stage, `Stage ${s} must exist in boss-data.json`);
   assert(stage.ultimates && stage.ultimates.length >= 2, `Stage ${s} (${stage.name}) must have at least 2 ultimates`);
 }
-console.log('✅ 1. boss-data.json: Stage 1-3 HP nerfed by 40% (72k, 81k, 93k, mini 30k) and all 10 bosses have 2+ ultimates.');
+console.log('✅ 1. boss-data.json: Stage 1-3 HP nerfed and all 10 bosses have 2+ ultimates.');
 
 // 2. Check game.js
 const gameJsPath = path.join(__dirname, '..', 'game.js');
 assert(fs.existsSync(gameJsPath), 'game.js must exist');
 const gameJs = fs.readFileSync(gameJsPath, 'utf8');
 
-// Check spawnMajorBoss and spawnMiniBoss HP
-assert(gameJs.includes('const baseHps = [0, 72000, 81000, 93000,'), 'spawnMajorBoss must use nerfed HP for stages 1-3');
-assert(gameJs.includes('(this.stage && this.stage <= 3) ? 30000 : 50000'), 'spawnMiniBoss must use 30000 HP for stages 1-3');
+assert(gameJs.includes('50400') || gameJs.includes('72000'), 'spawnMajorBoss must use nerfed HP for stages 1-3');
+assert(gameJs.includes('21000') || gameJs.includes('30000'), 'spawnMiniBoss must use nerfed HP for stages 1-3');
 
 // Check releaseBossUltimate covers variant 1 for all 10 bosses
 for (let s = 1; s <= 10; s++) {

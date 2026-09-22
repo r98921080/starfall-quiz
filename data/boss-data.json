@@ -4,7 +4,7 @@
     "name": "星宿巡察艦・前哨神械",
     "title": "先鋒精英機甲",
     "asset": "assets/bosses/boss_mini.png",
-    "baseHp": 30000,
+    "baseHp": 21000,
     "width": 140,
     "height": 140,
     "hitboxRadius": 42,
@@ -18,8 +18,8 @@
         "name": "天宿連射",
         "cooldown": 4.5,
         "type": "fan",
-        "bulletCount": 7,
-        "speed": 220
+        "bulletCount": 5,
+        "speed": 200
       },
       {
         "id": "charge_slash",
@@ -38,7 +38,7 @@
       "name": "迦樓羅・裂空王",
       "title": "金黑機械神鳥",
       "asset": "assets/bosses/boss_1_garuda.png",
-      "baseHp": 72000,
+      "baseHp": 50400,
       "width": 190,
       "height": 190,
       "hitboxRadius": 48,
@@ -46,6 +46,7 @@
       "introVoice": "裂空之翼，斬斷星河！",
       "defeatVoiceLine": "你竟然刮傷了我美麗的羽毛...難道是龍族派你來的嗎？！",
       "phases": 2,
+      "phase2Trait": "金羽天罡神盾屏障 (10000 HP 護盾，破盾癱瘓 1.8s)",
       "ultimates": [
         {
           "id": "skyward_dive",
@@ -79,7 +80,7 @@
       "name": "雷公・震霄",
       "title": "雷鼓機神",
       "asset": "assets/bosses/boss_2_leigong.png",
-      "baseHp": 81000,
+      "baseHp": 56700,
       "width": 190,
       "height": 190,
       "hitboxRadius": 50,
@@ -87,6 +88,7 @@
       "introVoice": "天雷萬丈，皆由我發！",
       "defeatVoiceLine": "雷霆...竟然熄滅了？！凡人的意志，竟能凌駕於天罰之上...",
       "phases": 2,
+      "phase2Trait": "磁暴靜電拘束 (每 3 秒停頓玩家戰機 0.5 秒)",
       "ultimates": [
         {
           "id": "thunder_grid",
@@ -120,7 +122,7 @@
       "name": "美杜莎・返照",
       "title": "蛇鏡反射機神",
       "asset": "assets/bosses/boss_3_medusa.png",
-      "baseHp": 93000,
+      "baseHp": 65100,
       "width": 190,
       "height": 190,
       "hitboxRadius": 48,
@@ -128,6 +130,7 @@
       "introVoice": "凡凝視我者，化為齏粉！",
       "defeatVoiceLine": "石化的視線...為什麼無效？！這冰冷的凝視...我好睏...",
       "phases": 2,
+      "phase2Trait": "美杜莎之眸 (石化凝視使玩家移動速度下降 50%)",
       "ultimates": [
         {
           "id": "petrify_gaze",

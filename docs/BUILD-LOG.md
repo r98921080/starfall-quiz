@@ -1069,4 +1069,65 @@
 3. 執行 `node scripts/test-v1.12.js`：31 項 S0001 權限隔離與公網環境測試全數 PASS。
 4. 執行 `node scripts/test-v1.11.js`：40 項學生歷程獨立性測試全數 PASS。
 
+---
+
+## 2026-09-22 14:30 — BUILD-020：武器名稱四態視覺區隔、1-3 關 Boss 彈幕與血量再降 30%、十大 Boss 第二型態神話機制精緻化與全 10 關攻略手冊
+
+### 完成項目
+1. **名稱四態獨立色彩、外框與發光特效 (`style.css` & `game.js`)**：
+   - 強化三選一升級面板中卡片「名稱 (`.upgrade-name`)」的視覺辨識度，劃分四大專屬樣式：
+     - **主動・主武 (`.name-active`)**：熾燃橙金（`#ff9d42`），火燄外框與橙紅霓虹光暈，左邊飾條 `#ff9138`。
+     - **被動・常駐 (`.name-passive`)**：星雲紫青（`#d8b4fe`），幽能晶框與紫青光暈，左邊飾條 `#a855f7`。
+     - **生存・特化 (`.name-perk`)**：生機翠綠（`#48e583`），科技發光邊框與綠能光暈，左邊飾條 `#48e583`。
+     - **終極・真融合 (`.name-fusion`)**：神話純金（`#ffd700`），流金雙邊框與循環呼吸脈衝光芒（`fusionNameGlow` 動畫），左邊飾條 `#ffd700`。
+   - `openUpgradeScreen` 動態為名稱注入對應 class，達成一眼即知武器類型與定位之絕佳體驗。
+2. **1~3 關 Boss 彈幕與血量再調降 30%**：
+   - **血量全面縮減 30%**：
+     - 前哨神械 (Mini-Boss)：30,000 ➔ **21,000 HP**
+     - 第 1 關 迦樓羅・裂空王：72,000 ➔ **50,400 HP**
+     - 第 2 關 雷公・震霄：81,000 ➔ **56,700 HP**
+     - 第 3 關 美杜莎・返照：93,000 ➔ **65,100 HP**
+   - **彈幕數量與發射頻率縮減 30%**：
+     - 前哨神械：迦樓羅金羽風刃 5➔3 枚、雷公垂直落雷 3➔2 道、美杜莎石化蛇光 8➔5 向。
+     - 迦樓羅：獨特攻擊羽刃 7➔5 枚、天罰滯空金羽 5➔3 枚、爪刃 6➔4 枚；大招 1 羽瀑 24➔16 枚、滯空炸彈 4➔3 枚；大招 2 穿雲風刃 8➔5 枚。
+     - 雷公：驚雷劈擊 10➔7 道、雷鼓電網 8➔5 發；大招 1 落雷線 4➔3 道、雷球 20➔13 發；大招 2 雷暴十字環 16➔11 發。
+     - 美杜莎：蛇髮光線 12➔8 道、鏡面彈 8➔5 發；大招 1 萬蛇鏡界 20➔14 發；大招 2 毒晶碎屑 14➔9 發。
+3. **Boss 專屬攻擊特效與第二型態機制精緻昇華**：
+   - **迦樓羅 Phase 2【金羽天罡神盾屏障】**：
+     - 進入第二型態時，12 片黃金羽刃環繞機身化為高速旋轉護盾（`featherBarrierHp = 10000`）。
+     - 護盾期間本體免疫直接傷害，`renderBossAuras` 動態渲染 8 枚繞轉金色飛羽光環。
+     - 灌破 10,000 護盾瞬間觸發 **1.8 秒大硬直癱瘓**（`boss.stunTimer = 1.8`），為極致輸出破綻期。
+     - 超空泡穿甲鏢可 40% 穿透護盾直接殺傷本體。
+   - **雷公 Phase 2【九天磁暴・靜電拘束】**：
+     - 進入 Phase 2 每 3 秒引發一次全屏強電脈衝（`shockCycleTimer`），提前 0.6 秒冒出電弧警示圈與音效。
+     - 倒數歸零強制使玩家戰機陷入短路停頓 **0.5 秒**（`player.stunTimer = 0.5`），戰機噴發短路電弧粒子，無法移動。
+     - 考驗玩家在 0.6 秒預警時提前將戰機拉至安全開闊空域。
+   - **美杜莎 Phase 2【石化凝視領域】**：
+     - 睜開巨型蛇瞳，全屏籠罩紫色石化霧氣，玩家戰機移動速度強制下降 50%（`player.gorgonSlowActive`）。
+     - 暗線破除機制：使用「金陽聚焦光束」擊中美杜莎，高溫雷射立即融化其石化眼瞳，解除減速 4 秒（`gorgonPurgeTimer = 4.0`）！
+4. **發布《十大神話機神官方攻略手冊》(`docs/BOSS_STRATEGY_GUIDE.md`)**：
+   - 建立專屬 Markdown 攻略文件，完整收錄 1~10 關所有神話機神數值、Phase 1 招式拆解、Phase 2 專屬機制、弱點武器暗線與艦隊戰術核心指南，供審核與查閱。
+
+### 異動檔案
+- `style.css`：新增 `.upgrade-name.name-active`, `.name-passive`, `.name-perk`, `.name-fusion` 與 `.card-active`, `.card-passive`, `.card-perk`, `.card-fusion` 邊緣飾條與 `fusionNameGlow` 呼吸光動畫。
+- `data/boss-data.json`：更新 1~3 關 Boss 與前哨小 Boss 的 `baseHp`（-30%）。
+- `game.js`：
+  - `openUpgradeScreen`：名稱注入 `name-active`, `name-passive`, `name-perk`, `name-fusion` 四類光效樣式。
+  - `spawnMiniBoss` & `spawnMajorBoss`：實裝 1~3 關 HP 降調 30%（50400, 56700, 65100, mini 21000）。
+  - `executeMiniBossAttack`, `executeBossUniqueAttack`, `releaseBossUltimate`：實裝 1~3 關彈幕全量縮減 30%。
+  - `damageBoss` & `triggerBossPhase2`：實裝迦樓羅 10,000 HP 金羽神盾屏障、破盾 1.8 秒大硬直與穿甲鏢穿透。
+  - `updateBoss`：實裝雷公 Phase 2 每 3 秒引發 0.5 秒停頓之磁暴拘束循環與 HUD 動態提示。
+  - `checkBossMythicWeakness`：實裝金陽聚焦光束高溫融化美杜莎石化凝視 4 秒機制。
+  - `update(dt)` & `onPointerMove` & keydown：實裝 `player.stunTimer` 硬直控制與 `player.gorgonSlowActive` 50% 減速。
+  - `renderBossAuras`：實裝迦樓羅 8 片金色旋轉羽刃屏障光環。
+  - `startNewGame`：重置所有硬直與減速狀態變數。
+- `docs/BOSS_STRATEGY_GUIDE.md`：全新十大 Boss 官方破滅戰手冊。
+- `scripts/test-v1.15.js`：BUILD-020 專屬全自動化測試套件（9 大項目 100% 通過）。
+- `docs/BUILD-LOG.md`：記錄 BUILD-020 異動。
+
+### 測試方式
+1. 執行 `node scripts/test-v1.15.js`：9/9 測試項目全數 PASS 通過。
+2. 執行 `node scripts/test-v1.14.js; node scripts/test-v1.13.js; node scripts/test-v1.12.js; node scripts/test-v1.11.js`：全數 PASS 通過，向下相容性 100%。
+
+
 

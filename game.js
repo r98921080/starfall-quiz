@@ -2466,18 +2466,31 @@ class Game {
 
     const onPointerMove = (e) => {
       if (!touchDragging || this.state !== 'playing') return;
+      // 雷公 Phase 2: 磁暴停頓控制
+      if (this.player.stunTimer && this.player.stunTimer > 0) return;
+
       const rect = c.getBoundingClientRect();
       const curX = e.clientX - rect.left;
       const curY = e.clientY - rect.top;
 
+      // 美杜莎 Phase 2: 石化凝視領域使移動速度下降 50%
+      const slowFactor = this.player.gorgonSlowActive ? 0.5 : 1.0;
+
       if (e.pointerType === 'touch') {
-        const dx = curX - lastTouchX;
-        const dy = curY - lastTouchY;
+        const dx = (curX - lastTouchX) * slowFactor;
+        const dy = (curY - lastTouchY) * slowFactor;
         this.player.targetX = Math.max(24, Math.min(this.W - 24, this.player.targetX + dx));
         this.player.targetY = Math.max(30, Math.min(this.H - 36, this.player.targetY + dy));
       } else {
-        this.player.targetX = Math.max(24, Math.min(this.W - 24, curX));
-        this.player.targetY = Math.max(30, Math.min(this.H - 36, curY));
+        if (slowFactor < 1.0) {
+          const dx = (curX - this.player.targetX) * slowFactor;
+          const dy = (curY - this.player.targetY) * slowFactor;
+          this.player.targetX = Math.max(24, Math.min(this.W - 24, this.player.targetX + dx));
+          this.player.targetY = Math.max(30, Math.min(this.H - 36, this.player.targetY + dy));
+        } else {
+          this.player.targetX = Math.max(24, Math.min(this.W - 24, curX));
+          this.player.targetY = Math.max(30, Math.min(this.H - 36, curY));
+        }
       }
       lastTouchX = curX;
       lastTouchY = curY;
@@ -2508,7 +2521,9 @@ class Game {
 
     window.addEventListener('keydown', (e) => {
       if (this.state === 'playing') {
-        const step = 28;
+        if (this.player.stunTimer && this.player.stunTimer > 0) return;
+        const slowFactor = this.player.gorgonSlowActive ? 0.5 : 1.0;
+        const step = 28 * slowFactor;
         if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') this.player.targetX -= step;
         if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') this.player.targetX += step;
         if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') this.player.targetY -= step;
@@ -3566,6 +3581,38 @@ class Game {
       finalDmg *= 1.35;
     }
 
+    // 迦樓羅專屬第二階段：金羽天罡神盾屏障 (Feather Barrier 承受傷害)
+    if (boss.featherBarrierHp && boss.featherBarrierHp > 0) {
+      boss.featherBarrierHp -= finalDmg;
+      this.sound.playLaser(1200);
+      for (let i = 0; i < 4; i++) {
+        this.particles.push(new Particle(
+          boss.x + (Math.random() - 0.5) * 60,
+          boss.y + (Math.random() - 0.5) * 60,
+          (Math.random() - 0.5) * 100,
+          (Math.random() - 0.5) * 100,
+          '#ffd700',
+          3,
+          0.2
+        ));
+      }
+      // 超空泡穿甲鏢具有穿透暗線剋制，對本體造成 40% 穿透傷害
+      if (type === 'kinetic' || source === 'kinetic') {
+        boss.hp -= finalDmg * 0.4;
+      }
+      if (boss.featherBarrierHp <= 0) {
+        boss.featherBarrierHp = 0;
+        boss.featherShieldActive = false;
+        boss.stunTimer = 1.8;
+        this.sound.playExplosion(true);
+        this.shake(12, 0.4);
+        this.showToast('💥 迦樓羅金羽屏障破碎！陷入 1.8 秒大硬直癱瘓！');
+      }
+      this.totalDamageDealt += finalDmg;
+      this.score += Math.round(finalDmg * 2);
+      return; // 傷害由金羽神盾吸收，不扣減本體血量
+    }
+
     boss.hp -= finalDmg;
     boss.hitFlash = 0.08;
     this.totalDamageDealt += finalDmg;
@@ -3675,6 +3722,15 @@ class Game {
       }
     }
 
+    // 3B. 美杜莎石化凝視解鎖：金陽聚焦光束熱能融化石化凝視 (4 秒移速全面恢復)
+    if (s === 3 && (type === 'beam' || source === 'beam')) {
+      if (this.player.gorgonSlowActive) {
+        this.player.gorgonSlowActive = false;
+        this.player.gorgonPurgeTimer = 4.0;
+        this.showToast('✨【金陽神光熱能】驅散美杜莎石化凝視！4 秒移動速度全面恢復！');
+      }
+    }
+
     // 4. 饕餮 (Stage 4) 弱點：熾陽熔岩榴彈 (貪食吞噬高爆熔岩核，腹內內爆反噬重創 10% 生命！)
     if (s === 4 && (type === 'grenade' || source === 'grenade')) {
       boss.weaknessCounters.grenade = (boss.weaknessCounters.grenade || 0) + 1;
@@ -3741,6 +3797,21 @@ class Game {
     this.sound.playWarningAlert();
     this.sound.speak(`${boss.name}：第二型態展開！`);
     this.showToast(`${boss.name} 裝甲全面重組，狂暴攻擊模式啟動！`);
+
+    if (boss.stage === 1) {
+      boss.featherBarrierHp = 10000;
+      boss.maxFeatherBarrierHp = 10000;
+      boss.featherShieldActive = true;
+      this.sound.playLaser(1500);
+      this.showToast('🦅 迦樓羅展開【金羽天罡神盾屏障】！吸收 10,000 點傷害！');
+    } else if (boss.stage === 2) {
+      boss.shockCycleTimer = 0;
+      boss.shockTelegraphed = false;
+      this.showToast('⚡ 雷公激發【九天磁暴】！每 3 秒引發 0.5 秒靜電拘束！');
+    } else if (boss.stage === 3) {
+      this.player.gorgonSlowActive = true;
+      this.showToast('🐍 美杜莎開啟【石化凝視領域】！戰機移速降低 50%！（金陽神光可融化解鎖）');
+    }
   }
 
   triggerBossPhase3(boss) {
@@ -3865,6 +3936,9 @@ class Game {
     this.player.moveSpeedMultiplier = 1.0;
     this.player.speed = 400;
     this.player.baseShootTimer = 0;
+    this.player.stunTimer = 0;
+    this.player.gorgonSlowActive = false;
+    this.player.gorgonPurgeTimer = 0;
     this.player.x = this.W / 2;
     this.player.y = this.H - 100;
     this.player.targetX = this.player.x;
@@ -4035,7 +4109,7 @@ class Game {
   }
 
   spawnMiniBoss() {
-    const hp = (this.stage && this.stage <= 3) ? 30000 : 50000;
+    const hp = (this.stage && this.stage <= 3) ? 21000 : 50000;
     this.currentBoss = {
       isBoss: true,
       isMini: true,
@@ -4067,7 +4141,7 @@ class Game {
         this.sound.bgm.setStage(stage);
       }
     }
-    const baseHps = [0, 72000, 81000, 93000, 175000, 195000, 215000, 235000, 255000, 240000, 480000];
+    const baseHps = [0, 50400, 56700, 65100, 175000, 195000, 215000, 235000, 255000, 240000, 480000];
     const fallbackBossNames = [
       '', '迦樓羅・裂空王', '雷公・震霄', '美杜莎・返照', '饕餮・萬喰',
       '阿特拉斯・墜星', '雅典娜・神盾', '許德拉・再生', '獨眼巨人・天爐',
@@ -4080,7 +4154,7 @@ class Game {
       introVoice: '降臨！'
     };
 
-    let hp = bData.baseHp || baseHps[stage] || 72000;
+    let hp = bData.baseHp || baseHps[stage] || 50400;
     if (stage <= 3 && hp > 100000) {
       hp = Math.round(hp * 0.6); // 1-3 關難度實質調降 40%
     }
@@ -4385,10 +4459,45 @@ class Game {
       this.releaseBossUltimate(b);
     }
 
-    // 更新血條
+    // 雷公 Phase 2：每 3 秒引發全場磁暴，戰機強制停頓 0.5 秒
+    if (b.stage === 2 && b.phase >= 2 && !b.dead && !b.dying) {
+      b.shockCycleTimer = (b.shockCycleTimer || 0) + dt;
+      if (b.shockCycleTimer >= 2.4 && !b.shockTelegraphed) {
+        b.shockTelegraphed = true;
+        this.showToast('⚡【九天磁暴預警】0.6 秒後天雷拘束！注意安全走位！');
+        this.hazardTelegraphs.push({
+          type: 'circle', x: this.player.x, y: this.player.y, r: 48,
+          life: 0.6, color: 'rgba(56, 189, 248, 0.65)'
+        });
+      }
+      if (b.shockCycleTimer >= 3.0) {
+        b.shockCycleTimer = 0;
+        b.shockTelegraphed = false;
+        this.player.stunTimer = 0.5;
+        this.sound.playLaser(1600);
+        this.sound.vibrate([80, 50, 80]);
+        this.showToast('⚡【九天磁暴拘束】戰機短路停頓 0.5 秒！');
+      }
+    }
+
+    // 更新血條與副標題動態指示
     const pct = Math.max(0, b.hp / b.maxHp) * 100;
     document.getElementById('bossHpFill').style.width = pct + '%';
     document.getElementById('bossHpGhost').style.width = pct + '%';
+    const subTitleEl = document.getElementById('bossSubTitle');
+    if (subTitleEl) {
+      if (b.stage === 1 && b.featherBarrierHp > 0) {
+        subTitleEl.textContent = `🛡️ 金羽神盾: ${Math.round(b.featherBarrierHp)} / ${b.maxFeatherBarrierHp || 10000}`;
+        subTitleEl.style.color = '#ffd700';
+      } else if (b.stage === 2 && b.phase >= 2) {
+        const shockIn = Math.max(0, 3.0 - (b.shockCycleTimer || 0)).toFixed(1);
+        subTitleEl.textContent = `⚡ 磁暴拘束倒數: ${shockIn}s`;
+        subTitleEl.style.color = '#38bdf8';
+      } else if (b.stage === 3 && b.phase >= 2) {
+        subTitleEl.textContent = this.player.gorgonSlowActive ? '🗿 石化凝視領域作用中 (移速 -50%)' : '✨ 石化融化中 (移速正常)';
+        subTitleEl.style.color = '#d8b4fe';
+      }
+    }
   }
 
   // 前哨神械 (Mini-Boss) 十大神話魔王招式巡迴武裝投影 (每輪依序巡迴 10 大 Boss 標誌性武裝)
@@ -4410,18 +4519,18 @@ class Game {
     this.showToast(`⚡ 前哨神械投影 ${moveNames[step]}`);
 
     switch (step) {
-      case 0: // 迦樓羅：5 向金羽風刃 (feather)
-        for (let i = -2; i <= 2; i++) {
-          const ang = Math.PI / 2 + (i / 2) * 0.45;
-          const eb = new Bullet(boss.x, boss.y + 15, Math.cos(ang) * 210, Math.sin(ang) * 210, false, 1, 'feather');
+      case 0: // 迦樓羅：5 向 -> 3 向金羽風刃 (feather) (減少 30%)
+        for (let i = -1; i <= 1; i++) {
+          const ang = Math.PI / 2 + i * 0.45;
+          const eb = new Bullet(boss.x, boss.y + 15, Math.cos(ang) * 190, Math.sin(ang) * 190, false, 1, 'feather');
           eb.color = '#ffd700'; eb.r = 7;
           this.ebullets.push(eb);
         }
         break;
 
-      case 1: // 雷公：3 道垂直落雷預警 + 閃電打擊 (thunder)
-        for (let k = 0; k < 3; k++) {
-          const tx = 50 + k * (this.W - 100) / 2 + (Math.random() - 0.5) * 40;
+      case 1: // 雷公：3 道 -> 2 道垂直落雷預警 + 閃電打擊 (thunder) (減少 30%)
+        for (let k = 0; k < 2; k++) {
+          const tx = 70 + k * (this.W - 140) + (Math.random() - 0.5) * 40;
           this.hazardTelegraphs.push({
             type: 'line', x1: tx, y1: 0, x2: tx, y2: this.H,
             life: 0.55, width: 22, color: 'rgba(56, 189, 248, 0.7)'
@@ -4429,17 +4538,17 @@ class Game {
           setTimeout(() => {
             if (!boss || boss.dead) return;
             this.sound.playLaser(950);
-            const eb = new Bullet(tx, 0, 0, 460, false, 1, 'thunder');
+            const eb = new Bullet(tx, 0, 0, 440, false, 1, 'thunder');
             eb.color = '#38bdf8'; eb.r = 8;
             this.ebullets.push(eb);
           }, 550);
         }
         break;
 
-      case 2: // 美杜莎：8 向蛇髮石化光線 (petrify_beam)
-        for (let a = 0; a < 8; a++) {
-          const ang = (a / 8) * Math.PI * 2 + (this.time * 0.5);
-          const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 190, Math.sin(ang) * 190, false, 1, 'petrify_beam');
+      case 2: // 美杜莎：8 向 -> 5 向蛇髮石化光線 (petrify_beam) (減少 30%)
+        for (let a = 0; a < 5; a++) {
+          const ang = (a / 5) * Math.PI * 2 + (this.time * 0.5);
+          const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 170, Math.sin(ang) * 170, false, 1, 'petrify_beam');
           eb.color = '#c054ff'; eb.r = 7;
           this.ebullets.push(eb);
         }
@@ -4531,52 +4640,51 @@ class Game {
     const isPhase2 = boss.phase >= 2;
 
     switch (s) {
-      case 1: // 迦樓羅・裂空王 (每輪循環 3 種模式 + Phase 2 召喚毒蛇機兵)
+      case 1: // 迦樓羅・裂空王 (彈幕減少 30%)
         {
           const mode = boss.patternIndex % 3;
           if (mode === 0) {
-            // 模式 1：神鳥羽刃旋風 (Feather Barrage) - 7 枚羽毛呈扇形漂浮下落
-            for (let i = -3; i <= 3; i++) {
-              const ang = Math.PI / 2 + (i / 3) * 0.55;
-              const spd = isPhase2 ? 260 : 210;
+            // 模式 1：神鳥羽刃旋風 (Feather Barrage) - 7 -> 5 枚金羽
+            for (let i = -2; i <= 2; i++) {
+              const ang = Math.PI / 2 + (i / 2) * 0.48;
+              const spd = isPhase2 ? 220 : 180;
               const eb = new Bullet(boss.x, boss.y + 20, Math.cos(ang) * spd, Math.sin(ang) * spd, false, 1, 'feather');
               eb.color = '#ffd700';
               eb.driftPhase = i * 0.8;
               this.ebullets.push(eb);
             }
           } else if (mode === 1) {
-            // 模式 2：一飛沖天 (Skyward Dive) - 預警線 + 直線衝刺 + 留下一排滯空金羽 (3秒原地爆炸)
+            // 模式 2：一飛沖天 (Skyward Dive) - 預警線 + 直線衝刺 + 3 枚滯空金羽 (原5枚，減少30%)
             const targetX = this.player.x;
             this.hazardTelegraphs.push({
               type: 'line', x1: targetX, y1: 0, x2: targetX, y2: this.H,
-              life: 1.0, width: 36, color: 'rgba(255, 71, 102, 0.5)'
+              life: 1.0, width: 34, color: 'rgba(255, 71, 102, 0.5)'
             });
             setTimeout(() => {
               if (!boss || boss.dead) return;
               this.sound.playExplosion(false);
-              this.shake(6, 0.25);
-              // 沿途留下 5 枚滯空金羽 (3秒倒數原地劇烈爆炸)
-              for (let k = 0; k < 5; k++) {
-                const fy = 120 + k * 85;
+              this.shake(5, 0.22);
+              for (let k = 0; k < 3; k++) {
+                const fy = 150 + k * 120;
                 const fb = new Bullet(targetX, fy, 0, 0, false, 1, 'floating_feather');
                 fb.detonateTimer = 3.0;
                 this.ebullets.push(fb);
               }
             }, 1000);
           } else {
-            // 模式 3：裂空神爪 (Gale Claw Slices) - 雙十字交錯斬線
+            // 模式 3：裂空神爪 (Gale Claw Slices) - 雙十字交錯斬線 (6 -> 4 碎片)
             this.hazardTelegraphs.push({
               type: 'line', x1: 0, y1: 100, x2: this.W, y2: 460,
-              life: 1.1, width: 26, color: 'rgba(245, 188, 56, 0.55)'
+              life: 1.1, width: 24, color: 'rgba(245, 188, 56, 0.55)'
             });
             this.hazardTelegraphs.push({
               type: 'line', x1: this.W, y1: 100, x2: 0, y2: 460,
-              life: 1.1, width: 26, color: 'rgba(245, 188, 56, 0.55)'
+              life: 1.1, width: 24, color: 'rgba(245, 188, 56, 0.55)'
             });
             setTimeout(() => {
               if (!boss || boss.dead) return;
-              for (let k = 0; k < 6; k++) {
-                const eb = new Bullet(boss.x, boss.y + 15, (k - 2.5) * 60, 240, false, 1, 'feather_shard');
+              for (let k = 0; k < 4; k++) {
+                const eb = new Bullet(boss.x, boss.y + 15, (k - 1.5) * 65, 210, false, 1, 'feather_shard');
                 eb.color = '#ff9138'; eb.r = 6;
                 this.ebullets.push(eb);
               }
@@ -4597,63 +4705,62 @@ class Game {
         }
         break;
 
-      case 2: // 雷公・震霄 (每輪循環 3 種模式 + 乾坤雷鼓結界)
+      case 2: // 雷公・震霄 (彈幕減少 30%)
         {
           const mode = boss.patternIndex % 3;
           if (mode === 0) {
-            // 模式 1：雷電五芒星陣 (Lightning Pentagram) - 生成五芒星雷球連線，隨後聚射
+            // 模式 1：雷電五芒星陣 (Lightning Pentagram)
             const cx = this.W / 2, cy = 200, r = 100;
             const starPoints = [];
             for (let p = 0; p < 5; p++) {
               const ang = -Math.PI / 2 + p * (Math.PI * 2 / 5);
               starPoints.push({ x: cx + Math.cos(ang) * r, y: cy + Math.sin(ang) * r });
             }
-            // 繪製五芒星連線預警 (0 -> 2 -> 4 -> 1 -> 3 -> 0)
             const starOrder = [0, 2, 4, 1, 3, 0];
             for (let p = 0; p < 5; p++) {
               const p1 = starPoints[starOrder[p]];
               const p2 = starPoints[starOrder[p + 1]];
               this.hazardTelegraphs.push({
                 type: 'line', x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y,
-                life: 1.3, width: 22, color: 'rgba(56, 189, 248, 0.65)'
+                life: 1.3, width: 20, color: 'rgba(56, 189, 248, 0.65)'
               });
             }
             setTimeout(() => {
               if (!boss || boss.dead) return;
               this.sound.playLaser(1200);
-              starPoints.forEach((pt, idx) => {
+              starPoints.forEach((pt) => {
                 const ang = Math.atan2(this.player.y - pt.y, this.player.x - pt.x);
-                const eb = new Bullet(pt.x, pt.y, Math.cos(ang) * 230, Math.sin(ang) * 230, false, 1, 'thunder');
+                const eb = new Bullet(pt.x, pt.y, Math.cos(ang) * 210, Math.sin(ang) * 210, false, 1, 'thunder');
                 eb.color = '#38bdf8'; eb.r = 7;
                 this.ebullets.push(eb);
               });
             }, 1300);
           } else if (mode === 1) {
-            // 模式 2：天頂驚雷十連劈 (Ten Sky-Strikes) - 連續 10 道垂直閃電直劈
-            for (let strike = 0; strike < 10; strike++) {
+            // 模式 2：天頂驚雷劈 (原 10 道，減少 30% 為 7 道)
+            for (let strike = 0; strike < 7; strike++) {
               setTimeout(() => {
                 if (!boss || boss.dead) return;
                 const tx = strike % 2 === 0
-                  ? this.player.x + (Math.random() - 0.5) * 60
-                  : 30 + Math.random() * (this.W - 60);
+                  ? this.player.x + (Math.random() - 0.5) * 50
+                  : 40 + Math.random() * (this.W - 80);
                 this.hazardTelegraphs.push({
                   type: 'line', x1: tx, y1: 0, x2: tx, y2: this.H,
-                  life: 0.45, width: 28, color: 'rgba(51, 224, 224, 0.7)'
+                  life: 0.45, width: 26, color: 'rgba(51, 224, 224, 0.7)'
                 });
                 setTimeout(() => {
                   if (!boss || boss.dead) return;
                   this.sound.playLaser(950);
-                  const eb = new Bullet(tx, 0, 0, 480, false, 1, 'thunder_bolt');
+                  const eb = new Bullet(tx, 0, 0, 440, false, 1, 'thunder_bolt');
                   eb.color = '#ffffff'; eb.r = 8;
                   this.ebullets.push(eb);
                 }, 450);
-              }, strike * 130);
+              }, strike * 150);
             }
           } else {
-            // 模式 3：雷鼓霹靂電網
-            for (let a = 0; a < 8; a++) {
-              const ang = (a / 8) * Math.PI * 2 + (boss.patternIndex * 0.25);
-              const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 190, Math.sin(ang) * 190, false, 1, 'thunder');
+            // 模式 3：雷鼓霹靂電網 (原 8 發，減少 30% 為 5 發)
+            for (let a = 0; a < 5; a++) {
+              const ang = (a / 5) * Math.PI * 2 + (boss.patternIndex * 0.25);
+              const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 170, Math.sin(ang) * 170, false, 1, 'thunder');
               eb.color = '#67ffff'; eb.r = 6;
               this.ebullets.push(eb);
             }
@@ -4675,23 +4782,24 @@ class Game {
         }
         break;
 
-      case 3: // 美杜莎・返照 (Phase 2 分裂蛇髮分身)
+      case 3: // 美杜莎・返照 (彈幕減少 30%)
         if (!isPhase2) {
-          for (let i = 0; i < 8; i++) {
-            const ang = (i / 8) * Math.PI * 2 + (boss.patternIndex * 0.2);
-            const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 170, Math.sin(ang) * 170, false, 1, 'mirror_bullet');
+          // 原 8 發，減少 30% 為 5 發
+          for (let i = 0; i < 5; i++) {
+            const ang = (i / 5) * Math.PI * 2 + (boss.patternIndex * 0.2);
+            const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 160, Math.sin(ang) * 160, false, 1, 'mirror_bullet');
             eb.color = '#b359ff';
             this.ebullets.push(eb);
           }
         } else {
-          // 第二型態：石化光環 + 蛇髮分身
+          // 第二型態：石化光環 + 蛇髮分身 (原 12 發，減少 30% 為 8 發)
           this.hazardTelegraphs.push({
-            type: 'circle', x: this.player.x, y: this.player.y, r: 65, life: 1.4, color: 'rgba(179, 89, 255, 0.45)'
+            type: 'circle', x: this.player.x, y: this.player.y, r: 60, life: 1.4, color: 'rgba(179, 89, 255, 0.45)'
           });
           setTimeout(() => {
-            for (let a = 0; a < 12; a++) {
-              const ang = (a / 12) * Math.PI * 2;
-              const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 210, Math.sin(ang) * 210, false, 1, 'petrify_beam');
+            for (let a = 0; a < 8; a++) {
+              const ang = (a / 8) * Math.PI * 2;
+              const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 190, Math.sin(ang) * 190, false, 1, 'petrify_beam');
               eb.color = '#d991ff'; eb.r = 7;
               this.ebullets.push(eb);
             }
@@ -4702,11 +4810,11 @@ class Game {
             this.showToast('美杜莎蛇髮狂舞，分裂出 2 具戈爾貢蛇髮幻影！');
             this.bossMinions.push({
               type: 'gorgon_clone', name: '蛇髮幻影(左)',
-              x: boss.x - 75, y: boss.y + 20, r: 22, hp: 500, maxHp: 500, color: '#b359ff'
+              x: boss.x - 75, y: boss.y + 20, r: 22, hp: 450, maxHp: 450, color: '#b359ff'
             });
             this.bossMinions.push({
               type: 'gorgon_clone', name: '蛇髮幻影(右)',
-              x: boss.x + 75, y: boss.y + 20, r: 22, hp: 500, maxHp: 500, color: '#b359ff'
+              x: boss.x + 75, y: boss.y + 20, r: 22, hp: 450, maxHp: 450, color: '#b359ff'
             });
           }
         }
@@ -4967,10 +5075,10 @@ class Game {
     const variant = (boss.ultVariant !== undefined) ? (boss.ultVariant % 2) : 0;
 
     switch (s) {
-      case 1: { // 迦樓羅
+      case 1: { // 迦樓羅 (大招彈幕減少 30%)
         if (variant === 0) {
-          // 大招 1：羽化流星天罰 (漫天金羽瀑布 + 4 枚滯空金羽炸彈)
-          const featherCount = 24;
+          // 大招 1：羽化流星天罰 (漫天金羽瀑布 + 3 枚滯空金羽炸彈，原24發/4枚減少30%)
+          const featherCount = 16;
           for (let i = 0; i < featherCount; i++) {
             setTimeout(() => {
               if (!boss || boss.dead) return;
@@ -4981,15 +5089,15 @@ class Game {
               this.ebullets.push(eb);
             }, i * 60);
           }
-          for (let k = 0; k < 4; k++) {
-            const fx = 60 + k * 80;
+          for (let k = 0; k < 3; k++) {
+            const fx = 60 + k * 105;
             const fy = 200 + (k % 2) * 120;
             const fb = new Bullet(fx, fy, 0, 0, false, 1, 'floating_feather');
             fb.detonateTimer = 3.0;
             this.ebullets.push(fb);
           }
         } else {
-          // 新增大招 2：暴風神喙・萬里穿雲擊 (左右風暴封鎖 + 穿雲俯衝風刃爆發)
+          // 新增大招 2：暴風神喙・萬里穿雲擊 (左右風暴封鎖 + 穿雲俯衝風刃爆發，原8發減少30%為5發)
           this.hazardTelegraphs.push({
             type: 'line', x1: 30, y1: 0, x2: 30, y2: this.H,
             life: 1.2, width: 36, color: 'rgba(255, 215, 0, 0.5)'
@@ -5007,8 +5115,8 @@ class Game {
             if (!boss || boss.dead) return;
             this.sound.playLaser(1300);
             this.shake(14, 0.5);
-            for (let a = 0; a < 8; a++) {
-              const ang = (a / 8) * Math.PI * 2;
+            for (let a = 0; a < 5; a++) {
+              const ang = (a / 5) * Math.PI * 2;
               const eb = new Bullet(targetX, 250, Math.cos(ang) * 240, Math.sin(ang) * 240, false, 1, 'feather');
               eb.color = '#ffd700'; eb.r = 8;
               this.ebullets.push(eb);
@@ -5017,31 +5125,31 @@ class Game {
         }
         break;
       }
-      case 2: { // 雷公
+      case 2: { // 雷公 (大招彈幕減少 30%)
         if (variant === 0) {
-          // 大招 1：九天雷霆萬鈞 (全屏天頂交錯雷網 + 五芒星雷爆)
-          for (let k = 0; k < 4; k++) {
-            const ly = 140 + k * 110;
+          // 大招 1：九天雷霆萬鈞 (全屏天頂交錯雷網 + 五芒星雷爆，原4道/20發減少30%為3道/13發)
+          for (let k = 0; k < 3; k++) {
+            const ly = 150 + k * 130;
             this.hazardTelegraphs.push({
               type: 'line', x1: 0, y1: ly, x2: this.W, y2: ly,
               life: 1.0, width: 22, color: 'rgba(56, 189, 248, 0.65)'
             });
             setTimeout(() => {
-              for (let x = 20; x < this.W; x += 45) {
+              for (let x = 20; x < this.W; x += 55) {
                 const eb = new Bullet(x, ly, 0, 220, false, 1, 'thunder_bolt');
                 eb.color = '#67ffff'; eb.r = 6;
                 this.ebullets.push(eb);
               }
             }, 1000);
           }
-          for (let i = 0; i < 20; i++) {
-            const ang = (i / 20) * Math.PI * 2;
+          for (let i = 0; i < 13; i++) {
+            const ang = (i / 13) * Math.PI * 2;
             const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 210, Math.sin(ang) * 210, false, 1, 'thunder');
             eb.color = '#38bdf8'; eb.r = 7;
             this.ebullets.push(eb);
           }
         } else {
-          // 新增大招 2：乾坤雷煞・雷暴核心超載 (環狀雷球電弧 + 4 道十字落雷裂隙)
+          // 新增大招 2：乾坤雷煞・雷暴核心超載 (環狀雷球電弧 + 十字落雷裂隙，原16發減少30%為11發)
           const cx = boss.x, cy = boss.y;
           this.hazardTelegraphs.push({
             type: 'line', x1: cx, y1: 0, x2: cx, y2: this.H,
@@ -5055,8 +5163,8 @@ class Game {
             if (!boss || boss.dead) return;
             this.sound.playLaser(1400);
             this.shake(14, 0.5);
-            for (let a = 0; a < 16; a++) {
-              const ang = (a / 16) * Math.PI * 2;
+            for (let a = 0; a < 11; a++) {
+              const ang = (a / 11) * Math.PI * 2;
               const eb = new Bullet(cx, cy, Math.cos(ang) * 230, Math.sin(ang) * 230, false, 1, 'thunder');
               eb.color = '#ffffff'; eb.r = 7;
               this.ebullets.push(eb);
@@ -5065,17 +5173,17 @@ class Game {
         }
         break;
       }
-      case 3: { // 美杜莎
+      case 3: { // 美杜莎 (大招彈幕減少 30%)
         if (variant === 0) {
-          // 大招 1：顧影自憐・萬蛇鏡界 (20 發紫色旋轉鏡面光束)
-          for (let i = 0; i < 20; i++) {
-            const ang = (i / 20) * Math.PI * 2;
+          // 大招 1：顧影自憐・萬蛇鏡界 (原20發減少30%為14發紫色旋轉鏡面光束)
+          for (let i = 0; i < 14; i++) {
+            const ang = (i / 14) * Math.PI * 2;
             const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 190, Math.sin(ang) * 190, false, 1, 'petrify_beam');
             eb.color = '#d991ff'; eb.r = 7.5;
             this.ebullets.push(eb);
           }
         } else {
-          // 新增大招 2：邪眼凝視・深淵石化射線 (巨幅紫色石化預警光錐 + 毒晶碎屑)
+          // 新增大招 2：邪眼凝視・深淵石化射線 (原14發減少30%為9發毒晶碎屑)
           this.hazardTelegraphs.push({
             type: 'circle', x: this.player.x, y: this.player.y, r: 80,
             life: 1.3, color: 'rgba(179, 89, 255, 0.55)'
@@ -5083,8 +5191,8 @@ class Game {
           setTimeout(() => {
             if (!boss || boss.dead) return;
             this.sound.playCrit();
-            for (let k = 0; k < 14; k++) {
-              const ang = (k / 14) * Math.PI * 2;
+            for (let k = 0; k < 9; k++) {
+              const ang = (k / 9) * Math.PI * 2;
               const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 210, Math.sin(ang) * 210, false, 1, 'petrify_beam');
               eb.color = '#c054ff'; eb.r = 7;
               this.ebullets.push(eb);
@@ -5615,7 +5723,22 @@ class Game {
       const card = document.createElement('div');
       const isFusion = !!c.isFusion;
       const tierClass = c.tierRating ? `tier-${c.tierRating.toLowerCase()}` : '';
-      card.className = `upgrade-card ${c.quality || 'quality-good'} ${tierClass} ${isFusion ? 'fusion-card' : ''}`;
+
+      // 依主武/被動/特化/真融合賦予專屬邊界與名稱特效 class (四色光效與外框區隔)
+      let nameClass = 'name-active';
+      let cardTypeClass = 'card-active';
+      if (isFusion) {
+        nameClass = 'name-fusion';
+        cardTypeClass = 'card-fusion';
+      } else if (c.isPerk) {
+        nameClass = 'name-perk';
+        cardTypeClass = 'card-perk';
+      } else if (c.isPassive) {
+        nameClass = 'name-passive';
+        cardTypeClass = 'card-passive';
+      }
+
+      card.className = `upgrade-card ${c.quality || 'quality-good'} ${tierClass} ${cardTypeClass} ${isFusion ? 'fusion-card' : ''}`;
 
       // 主被動標籤 (明顯呈現)
       let typeBadgeHtml = '';
@@ -5665,7 +5788,7 @@ class Game {
         <div class="upgrade-icon-box">${iconHtml}</div>
         <div class="upgrade-info">
           <div class="upgrade-name-row">
-            <span class="upgrade-name">${c.name}</span>
+            <span class="upgrade-name ${nameClass}">${c.name}</span>
             ${typeBadgeHtml}
             ${tierBadgeHtml}
             ${rankTagHtml}
@@ -6041,8 +6164,42 @@ class Game {
 
     // 玩家平滑移動與絕對邊界限制 (移動嚴禁超出畫面)
     const p = this.player;
-    p.x += (p.targetX - p.x) * 0.22;
-    p.y += (p.targetY - p.y) * 0.22;
+
+    // 石化狀態解除倒數計時（如使用光束砲高溫融化解除）
+    if (p.gorgonPurgeTimer && p.gorgonPurgeTimer > 0) {
+      p.gorgonPurgeTimer -= dt;
+      if (p.gorgonPurgeTimer <= 0) {
+        p.gorgonPurgeTimer = 0;
+        // 若美杜莎還在 Phase 2，石化領域再次生效
+        const medusa = this.bosses.find(b => b.stage === 3 && b.phase >= 2 && !b.dead && !b.dying);
+        if (medusa) p.gorgonSlowActive = true;
+      }
+    }
+
+    // 雷公 Phase 2: 磁暴拘束強制停頓
+    if (p.stunTimer && p.stunTimer > 0) {
+      p.stunTimer -= dt;
+      p.targetX = p.x;
+      p.targetY = p.y;
+      // 戰機短路電弧粒子
+      if (Math.random() < 0.4) {
+        this.particles.push(new Particle(
+          p.x + (Math.random() - 0.5) * 30,
+          p.y + (Math.random() - 0.5) * 30,
+          (Math.random() - 0.5) * 60,
+          (Math.random() - 0.5) * 60,
+          '#38bdf8',
+          0.3,
+          2.5
+        ));
+      }
+    } else {
+      // 美杜莎 Phase 2: 石化凝視領域使玩家移動速度下降 50%
+      const slow = p.gorgonSlowActive ? 0.5 : 1.0;
+      p.x += (p.targetX - p.x) * (0.22 * slow);
+      p.y += (p.targetY - p.y) * (0.22 * slow);
+    }
+
     p.x = Math.max(24, Math.min(this.W - 24, p.x));
     p.y = Math.max(30, Math.min(this.H - 36, p.y));
     if (p.invulnTime > 0) p.invulnTime -= dt;
@@ -8128,6 +8285,42 @@ class Game {
       ctx.lineTo(Math.cos(midA) * (innerR + outerR) * 0.5, Math.sin(midA) * (innerR + outerR) * 0.5);
       ctx.lineTo(Math.cos(a) * outerR, Math.sin(a) * outerR);
       ctx.stroke();
+    }
+
+    // 3. 迦樓羅專屬：金羽神盾環繞羽刃屏障 (承受 10,000 傷害破盾)
+    if (b.stage === 1 && b.featherBarrierHp > 0) {
+      const featherOrbCount = 8;
+      const shieldR = b.hitboxRadius + 32;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 215, 0, 0.85)';
+      ctx.lineWidth = 3;
+      ctx.shadowColor = '#ffd700';
+      ctx.shadowBlur = 16;
+      ctx.beginPath();
+      ctx.arc(0, 0, shieldR, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // 環繞旋轉的黃金羽刃
+      for (let f = 0; f < featherOrbCount; f++) {
+        const fa = (f / featherOrbCount) * Math.PI * 2 + time * 3.5;
+        const fx = Math.cos(fa) * shieldR;
+        const fy = Math.sin(fa) * shieldR;
+        ctx.save();
+        ctx.translate(fx, fy);
+        ctx.rotate(fa + Math.PI / 2);
+        ctx.fillStyle = '#ffd700';
+        ctx.shadowColor = '#ffffff';
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.moveTo(0, -12);
+        ctx.lineTo(5, 5);
+        ctx.lineTo(0, 12);
+        ctx.lineTo(-5, 5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+      ctx.restore();
     }
     ctx.restore();
   }
