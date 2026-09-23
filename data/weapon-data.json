@@ -220,44 +220,44 @@
       "type": "homing",
       "description": "螺旋尾焰巡弋微型核融飛彈，自動尋標最危險敵機，命中引發大範圍熱核爆轟與火環。",
       "maxRank": 5,
-      "baseDamage": 50,
-      "fireRate": 1.8,
+      "baseDamage": 42,
+      "fireRate": 0.91,
       "specialEffect": "自動鎖定追蹤，命中引發範圍核爆火環",
       "ranks": [
         {
           "rank": 1,
           "name": "雙發巡弋飛彈",
           "missiles": 2,
-          "damage": 50,
-          "effect": "雙枚追蹤飛彈"
+          "damage": 56,
+          "effect": "雙枚微型追蹤導彈，自動尋標"
         },
         {
           "rank": 2,
-          "name": "四聯核融獵殺",
-          "missiles": 4,
-          "damage": 65,
-          "effect": "四枚追蹤飛彈，爆風半徑擴大"
+          "name": "三聯核融獵殺",
+          "missiles": 3,
+          "damage": 70,
+          "effect": "三枚追蹤導彈，爆風半徑擴大"
         },
         {
           "rank": 3,
-          "name": "六重智能天導",
-          "missiles": 6,
-          "damage": 82,
-          "effect": "六枚微型導彈，鎖定 Boss 弱點"
+          "name": "四重智能天導",
+          "missiles": 4,
+          "damage": 84,
+          "effect": "四枚追蹤導彈，鎖定敵陣弱點"
         },
         {
           "rank": 4,
-          "name": "八發烈陽蜂巢",
-          "missiles": 8,
-          "damage": 105,
-          "effect": "爆轟留下持續 2 秒燃燒熔岩區"
+          "name": "五發烈陽蜂巢",
+          "missiles": 5,
+          "damage": 98,
+          "effect": "五枚導彈，爆轟留下短暫燃燒火環"
         },
         {
           "rank": 5,
-          "name": "十二聯弒星導彈",
-          "missiles": 10,
-          "damage": 135,
-          "effect": "【MAX 終極特化】彈頭子母分裂，造成二次破片巨型連環核爆"
+          "name": "六聯弒星導彈",
+          "missiles": 6,
+          "damage": 112,
+          "effect": "【MAX 終極特化】六枚高能導彈全彈齊射，引發二次破片核融爆轟"
         }
       ],
       "tier": "B",

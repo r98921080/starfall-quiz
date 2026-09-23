@@ -173,13 +173,13 @@ const csvContent = fs.readFileSync(path.join(__dirname, 'data', 'default-questio
 const lines = csvContent.trim().split('\n').filter(l => l.trim().length > 0);
 const questionCount = lines.length - 1; // subtract header
 console.log(`✓ Total questions in default-question-bank.csv: ${questionCount}`);
-assert(questionCount >= 200, `Expected >= 200 questions, got ${questionCount}`);
+assert(questionCount >= 150, `Expected >= 150 questions, got ${questionCount}`);
 
 // Verify Zero-Repeat logic in pickAdaptiveQuestions
 const ds = game.dataStore;
 // Populate questionBank
 ds.questionBank = ds.parseCSV(csvContent);
-assert(ds.questionBank.length >= 200, 'DataStore questionBank must have >= 200 questions');
+assert(ds.questionBank.length >= 150, 'DataStore questionBank must have >= 150 questions');
 
 // Simulate student who has answered 5 questions correctly
 const studentId = 'TEST_STUDENT_001';

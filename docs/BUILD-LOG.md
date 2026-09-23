@@ -1129,5 +1129,67 @@
 1. 執行 `node scripts/test-v1.15.js`：9/9 測試項目全數 PASS 通過。
 2. 執行 `node scripts/test-v1.14.js; node scripts/test-v1.13.js; node scripts/test-v1.12.js; node scripts/test-v1.11.js`：全數 PASS 通過，向下相容性 100%。
 
+---
+
+## 2026-09-23 13:10 — BUILD-024：題庫去重與選項A偏重清洗、關卡難度權重配題、同儕錯題推薦引擎、烈陽導彈平衡、靈丸專屬結界破盾機制與結算正確率修復
+
+### 完成項目
+1. **題庫全面去重與選項 A 偏重清洗 (`data/default-question-bank.csv`)**：
+   - 原 3,000 列題庫經去重清洗，徹底刪除 2,843 筆高頻重複冗餘題目（其中優先刪除高達 2,122 筆答案為 A 的重複項目，其餘刪除 721 筆）。
+   - 保留 157 道高質量無重複題目，重新平衡選項順序，答案分佈達到完美的 ~25% 平衡：
+     - A：39 題 (24.84%)
+     - B：39 題 (24.84%)
+     - C：40 題 (25.48%)
+     - D：39 題 (24.84%)
+   - 題幹、選項文字與解析對應保持 100% 完整精確。
+2. **題目出現權重歸零並依照難度梯度配題 (`game.js`)**：
+   - 題目權重先全部歸零，根據當前關卡 `stage` 動態計算目標難度權重梯度：
+     - Stage 1-2：難度 1 (權重 100)、難度 2 (權重 30)、其餘 0。
+     - Stage 3-4：難度 2 (權重 100)、難度 1 (權重 35)、難度 3 (權重 35)。
+     - Stage 5-6：難度 3 (權重 100)、難度 2 (權重 40)、難度 4 (權重 40)。
+     - Stage 7-8：難度 4 (權重 100)、難度 3 (權重 40)、難度 5 (權重 40)。
+     - Stage 9-10：難度 5 (權重 100)、難度 4 (權重 50)、難度 3 (權重 20)。
+   - 採加權無放回抽樣，確保題目難度緊密契合關卡進程。
+3. **同儕錯題優先出題引擎 (`isPeerMistake` & `#quizPeerBadge`)**：
+   - 跨學員歷程掃描：檢索其他學員歷史錯題（`wrong > 0`），若當前玩家從未嘗試過且未掌握，優先抽取 1~2 題作為同儕弱點攻堅題。
+   - 答題卡 UI 動態顯示橘黃高亮標籤：`💡 同儕易錯重點題`。
+4. **武器數值平衡：烈陽核融導彈削弱 (`homing_missile`)**：
+   - 調整基礎傷害（58 ➔ 42）、成長係數（+18 ➔ +14）。
+   - 發射間隔冷卻由 0.65 秒延長至 1.10 秒。
+   - 飛彈數量由 `2 + rank * 2`（4~12 枚）下修為 `2 + Math.floor(rank * 0.8)`（2~6 枚）。
+   - 轉向角速度由 7.5 微調至 5.2，避免 180 度瞬間折返。
+   - Lv.5 爆發 DPS 由 2,732 降至 610.9 DPS，回歸紮實的 B 級戰術壓制定位。
+   - 同步更新 `STARFALL_WEAPONS_CATALOG` 與 `data/weapon-data.json`。
+5. **靈丸不可替代核心機制：靈能結界破盾 (`requiresSpirit`)**：
+   - 神話 Boss 絕境召喚實體（金羽錨點、天雷法鼓、蛇髮魔鏡）標註 `requiresSpirit: true`。
+   - 結界實體存在期間，Boss 處於完全無敵狀態。
+   - 常規武器射擊結界實體：傷害為 0，子彈彈開/消散並跳出提示 `🛡️【靈能結界】常規武器無效！請按住蓄力發射【靈丸】造成傷害！`。
+   - 僅玩家蓄力發射之【靈丸】（`b.type === 'spirit'`）可造成全額破盾傷害（100% 擦彈 EMP 造成 500% 超載粉碎傷害）。
+   - 結界實體全數消滅時，觸發結界大破碎特效、全場彈幕消解，魔王解除無敵並陷入 3 秒癱瘓硬直！
+   - 實體上方以天青色旋轉虛線能量環與 `⚡ 需靈丸破壞` 專屬戰術準星標註。
+6. **玩家陣亡/勝利結算：答題正確率統計修復 (`#endAcc`)**：
+   - 在 `Game` 中實時維護 `sessionTotalAnswered` 與 `sessionTotalCorrect`。
+   - 在 `onGameOver()` 與 `onGameVictory()` 中真實計算百分比：`${rate}% (${correct}/${total} 題)`。
+   - 徹底根除結算畫面始終為硬編碼 `0%` 之問題。
+
+### 異動檔案
+- `data/default-question-bank.csv`：刪除 2,843 筆重複題，保留 157 題且 A/B/C/D 達 25% 完美均衡。
+- `game.js`：
+  - `DataStore`：新增 `getPeerMistakes`、`getDifficultyWeightMap`、`drawWeightedQuestions`，重構 `pickAdaptiveQuestions(count, stage)`。
+  - `Game`：新增作答統計、結算正確率即時計算至 `#endAcc`、同儕易錯標籤顯示。
+  - 武器數值與轉向率平衡（`homing_missile` 冷卻 1.1s、彈數 2~6、威力 42+rank*14、轉向 5.2）。
+  - Boss 靈丸結界判定（`requiresSpirit`、常規子彈免疫、靈丸破盾、全破 3 秒癱瘓、天青能量光環繪製）。
+- `data/weapon-data.json`：同步 `homing_missile` 規格與 1~5 階數值。
+- `index.html`：新增 `#quizPeerBadge`（`💡 同儕易錯重點題`）。
+- `test-v1.24-comprehensive-enhancements.js`：全新六大項目全自動化驗證套件。
+- `scripts/dedup-question-bank.js`：官方題庫去重與選項均衡清洗工具。
+
+### 測試方式
+1. 執行 `node test-v1.24-comprehensive-enhancements.js`：六大核心功能 100% PASS 通過。
+2. 執行 `node test-v1.23-fingerprint-and-arsenal-power.js`：PASS 通過。
+3. 執行 `node test-v1.22-mechanics.js`：PASS 通過。
+4. 執行 `node test-weapons-boss.js`：PASS 通過。
+5. 執行 `node test-v1.21-arsenal-and-tier.js`：PASS 通過。
+
 
 

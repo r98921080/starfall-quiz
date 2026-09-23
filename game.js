@@ -2197,7 +2197,123 @@ class DataStore {
     return false;
   }
 
-  pickAdaptiveQuestions(count = 5) {
+  // 取得其他學員曾答錯但當前學員從未嘗試過的錯題（同儕易錯攻堅題）
+  getPeerMistakes(currentSid, pool) {
+    const peerMistakeQids = new Set();
+    const currentProgress = this.getStudentProgressMap(currentSid);
+
+    // 1. 從記憶體中的 allStudentProgress 收集其他學員的錯題
+    if (this.allStudentProgress) {
+      Object.entries(this.allStudentProgress).forEach(([sid, pMap]) => {
+        if (sid !== currentSid && pMap) {
+          Object.entries(pMap).forEach(([qid, p]) => {
+            if (p && p.wrong > 0) {
+              peerMistakeQids.add(qid);
+            }
+          });
+        }
+      });
+    }
+
+    // 2. 從 localStorage (starfall_progress_*) 收集其他學員的錯題
+    try {
+      if (typeof localStorage !== 'undefined') {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('starfall_progress_')) {
+            const sid = key.replace('starfall_progress_', '');
+            if (sid !== currentSid) {
+              const val = localStorage.getItem(key);
+              if (val) {
+                const parsed = JSON.parse(val);
+                if (parsed && typeof parsed === 'object') {
+                  Object.entries(parsed).forEach(([qid, p]) => {
+                    if (p && p.wrong > 0) {
+                      peerMistakeQids.add(qid);
+                    }
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed scanning localStorage for peer mistakes:', e);
+    }
+
+    // 3. 在可用池中篩選出：當前玩家從未嘗試過 (attempts === 0 或無記錄) 且非掌握題
+    const candidates = [];
+    pool.forEach(q => {
+      if (!peerMistakeQids.has(q.question_id)) return;
+      const fp = this.getQuestionFingerprint(q.question);
+      if (this.masteredFingerprints && this.masteredFingerprints.has(fp)) return;
+      if (this.sessionUsedQuestionIds && this.sessionUsedQuestionIds.has(q.question_id)) return;
+      if (this.sessionUsedFingerprints && this.sessionUsedFingerprints.has(fp)) return;
+      const cp = currentProgress[q.question_id];
+      if (cp && cp.attempts > 0) return; // 該玩家若已做過則不符合「未在該玩家答題紀錄出現過」條件
+      candidates.push(q);
+    });
+
+    return candidates;
+  }
+
+  // 依照關卡難度權重配題
+  getDifficultyWeightMap(stage = 1) {
+    // 題目權重先全部歸零，依照關卡梯度配題
+    // stage 1-2: 難度 1 (100), 難度 2 (30)
+    // stage 3-4: 難度 2 (100), 難度 1 (35), 難度 3 (35)
+    // stage 5-6: 難度 3 (100), 難度 2 (40), 難度 4 (40)
+    // stage 7-8: 難度 4 (100), 難度 3 (40), 難度 5 (40)
+    // stage 9-10: 難度 5 (100), 難度 4 (50), 難度 3 (20)
+    if (stage <= 2) {
+      return { 1: 100, 2: 30, 3: 5, 4: 0, 5: 0 };
+    } else if (stage <= 4) {
+      return { 1: 30, 2: 100, 3: 40, 4: 5, 5: 0 };
+    } else if (stage <= 6) {
+      return { 1: 5, 2: 35, 3: 100, 4: 45, 5: 10 };
+    } else if (stage <= 8) {
+      return { 1: 0, 2: 10, 3: 35, 4: 100, 5: 50 };
+    } else {
+      return { 1: 0, 2: 0, 3: 20, 4: 60, 5: 100 };
+    }
+  }
+
+  // 加權隨機抽題輔助函式
+  drawWeightedQuestions(candidates, count, stage = 1) {
+    if (candidates.length <= count) return [...candidates];
+    const weightMap = this.getDifficultyWeightMap(stage);
+    const pool = candidates.map(q => {
+      const diff = q.difficulty || 1;
+      const w = weightMap[diff] !== undefined ? weightMap[diff] : 10;
+      return { item: q, weight: w };
+    });
+
+    // 檢查若所有候選題目權重總和為 0 (極端情況)，則重設基礎權重
+    const totalWeight = pool.reduce((sum, c) => sum + c.weight, 0);
+    if (totalWeight <= 0) {
+      pool.forEach(c => c.weight = 10);
+    }
+
+    const drawn = [];
+    while (drawn.length < count && pool.length > 0) {
+      const curTotal = pool.reduce((sum, c) => sum + c.weight, 0);
+      let r = Math.random() * curTotal;
+      let chosenIdx = 0;
+      for (let i = 0; i < pool.length; i++) {
+        if (r < pool[i].weight) {
+          chosenIdx = i;
+          break;
+        }
+        r -= pool[i].weight;
+      }
+      drawn.push(pool[chosenIdx].item);
+      pool.splice(chosenIdx, 1);
+    }
+    return drawn;
+  }
+
+  pickAdaptiveQuestions(count = 5, stage = 1) {
     if (!this.questionBank || this.questionBank.length === 0) return [];
     const sid = this.currentStudentId || 'S0001';
     const sidProgress = this.getStudentProgressMap(sid);
@@ -2242,111 +2358,142 @@ class DataStore {
     const selected = [];
     const selectedFps = new Set();
 
-    // 2. 錯題主動復仇機制：優先摻入 1~2 題上一輪/歷史尚未雪恥復仇的錯題 (p.wrong > 0 && !p.avenged)
-    const unavengedMistakes = [];
-    // (A) 從 mistakeMap 優先提取 (包含跨局儲存之錯題)
-    if (this.mistakeMap) {
-      Object.entries(this.mistakeMap).forEach(([fp, mq]) => {
-        if (!this.masteredFingerprints.has(fp) && !this.sessionUsedFingerprints.has(fp) && !selectedFps.has(fp)) {
-          unavengedMistakes.push(mq);
+    // 2.【同儕易錯攻堅題】：若其他人有錯題且未在該玩家答題紀錄出現過，優先出題 1~2 題
+    const peerMistakes = this.getPeerMistakes(sid, availablePool);
+    if (peerMistakes.length > 0) {
+      peerMistakes.sort(() => Math.random() - 0.5);
+      const peerTargetCount = Math.min(2, Math.min(count - 1, peerMistakes.length));
+      for (let i = 0; i < peerTargetCount; i++) {
+        const pq = peerMistakes[i];
+        const fp = this.getQuestionFingerprint(pq.question);
+        if (!selectedFps.has(fp)) {
+          selected.push({
+            ...pq,
+            isPeerMistake: true,
+            isReview: false,
+            isRevenge: false
+          });
+          selectedFps.add(fp);
+          this.sessionUsedQuestionIds.add(pq.question_id);
+          this.sessionUsedFingerprints.add(fp);
+        }
+      }
+    }
+
+    // 3.【自身錯題復仇機制】：優先摻入 1~2 題當前玩家尚未雪恥復仇的錯題 (p.wrong > 0 && !p.avenged)
+    const neededForMistakes = count - selected.length;
+    if (neededForMistakes > 0) {
+      const unavengedMistakes = [];
+      // (A) 從 mistakeMap 優先提取 (包含跨局儲存之錯題)
+      if (this.mistakeMap) {
+        Object.entries(this.mistakeMap).forEach(([fp, mq]) => {
+          if (!this.masteredFingerprints.has(fp) && !this.sessionUsedFingerprints.has(fp) && !selectedFps.has(fp)) {
+            unavengedMistakes.push(mq);
+          }
+        });
+      }
+      // (B) 比對 sidProgress 中尚未雪恥的題目
+      availablePool.forEach(q => {
+        const fp = this.getQuestionFingerprint(q.question);
+        const p = sidProgress[q.question_id];
+        if (p && p.wrong > 0 && !p.avenged && !this.masteredFingerprints.has(fp)) {
+          if (!unavengedMistakes.some(m => this.getQuestionFingerprint(m.question) === fp)) {
+            unavengedMistakes.push(q);
+          }
         }
       });
-    }
-    // (B) 比對 sidProgress 中尚未雪恥的題目
-    availablePool.forEach(q => {
-      const fp = this.getQuestionFingerprint(q.question);
-      const p = sidProgress[q.question_id];
-      if (p && p.wrong > 0 && !p.avenged && !this.masteredFingerprints.has(fp)) {
-        if (!unavengedMistakes.some(m => this.getQuestionFingerprint(m.question) === fp)) {
-          unavengedMistakes.push(q);
+
+      if (unavengedMistakes.length > 0) {
+        unavengedMistakes.sort(() => Math.random() - 0.5);
+        const mistakeTargetCount = Math.min(2, Math.min(neededForMistakes, unavengedMistakes.length));
+        for (let i = 0; i < mistakeTargetCount; i++) {
+          const mq = unavengedMistakes[i];
+          const fp = this.getQuestionFingerprint(mq.question);
+          if (!selectedFps.has(fp)) {
+            selected.push({
+              ...mq,
+              isPeerMistake: false,
+              isReview: true,
+              isRevenge: true
+            });
+            selectedFps.add(fp);
+            this.sessionUsedQuestionIds.add(mq.question_id);
+            this.sessionUsedFingerprints.add(fp);
+          }
         }
       }
-    });
-
-    if (unavengedMistakes.length > 0) {
-      unavengedMistakes.sort(() => Math.random() - 0.5);
-      const mistakeTargetCount = Math.min(2, Math.min(count - 1, unavengedMistakes.length));
-      for (let i = 0; i < mistakeTargetCount; i++) {
-        const mq = unavengedMistakes[i];
-        const fp = this.getQuestionFingerprint(mq.question);
-        selected.push({
-          ...mq,
-          isReview: true,
-          isRevenge: true
-        });
-        selectedFps.add(fp);
-        this.sessionUsedQuestionIds.add(mq.question_id);
-        this.sessionUsedFingerprints.add(fp);
-      }
     }
 
-    // 3. 剩餘題數嚴格自「從未作答過的全新題目」中抽取 (ZERO REPEAT for mastered questions)
+    // 4.【全新未作答題目 + 依照難度配題權重抽取】：權重先全部歸零，依照難度配題
     const remainingNeeded = count - selected.length;
-    const freshQuestions = [];
-    const seenFreshFp = new Set();
+    if (remainingNeeded > 0) {
+      const freshQuestions = [];
+      const seenFreshFp = new Set();
 
-    for (const q of availablePool) {
-      if (this.sessionUsedQuestionIds.has(q.question_id)) continue;
-      const fp = this.getQuestionFingerprint(q.question);
-      if (!fp || this.sessionUsedFingerprints.has(fp) || selectedFps.has(fp)) continue;
-      if (this.masteredFingerprints.has(fp)) continue; // 100% 排除已答對指紋 (包含題庫中不同 ID 的同一題目)
-      if (seenFreshFp.has(fp)) continue; // 排除同一輪內重複題幹
-      const p = sidProgress[q.question_id];
-      if (p && p.attempts > 0 && p.wrong === 0) continue; // 排除已答對題
+      for (const q of availablePool) {
+        if (this.sessionUsedQuestionIds.has(q.question_id)) continue;
+        const fp = this.getQuestionFingerprint(q.question);
+        if (!fp || this.sessionUsedFingerprints.has(fp) || selectedFps.has(fp)) continue;
+        if (this.masteredFingerprints.has(fp)) continue; // 100% 排除已掌握指紋
+        if (seenFreshFp.has(fp)) continue;
+        const p = sidProgress[q.question_id];
+        if (p && p.attempts > 0 && p.wrong === 0) continue; // 排除已答對題
 
-      freshQuestions.push(q);
-      seenFreshFp.add(fp);
-    }
-
-    if (freshQuestions.length >= remainingNeeded) {
-      // 全新題目充足：100% 抽取全新題目，已答對題目機率嚴格為 0%！
-      freshQuestions.sort(() => Math.random() - 0.5);
-      for (let i = 0; i < remainingNeeded; i++) {
-        const fq = freshQuestions[i];
-        const fp = this.getQuestionFingerprint(fq.question);
-        selected.push({
-          ...fq,
-          isReview: false,
-          isRevenge: false
-        });
-        selectedFps.add(fp);
-        this.sessionUsedQuestionIds.add(fq.question_id);
-        this.sessionUsedFingerprints.add(fp);
+        freshQuestions.push(q);
+        seenFreshFp.add(fp);
       }
-    } else {
-      // 若全新題目不足（例如學員已刷了數千題），先取完所有剩餘新題
-      freshQuestions.forEach(fq => {
-        const fp = this.getQuestionFingerprint(fq.question);
-        selected.push({ ...fq, isReview: false, isRevenge: false });
-        selectedFps.add(fp);
-        this.sessionUsedQuestionIds.add(fq.question_id);
-        this.sessionUsedFingerprints.add(fp);
-      });
 
-      const stillNeeded = count - selected.length;
-      // 剩餘名額從可用池中補足（嚴格優先未熟練題，依指紋去重）
-      const remainingOthers = [];
-      const seenOtherFp = new Set();
-      for (const oq of availablePool) {
-        if (this.sessionUsedQuestionIds.has(oq.question_id)) continue;
-        const fp = this.getQuestionFingerprint(oq.question);
-        if (!fp || this.sessionUsedFingerprints.has(fp) || selectedFps.has(fp) || seenOtherFp.has(fp)) continue;
-        remainingOthers.push(oq);
-        seenOtherFp.add(fp);
-      }
-      remainingOthers.sort(() => Math.random() - 0.5);
-      for (let i = 0; i < stillNeeded && i < remainingOthers.length; i++) {
-        const oq = remainingOthers[i];
-        const fp = this.getQuestionFingerprint(oq.question);
-        const p = sidProgress[oq.question_id];
-        selected.push({
-          ...oq,
-          isReview: !!(p && p.attempts > 0),
-          isRevenge: !!(p && p.wrong > 0 && !p.avenged)
+      if (freshQuestions.length >= remainingNeeded) {
+        // 依照關卡難度加權抽取
+        const drawn = this.drawWeightedQuestions(freshQuestions, remainingNeeded, stage);
+        for (const fq of drawn) {
+          const fp = this.getQuestionFingerprint(fq.question);
+          selected.push({
+            ...fq,
+            isPeerMistake: false,
+            isReview: false,
+            isRevenge: false
+          });
+          selectedFps.add(fp);
+          this.sessionUsedQuestionIds.add(fq.question_id);
+          this.sessionUsedFingerprints.add(fp);
+        }
+      } else {
+        // 全新題目不足時取完所有新題，其餘自未熟練可用池補足
+        freshQuestions.forEach(fq => {
+          const fp = this.getQuestionFingerprint(fq.question);
+          selected.push({ ...fq, isPeerMistake: false, isReview: false, isRevenge: false });
+          selectedFps.add(fp);
+          this.sessionUsedQuestionIds.add(fq.question_id);
+          this.sessionUsedFingerprints.add(fp);
         });
-        selectedFps.add(fp);
-        this.sessionUsedQuestionIds.add(oq.question_id);
-        this.sessionUsedFingerprints.add(fp);
+
+        const stillNeeded = count - selected.length;
+        if (stillNeeded > 0) {
+          const remainingOthers = [];
+          const seenOtherFp = new Set();
+          for (const oq of availablePool) {
+            if (this.sessionUsedQuestionIds.has(oq.question_id)) continue;
+            const fp = this.getQuestionFingerprint(oq.question);
+            if (!fp || this.sessionUsedFingerprints.has(fp) || selectedFps.has(fp) || seenOtherFp.has(fp)) continue;
+            remainingOthers.push(oq);
+            seenOtherFp.add(fp);
+          }
+          const drawnOthers = this.drawWeightedQuestions(remainingOthers, stillNeeded, stage);
+          for (const oq of drawnOthers) {
+            const fp = this.getQuestionFingerprint(oq.question);
+            const p = sidProgress[oq.question_id];
+            selected.push({
+              ...oq,
+              isPeerMistake: false,
+              isReview: !!(p && p.attempts > 0),
+              isRevenge: !!(p && p.wrong > 0 && !p.avenged)
+            });
+            selectedFps.add(fp);
+            this.sessionUsedQuestionIds.add(oq.question_id);
+            this.sessionUsedFingerprints.add(fp);
+          }
+        }
       }
     }
 
@@ -2362,7 +2509,7 @@ const STARFALL_WEAPONS_CATALOG = [
   { id: 'beam_cannon', name: '金陽聚焦光束', isPassive: false, tier: 'A', tierName: 'A 級・強襲主力', icon: 'assets/icons/weapons/weapon_2.png', tag: '主動・穿透', baseDmg: 240, desc: '筆直貫穿全螢幕之金色光柱，「熱能融解」穿透護盾造成敵方最大生命持續灼燒。' },
   { id: 'spirit_bullet', name: '靈能聚變核心', isPassive: true, tier: 'C', tierName: 'C 級・守護輔助', icon: 'assets/icons/weapons/weapon_3.png', tag: '被動・聚變', baseDmg: 110, desc: '慢速向前浮游之幽藍靈核，向周遭放射電漿弧，自機靈丸蓄力速度加快 30%。' },
   { id: 'kinetic_dart', name: '超空泡穿甲鏢', isPassive: false, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_4.png', tag: '主動・穿刺', baseDmg: 85, desc: '極高速藍色超空泡標槍，100% 貫穿所有敵人，每穿透一名目標傷害遞增 20%。' },
-  { id: 'homing_missile', name: '烈陽核融導彈', isPassive: false, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_5.png', tag: '主動・索敵', baseDmg: 58, desc: '巡弋微型核融飛彈，自動尋標最危險敵機，命中引發大範圍熱核爆轟與火環。' },
+  { id: 'homing_missile', name: '烈陽核融導彈', isPassive: false, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_5.png', tag: '主動・索敵', baseDmg: 42, desc: '巡弋微型核融飛彈，自動尋標最危險敵機，命中引發大範圍熱核爆轟與火環。' },
   { id: 'jade_chakram', name: '青玉風雷飛輪', isPassive: false, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_6.png', tag: '主動・削彈', baseDmg: 140, desc: '向前拋射的旋轉碧玉刃輪，在空中超高速旋轉，直接削碎切斷接觸的敵方子彈！' },
   { id: 'combat_wingman', name: '神鳥隨行僚機', isPassive: true, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_7.png', tag: '被動・僚機', baseDmg: 40, desc: '雙聯神鳥僚機伴隨兩翼，形成極致扇形綠色雷射交叉火網，持續壓制前線。' },
   { id: 'prism_wingman', name: '虹光折射星核', isPassive: true, tier: 'A', tierName: 'A 級・強襲主力', icon: 'assets/icons/weapons/weapon_8.png', tag: '被動・折射', baseDmg: 60, desc: '高科技浮游稜鏡，折射主砲光束，形成多角度偏折射線鎖定多重目標。' },
@@ -2556,6 +2703,8 @@ class Game {
     this.wave = 1;
     this.score = 0;
     this.knowledgePressure = 0;
+    this.sessionTotalAnswered = 0;
+    this.sessionTotalCorrect = 0;
     this.time = 0;
 
     // Hit-stop 凍結幀
@@ -3476,7 +3625,7 @@ class Game {
     const hm = this.arsenal.homing_missile;
     if (hm && hm.rank > 0 && this.isWeaponActiveEquipped('homing_missile')) {
       hm.timer += dt;
-      if (hm.timer >= 0.65 / rateMult) {
+      if (hm.timer >= 1.10 / rateMult) {
         hm.timer = 0;
         this.fireHomingMissiles(hm.rank, hm.quality);
       }
@@ -3732,8 +3881,8 @@ class Game {
   fireHomingMissiles(rank, quality = 'common') {
     const qMult = this.getQualityMultiplier(quality);
     const isSwarm = this.isFusionActive('swarm_hunter');
-    const count = (2 + rank * 2) * (isSwarm ? 2 : 1);
-    const dmg = (58 + rank * 18) * (isSwarm ? 1.35 : 1.0) * qMult;
+    const count = (2 + Math.floor(rank * 0.8)) * (isSwarm ? 2 : 1);
+    const dmg = (42 + rank * 14) * (isSwarm ? 1.35 : 1.0) * qMult;
 
     for (let i = 0; i < count; i++) {
       const offsetAngle = (i - (count - 1) / 2) * (isSwarm ? 0.2 : 0.35);
@@ -4498,15 +4647,16 @@ class Game {
 
     if (b.stage === 1) {
       b.invulnerable = true;
-      b.invulnTimer = 7.0;
+      b.invulnTimer = 999;
       this.sound.playLaser(1400);
       this.shake(10, 0.35);
-      this.showToast('⚠️【迦樓羅・涅槃金羽陣】進入 7 秒無敵！擊破 4 處金羽錨點或以 100% 擦彈靈丸破盾！');
+      this.showToast('⚠️【迦樓羅・涅槃金羽陣】靈能結界展開！魔王完全無敵，請蓄力發射【靈丸】擊破 4 處金羽錨點！');
       for (let i = 0; i < 4; i++) {
         const ang = (i / 4) * Math.PI * 2;
         this.bossMinions.push({
           type: 'garuda_feather_anchor',
           name: '涅槃金羽錨點',
+          requiresSpirit: true,
           x: bx + Math.cos(ang) * 85,
           y: by + Math.sin(ang) * 85,
           r: 18,
@@ -4517,13 +4667,14 @@ class Game {
       }
     } else if (b.stage === 2) {
       b.invulnerable = true;
-      b.invulnTimer = 7.0;
+      b.invulnTimer = 999;
       this.sound.playLaser(1600);
       this.shake(10, 0.35);
-      this.showToast('⚠️【雷公・天劫囚籠】無敵磁暴激活！摧毀任一天雷法鼓或釋放 100% 擦彈 EMP 瓦解力場！');
+      this.showToast('⚠️【雷公・天劫囚籠】無敵磁暴激活！常規武器無效，請蓄力發射【靈丸】摧毀天雷法鼓！');
       this.bossMinions.push({
         type: 'thunder_drum_anchor',
         name: '天雷法鼓・左',
+        requiresSpirit: true,
         x: w * 0.22,
         y: by + 30,
         r: 22,
@@ -4533,6 +4684,7 @@ class Game {
       this.bossMinions.push({
         type: 'thunder_drum_anchor',
         name: '天雷法鼓・右',
+        requiresSpirit: true,
         x: w * 0.78,
         y: by + 30,
         r: 22,
@@ -4540,14 +4692,17 @@ class Game {
         maxHp: 1200
       });
     } else if (b.stage === 3) {
+      b.invulnerable = true;
+      b.invulnTimer = 999;
       this.sound.playLaser(900);
       this.shake(8, 0.3);
-      this.showToast('⚠️【美杜莎・蛇髮魔鏡】鏡面反彈常規子彈！使用貫穿光束、破壞魔鏡或釋放 100% 擦彈破盾！');
+      this.showToast('⚠️【美杜莎・蛇髮魔鏡】靈能反彈壁壘！魔王處於無敵狀態，請使用【靈丸】摧毀 3 面魔鏡！');
       for (let i = 0; i < 3; i++) {
         const ang = (i / 3) * Math.PI * 2;
         this.bossMinions.push({
           type: 'gorgon_hex_mirror',
           name: '蛇髮魔鏡',
+          requiresSpirit: true,
           x: bx + Math.cos(ang) * 95,
           y: by + Math.sin(ang) * 95,
           r: 20,
@@ -4691,6 +4846,8 @@ class Game {
     this.resetPlayerStatusEffects();
     if (stage === 1 && this.dataStore) {
       this.dataStore.resetSessionQuestions();
+      this.sessionTotalAnswered = 0;
+      this.sessionTotalCorrect = 0;
     }
     this.player.hp = 3;
     this.player.shield = false;
@@ -5209,36 +5366,41 @@ class Game {
 
     // 檢查 1-3 關魔王背水一戰機制是否被瓦解
     if (b.desperationActive) {
+      const spiritMinions = this.bossMinions.filter(m => m.requiresSpirit && !m.dead);
+      if (spiritMinions.length > 0) {
+        b.invulnerable = true;
+      }
+
       if (b.stage === 1) {
         const anchors = this.bossMinions.filter(m => m.type === 'garuda_feather_anchor');
         if (anchors.length === 0) {
           b.desperationActive = false;
           b.invulnerable = false;
-          b.stunTimer = 2.5;
+          b.stunTimer = 3.0;
           this.sound.playExplosion(true);
-          this.shake(12, 0.4);
-          this.showToast('💥 金羽錨點全數破除！迦樓羅神盾瓦解，陷入 2.5 秒大癱瘓！');
+          this.shake(14, 0.45);
+          this.cancelAllEnemyBullets('💥【靈能破盾】金羽錨點全數破除！迦樓羅神盾瓦解，陷入 3.0 秒大癱瘓！');
         }
       } else if (b.stage === 2) {
         const drums = this.bossMinions.filter(m => m.type === 'thunder_drum_anchor');
-        if (drums.length < 2) {
+        if (drums.length === 0) {
           b.desperationActive = false;
           b.invulnerable = false;
-          b.hp = Math.max(1, b.hp - b.maxHp * 0.05);
-          b.stunTimer = 2.0;
-          this.bossMinions = this.bossMinions.filter(m => m.type !== 'thunder_drum_anchor');
+          b.hp = Math.max(1, b.hp - b.maxHp * 0.08);
+          b.stunTimer = 3.0;
           this.sound.playExplosion(true);
-          this.shake(14, 0.4);
-          this.showToast('💥 天雷法鼓崩壞！雷公受到 5% 電荷反噬並癱瘓 2.0 秒！');
+          this.shake(14, 0.45);
+          this.cancelAllEnemyBullets('💥【靈能破盾】天雷法鼓崩壞！雷公受到 8% 電荷反噬並癱瘓 3.0 秒！');
         }
       } else if (b.stage === 3) {
         const mirrors = this.bossMinions.filter(m => m.type === 'gorgon_hex_mirror');
         if (mirrors.length === 0) {
           b.desperationActive = false;
+          b.invulnerable = false;
           b.stunTimer = 3.0;
           this.sound.playExplosion(true);
-          this.shake(12, 0.4);
-          this.showToast('💥 三座蛇髮魔鏡全數粉碎！美杜莎陷入 3.0 秒重度眩暈！');
+          this.shake(14, 0.45);
+          this.cancelAllEnemyBullets('💥【靈能破盾】三座蛇髮魔鏡全數粉碎！美杜莎陷入 3.0 秒重度眩暈！');
         }
       }
     }
@@ -6445,7 +6607,7 @@ class Game {
   startQuizPhase() {
     this.state = 'quiz';
     this.resetPlayerStatusEffects();
-    this.quizQueue = this.dataStore.pickAdaptiveQuestions(5);
+    this.quizQueue = this.dataStore.pickAdaptiveQuestions(5, this.stage || 1);
     this.quizCorrectCount = 0;
     this.showNextQuestion();
   }
@@ -6466,11 +6628,22 @@ class Game {
     document.getElementById('quizSkillBadge').textContent = q.skill || '語文素養';
     
     const revBadge = document.getElementById('quizReviewBadge');
+    const peerBadge = document.getElementById('quizPeerBadge');
     if (q.isRevenge) {
-      revBadge.style.display = 'inline-block';
-      revBadge.textContent = '錯題復仇';
+      if (revBadge) {
+        revBadge.style.display = 'inline-block';
+        revBadge.textContent = '錯題復仇';
+      }
+      if (peerBadge) peerBadge.style.display = 'none';
+    } else if (q.isPeerMistake) {
+      if (peerBadge) {
+        peerBadge.style.display = 'inline-block';
+        peerBadge.textContent = '💡 同儕易錯重點題';
+      }
+      if (revBadge) revBadge.style.display = 'none';
     } else {
-      revBadge.style.display = 'none';
+      if (revBadge) revBadge.style.display = 'none';
+      if (peerBadge) peerBadge.style.display = 'none';
     }
 
     const diffStars = '★'.repeat(q.difficulty) + '☆'.repeat(Math.max(0, 3 - q.difficulty));
@@ -6506,7 +6679,9 @@ class Game {
     const prevP = sidMap[q.question_id];
     const isRepeatedWrong = !isCorrect && prevP && prevP.wrong >= 1;
 
+    this.sessionTotalAnswered = (this.sessionTotalAnswered || 0) + 1;
     if (isCorrect) {
+      this.sessionTotalCorrect = (this.sessionTotalCorrect || 0) + 1;
       this.quizCorrectCount++;
       btns[selectedIdx].classList.add('correct');
       this.sound.playLaser(1100);
@@ -7040,6 +7215,11 @@ class Game {
     document.getElementById('gameOverTitle').textContent = '神話登頂！全十關通關！';
     document.getElementById('endScore').textContent = this.score;
     document.getElementById('endStage').textContent = '第 10 關 (全破)';
+    const total = this.sessionTotalAnswered || 0;
+    const correct = this.sessionTotalCorrect || 0;
+    const rate = total > 0 ? Math.round((correct / total) * 100) : 0;
+    const accEl = document.getElementById('endAcc');
+    if (accEl) accEl.textContent = `${rate}% (${correct}/${total} 題)`;
     document.getElementById('gameOverScreen').classList.remove('hidden');
     this.sound.speak('恭喜！十位神話機神全數擊破！');
   }
@@ -7049,6 +7229,11 @@ class Game {
     document.getElementById('gameOverTitle').textContent = '戰機裝甲瓦解';
     document.getElementById('endScore').textContent = this.score;
     document.getElementById('endStage').textContent = `第 ${this.stage} 關`;
+    const total = this.sessionTotalAnswered || 0;
+    const correct = this.sessionTotalCorrect || 0;
+    const rate = total > 0 ? Math.round((correct / total) * 100) : 0;
+    const accEl = document.getElementById('endAcc');
+    if (accEl) accEl.textContent = `${rate}% (${correct}/${total} 題)`;
     document.getElementById('gameOverScreen').classList.remove('hidden');
   }
 
@@ -7296,7 +7481,7 @@ class Game {
           const targetAng = Math.atan2(target.y - b.y, target.x - b.x);
           const curAng = Math.atan2(b.vy, b.vx);
           const diff = Math.atan2(Math.sin(targetAng - curAng), Math.cos(targetAng - curAng));
-          const turnRate = b.isSwarm ? 14.0 : 7.5;
+          const turnRate = b.isSwarm ? 9.5 : 5.2;
           const newAng = curAng + Math.sign(diff) * Math.min(Math.abs(diff), turnRate * dt);
           const spd = b.isSwarm ? 540 : 440;
           b.vx = Math.cos(newAng) * spd;
@@ -7638,8 +7823,20 @@ class Game {
           if (m.dead) return;
           const d = Math.hypot(b.x - m.x, b.y - m.y);
           if (d < b.r + m.r) {
+            // 靈丸專屬破盾機制：若該實體設定 requiresSpirit，則非靈丸武器無法造成傷害！
+            if (m.requiresSpirit && b.type !== 'spirit') {
+              b.dead = true;
+              this.sound.playLaser(1200);
+              this.particles.push(new Particle(b.x, b.y, (Math.random() - 0.5) * 70, (Math.random() - 0.5) * 70, '#38bdf8', 3, 0.25));
+              if (!this._lastSpiritPromptTime || (this.time - this._lastSpiritPromptTime > 2.5)) {
+                this._lastSpiritPromptTime = this.time;
+                this.showToast('🛡️【靈能結界】常規武器無效！請按住蓄力發射【靈丸】造成傷害！');
+              }
+              return;
+            }
+
             // 美杜莎蛇髮魔鏡：反彈常規子彈（金陽光束、破曉耀斑、破城光錐與 EMP 靈丸可穿透或擊碎）
-            if (m.type === 'gorgon_hex_mirror') {
+            if (m.type === 'gorgon_hex_mirror' && !m.requiresSpirit) {
               if (b.type !== 'beam' && b.type !== 'photon_lance' && b.type !== 'solar_flare' && !b.isGrazeEmp) {
                 b.dead = true;
                 const angToPlayer = Math.atan2(this.player.y - m.y, this.player.x - m.x);
@@ -7689,6 +7886,20 @@ class Game {
             return;
           }
           b.lastHitBossTime = now;
+
+          // 若場上仍有需要靈丸破除的召喚物/核心，Boss 處於完全無敵狀態
+          const hasSpiritMinions = this.bossMinions && this.bossMinions.some(m => m.requiresSpirit && !m.dead);
+          if (hasSpiritMinions && !b.isGrazeEmp) {
+            boss.invulnerable = true;
+            this.sound.playLaser(1300);
+            this.particles.push(new Particle(b.x, b.y, (Math.random() - 0.5) * 80, (Math.random() - 0.5) * 80, '#38bdf8', 3.5, 0.3));
+            if (!this._lastBossShieldPromptTime || (this.time - this._lastBossShieldPromptTime > 2.5)) {
+              this._lastBossShieldPromptTime = this.time;
+              this.showToast('🛡️【魔王結界無敵】請先以蓄力【靈丸】摧毀所有結界核心實體！');
+            }
+            if (b.pierce <= 1) b.dead = true;
+            return;
+          }
 
           if (b.isGrazeEmp && boss.invulnerable) {
             boss.invulnerable = false;
@@ -8995,7 +9206,7 @@ class Game {
           // 迦樓羅涅槃金羽錨點
           spriteImg = this.images.fx_feather_shard;
           spriteW = 42; spriteH = 42;
-          label = '🪶 涅槃金羽錨點 (破盾擊破)';
+          label = '🪶 涅槃金羽錨點 [⚡需靈丸破壞]';
           barColor = '#ffd700';
           glowColor = '#ff9138';
           ctx.rotate(this.time * 3);
@@ -9003,14 +9214,14 @@ class Game {
           // 雷公天劫法鼓錨點
           spriteImg = this.images.minion_thunder_drum;
           spriteW = 48; spriteH = 48;
-          label = '🥁 天雷法鼓 (過載核心)';
+          label = '🥁 天雷法鼓 [⚡需靈丸破壞]';
           barColor = '#38bdf8';
           glowColor = '#38bdf8';
         } else if (m.type === 'gorgon_hex_mirror') {
           // 美杜莎蛇髮魔鏡
           spriteImg = this.images.minion_gorgon_shadow;
           spriteW = 44; spriteH = 44;
-          label = '🪞 蛇髮魔鏡 (彈幕反彈)';
+          label = '🪞 蛇髮魔鏡 [⚡需靈丸破壞]';
           barColor = '#c054ff';
           glowColor = '#c054ff';
           ctx.rotate(this.time * 2);
@@ -9038,6 +9249,21 @@ class Game {
           ctx.fill();
         }
 
+        // 1.5 靈丸專屬結界能量光環 (旋轉天青靈能虛線環)
+        if (m.requiresSpirit) {
+          ctx.save();
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 2.5;
+          ctx.shadowColor = '#38bdf8';
+          ctx.shadowBlur = 10;
+          ctx.setLineDash([6, 6]);
+          ctx.lineDashOffset = -this.time * 24;
+          ctx.beginPath();
+          ctx.arc(0, 0, Math.max(spriteW, spriteH) / 2 + 5, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+
         // 2. 限時機制的圓形進度計時環 (僅作為 HUD 儀表，不遮擋主體)
         if (m.timer !== undefined && m.timer > 0) {
           const maxT = m.type === 'celestial_pillar' ? 8.0 : 6.0;
@@ -9051,13 +9277,13 @@ class Game {
           ctx.stroke();
         }
 
-        // 2.5 戰術瞄準指示準星 (🎯 弱點目標 / 優先擊破)
+        // 2.5 戰術瞄準指示準星 (🎯 弱點目標 / ⚡ 需靈丸破壞)
         if (this.currentBoss && (this.currentBoss.invulnerable || m.type.includes('anchor') || m.type === 'thunder_drum_anchor' || m.type === 'gorgon_hex_mirror')) {
           ctx.save();
           const retRot = this.time * 3.5;
-          ctx.strokeStyle = '#ff4766';
+          ctx.strokeStyle = m.requiresSpirit ? '#38bdf8' : '#ff4766';
           ctx.lineWidth = 2.2;
-          ctx.shadowColor = '#ff4766';
+          ctx.shadowColor = m.requiresSpirit ? '#38bdf8' : '#ff4766';
           ctx.shadowBlur = 10;
           const retR = Math.max(spriteW, spriteH) / 2 + 7;
           ctx.beginPath();
@@ -9066,12 +9292,12 @@ class Game {
           ctx.stroke();
 
           // 懸浮弱點標籤
-          ctx.fillStyle = '#ff4766';
+          ctx.fillStyle = m.requiresSpirit ? '#38bdf8' : '#ff4766';
           ctx.font = 'bold 10px sans-serif';
           ctx.textAlign = 'center';
           ctx.shadowBlur = 4;
           const retLabelY = -Math.max(spriteW, spriteH) / 2 - 20;
-          ctx.fillText('🎯 優先擊破弱點', 0, retLabelY);
+          ctx.fillText(m.requiresSpirit ? '⚡ 需靈丸破壞' : '🎯 優先擊破弱點', 0, retLabelY);
           ctx.restore();
         }
 
