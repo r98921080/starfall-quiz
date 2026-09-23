@@ -1459,7 +1459,14 @@ class DataStore {
     this.studentName = localStorage.getItem('starfall_student_name') || '測試學員';
     this.studentGrade = localStorage.getItem('starfall_student_grade') || '三年級';
     this.isCloudSynced = false;
+    // 整局已抽取的題目 ID 集合，保證同一局內完全零重複
+    this.sessionUsedQuestionIds = new Set();
     this.initIndexedDB();
+  }
+
+  // 重置當前遊戲局的題目抽取紀錄 (新遊戲開始時呼叫)
+  resetSessionQuestions() {
+    this.sessionUsedQuestionIds.clear();
   }
 
   // 取得指定學員的專屬作答進度映射表 (100% 獨立隔離)
@@ -2140,55 +2147,83 @@ class DataStore {
       }
     }
 
-    // 檢查題庫中是否尚有未作答新題目或尚未復仇之弱點題目
-    const hasUnmastered = pool.some(q => {
-      const p = sidProgress[q.question_id];
-      return !p || p.attempts === 0 || (p.wrong > 0 && !p.avenged);
-    });
+    if (!this.sessionUsedQuestionIds) {
+      this.sessionUsedQuestionIds = new Set();
+    }
 
-    const scored = pool.map(q => {
-      const p = sidProgress[q.question_id] || { attempts: 0, wrong: 0, streak: 0, avenged: false };
-      let weight = 6.0;
-      let type = 'new';
-      if (p.attempts === 0) {
-        // 未作答全新題目：高度優先推薦 (6.0)
-        weight = 6.0;
-        type = 'new';
-      } else if (p.wrong > 0 && !p.avenged) {
-        // 曾答錯且尚未復仇雪恥的弱點題目：最高優先級 (15.0)
-        weight = 15.0;
-        type = 'weak';
-      } else if (p.attempts > 0 && p.wrong === 0) {
-        // 已經答對的題目：只要題庫尚有新題/弱點題，機率嚴格設為 0，實現完全零重複！
-        weight = hasUnmastered ? 0.0 : 0.05;
-        type = 'mastered';
-      } else {
-        weight = hasUnmastered ? 0.05 : 0.4;
-        type = 'review';
-      }
-      return { q, weight, type };
-    });
+    // 1. 本局未作答題目池（嚴格排除本局同一 run 已作答過的題目，徹底零重複）
+    let availablePool = pool.filter(q => !this.sessionUsedQuestionIds.has(q.question_id));
+    // 若題庫全部被刷完（極端情況），清空 session 快取重啟新循環
+    if (availablePool.length < count) {
+      this.sessionUsedQuestionIds.clear();
+      availablePool = [...pool];
+    }
 
     const selected = [];
-    for (let i = 0; i < count; i++) {
-      if (scored.length === 0) break;
-      const totalWeight = scored.reduce((sum, item) => sum + item.weight, 0);
-      let r = Math.random() * totalWeight;
-      let chosenIdx = 0;
-      for (let j = 0; j < scored.length; j++) {
-        r -= scored[j].weight;
-        if (r <= 0) {
-          chosenIdx = j;
-          break;
-        }
+
+    // 2. 錯題主動復仇機制：優先摻入 1~2 題上一輪/歷史尚未雪恥復仇的錯題 (p.wrong > 0 && !p.avenged)
+    const unavengedMistakes = availablePool.filter(q => {
+      const p = sidProgress[q.question_id];
+      return p && p.wrong > 0 && !p.avenged;
+    });
+
+    if (unavengedMistakes.length > 0) {
+      unavengedMistakes.sort(() => Math.random() - 0.5);
+      const mistakeTargetCount = Math.min(2, Math.min(count - 1, unavengedMistakes.length));
+      for (let i = 0; i < mistakeTargetCount; i++) {
+        const mq = unavengedMistakes[i];
+        selected.push({
+          ...mq,
+          isReview: true,
+          isRevenge: true
+        });
+        this.sessionUsedQuestionIds.add(mq.question_id);
       }
-      const chosen = scored.splice(chosenIdx, 1)[0];
-      selected.push({
-        ...chosen.q,
-        isReview: chosen.type === 'weak' || chosen.type === 'review',
-        isRevenge: chosen.type === 'weak'
-      });
     }
+
+    // 3. 剩餘題數嚴格自「從未作答過的全新題目」中抽取 (ZERO REPEAT for mastered questions)
+    const remainingNeeded = count - selected.length;
+    const freshQuestions = availablePool.filter(q => {
+      if (this.sessionUsedQuestionIds.has(q.question_id)) return false;
+      const p = sidProgress[q.question_id];
+      return !p || p.attempts === 0;
+    });
+
+    if (freshQuestions.length >= remainingNeeded) {
+      // 全新題目充足：100% 抽取全新題目，已答對題目機率嚴格為 0%！
+      freshQuestions.sort(() => Math.random() - 0.5);
+      for (let i = 0; i < remainingNeeded; i++) {
+        const fq = freshQuestions[i];
+        selected.push({
+          ...fq,
+          isReview: false,
+          isRevenge: false
+        });
+        this.sessionUsedQuestionIds.add(fq.question_id);
+      }
+    } else {
+      // 若全新題目不足（例如學員已刷了幾千題），先取完所有剩餘新題
+      freshQuestions.forEach(fq => {
+        selected.push({ ...fq, isReview: false, isRevenge: false });
+        this.sessionUsedQuestionIds.add(fq.question_id);
+      });
+
+      const stillNeeded = count - selected.length;
+      // 剩餘名額從可用池中依權重補足（優先未熟練題）
+      const remainingOthers = availablePool.filter(q => !this.sessionUsedQuestionIds.has(q.question_id));
+      remainingOthers.sort(() => Math.random() - 0.5);
+      for (let i = 0; i < stillNeeded && i < remainingOthers.length; i++) {
+        const oq = remainingOthers[i];
+        const p = sidProgress[oq.question_id];
+        selected.push({
+          ...oq,
+          isReview: !!(p && p.attempts > 0),
+          isRevenge: !!(p && p.wrong > 0 && !p.avenged)
+        });
+        this.sessionUsedQuestionIds.add(oq.question_id);
+      }
+    }
+
     return selected;
   }
 }
@@ -4450,6 +4485,8 @@ class Game {
     }
 
     this.showToast(`💥 ${boss.name} 核心過載引爆！動力爐極限大破滅！`);
+    // Boss 擊破時立即解除所有異常狀態 (如美杜莎減速)
+    this.resetPlayerStatusEffects();
   }
 
   finishBossDefeat(boss) {
@@ -4460,11 +4497,25 @@ class Game {
     if (overlay) overlay.style.display = 'none';
     document.getElementById('bossHud').style.display = 'none';
     document.getElementById('ultimateWarning').style.display = 'none';
+    const tacAlert = document.getElementById('bossTacticalAlert');
+    if (tacAlert) tacAlert.style.display = 'none';
+    this.resetPlayerStatusEffects();
     this.startQuizPhase();
   }
 
   onBossDefeated(boss) {
     this.startBossDefeatCinematic(boss);
+  }
+
+  // 統一重置戰機所有受控狀態 (徹底根除美杜莎減速、硬直停頓等狀態帶入下一關之問題)
+  resetPlayerStatusEffects() {
+    if (!this.player) return;
+    this.player.gorgonSlowActive = false;
+    this.player.gorgonPurgeTimer = 0;
+    this.player.stunTimer = 0;
+    this.player.moveSpeedMultiplier = 1.0;
+    this.player.bulletSlowFactor = 1.0;
+    this.player.speed = 400;
   }
 
   // ============================================================
@@ -4509,6 +4560,10 @@ class Game {
     this.stage = stage;
     this.wave = 1;
     this.score = 0;
+    this.resetPlayerStatusEffects();
+    if (stage === 1 && this.dataStore) {
+      this.dataStore.resetSessionQuestions();
+    }
     this.player.hp = 3;
     this.player.shield = false;
     this.player.grazeSync = 0;
@@ -5127,6 +5182,37 @@ class Game {
       } else if (b.stage === 3 && b.phase >= 2) {
         subTitleEl.textContent = this.player.gorgonSlowActive ? '🗿 石化凝視領域作用中 (移速 -50%)' : '✨ 石化融化中 (移速正常)';
         subTitleEl.style.color = '#d8b4fe';
+      }
+    }
+
+    // 更新置頂戰術指示警報條 (Boss Tactical Alert，清晰告訴玩家現在機制與應對方案)
+    const tacAlert = document.getElementById('bossTacticalAlert');
+    if (tacAlert) {
+      if (b.invulnerable && b.invulnTimer > 0) {
+        tacAlert.style.display = 'block';
+        if (b.stage === 1) {
+          tacAlert.innerHTML = `🛡️ <b>【金羽神盾】Boss 無敵中 (${b.invulnTimer.toFixed(1)}s)</b> ➔ 🎯 <b>戰術指示：先擊破周圍 4 枚金色神羽錨點！</b>`;
+        } else if (b.stage === 2) {
+          tacAlert.innerHTML = `⚡ <b>【超導電牢】Boss 無敵中 (${b.invulnTimer.toFixed(1)}s)</b> ➔ 🎯 <b>戰術指示：先摧毀兩側天雷法鼓！</b>`;
+        } else if (b.stage === 3) {
+          tacAlert.innerHTML = `🪞 <b>【蛇髮魔鏡】鏡面反彈常規子彈</b> ➔ 🎯 <b>戰術指示：擊碎魔鏡或用貫穿光束/榴彈破壞！</b>`;
+        } else {
+          tacAlert.innerHTML = `🛡️ <b>【神聖無敵】防護罩展開中 (${b.invulnTimer.toFixed(1)}s)</b> ➔ 🎯 <b>戰術指示：閃避彈幕等待過載！</b>`;
+        }
+      } else if (b.stage === 3 && b.phase >= 2) {
+        tacAlert.style.display = 'block';
+        tacAlert.innerHTML = this.player.gorgonSlowActive
+          ? `🐍 <b>【石化凝視】戰機移速 -50%</b> ➔ 🎯 <b>戰術指示：使用「金陽聚焦光束」熱能可暫時驅散石化！</b>`
+          : `✨ <b>【石化暫時驅散】戰機移速正常</b> ➔ 🎯 <b>戰術指示：趁現在全力輸出！</b>`;
+      } else if (b.stage === 1 && b.featherBarrierHp > 0) {
+        tacAlert.style.display = 'block';
+        tacAlert.innerHTML = `🛡️ <b>【金羽天罡神盾】吸收傷害中</b> ➔ 🎯 <b>戰術指示：集中火力全力打破護盾！</b>`;
+      } else if (b.stage === 2 && b.phase >= 2) {
+        tacAlert.style.display = 'block';
+        const shockIn = Math.max(0, 3.0 - (b.shockCycleTimer || 0)).toFixed(1);
+        tacAlert.innerHTML = `⚡ <b>【九天磁暴】倒數 ${shockIn}s</b> ➔ 🎯 <b>戰術指示：注意每 3 秒引發 0.5s 戰機短路拘束！</b>`;
+      } else {
+        tacAlert.style.display = 'none';
       }
     }
   }
@@ -6230,6 +6316,7 @@ class Game {
   // ============================================================
   startQuizPhase() {
     this.state = 'quiz';
+    this.resetPlayerStatusEffects();
     this.quizQueue = this.dataStore.pickAdaptiveQuestions(5);
     this.quizCorrectCount = 0;
     this.showNextQuestion();
@@ -6285,6 +6372,12 @@ class Game {
     const isCorrect = selectedIdx === q.ans;
     const btns = document.querySelectorAll('.opt-btn');
 
+    // 檢查是否為「舊錯題重複答錯」
+    const sid = (this.dataStore && this.dataStore.currentStudentId) || 'S0001';
+    const sidMap = this.dataStore ? this.dataStore.getStudentProgressMap(sid) : {};
+    const prevP = sidMap[q.question_id];
+    const isRepeatedWrong = !isCorrect && prevP && prevP.wrong >= 1;
+
     if (isCorrect) {
       this.quizCorrectCount++;
       btns[selectedIdx].classList.add('correct');
@@ -6293,13 +6386,23 @@ class Game {
       if (q.isRevenge) {
         this.knowledgePressure = Math.max(0, this.knowledgePressure - 1);
         this.player.hp = Math.min(this.player.maxHp, this.player.hp + 1);
-        this.showToast('錯題破解成功！知識壓力 -1，裝甲修復 +1');
+        this.showToast('✨ 錯題雪恥成功！知識壓力 -1，裝甲修復 +1');
       }
     } else {
       btns[selectedIdx].classList.add('wrong');
       btns[q.ans].classList.add('correct');
       this.sound.playExplosion(false);
-      this.knowledgePressure = Math.min(10, this.knowledgePressure + 1);
+
+      if (isRepeatedWrong) {
+        // 重複答錯嚴重懲罰：結算評級額外扣減 1 題！
+        this.quizCorrectCount = Math.max(0, this.quizCorrectCount - 1);
+        this.knowledgePressure = Math.min(10, this.knowledgePressure + 2);
+        this.sound.playWarningAlert();
+        this.shake(12, 0.45);
+        this.showToast('⚠️ 舊錯題重複答錯！【重度懲罰】：結算評級額外扣減 1 題！');
+      } else {
+        this.knowledgePressure = Math.min(10, this.knowledgePressure + 1);
+      }
     }
 
     this.dataStore.recordAttempt({
@@ -6315,12 +6418,16 @@ class Game {
     if (q.explanation_short) {
       const expBox = document.getElementById('quizExplain');
       expBox.style.display = 'block';
-      expBox.innerHTML = `<b>${isCorrect ? '答對了！' : '解析：'}</b> ${q.explanation_short}`;
+      if (isRepeatedWrong) {
+        expBox.innerHTML = `<span style="color:#ff4766; font-weight:800; font-size:13px;">❌ 舊錯題重複答錯！【重度懲罰】：結算評級額外扣減 1 題！</span><br><b>正確解答：</b> 選項 ${'ABCD'[q.ans]}<br><b>解析：</b> ${q.explanation_short}`;
+      } else {
+        expBox.innerHTML = `<b>${isCorrect ? '答對了！' : '解析：'}</b> ${q.explanation_short}`;
+      }
     }
 
     setTimeout(() => {
       this.showNextQuestion();
-    }, 1200);
+    }, isRepeatedWrong ? 1800 : 1200);
   }
 
   endQuizPhase() {
@@ -6484,11 +6591,22 @@ class Game {
     }
 
     // 候選武器池：排除已經升至 5 階 (MAX) 的武器
-    const candidateWeapons = wpns.filter(w => {
+    let candidateWeapons = wpns.filter(w => {
       const eq = this.findEquippedWeapon(w.id);
       const curRank = eq ? eq.rank : 0;
       return curRank < 5;
     });
+
+    // 強勢武器門檻與稀有度抑制 (如超聲震盪重砲 sonic_cannon 清彈範圍過大)：
+    // 1. 必須本輪 5 題全部答對 (5/5 滿分) 才有資格出現在三選一候選池中 (未滿分 0% 機率)
+    // 2. 即使 5 題全部答對，出現機率亦大幅調降 (僅 20% 機率納入池中，出現機率降低 80%)
+    if (correctCount < 5) {
+      candidateWeapons = candidateWeapons.filter(w => w.id !== 'sonic_cannon');
+    } else {
+      if (Math.random() > 0.20) {
+        candidateWeapons = candidateWeapons.filter(w => w.id !== 'sonic_cannon');
+      }
+    }
 
     // 輔助函式：從池中隨機抽取指定數量不重複元素
     const pickRandom = (pool, count) => {
@@ -6766,6 +6884,8 @@ class Game {
   closeUpgradeScreen() {
     document.getElementById('upgradeScreen').classList.add('hidden');
     this.state = 'playing';
+    // 進入新波次或新關卡時，徹底清除上一關留存之任何負面減速/硬直狀態
+    this.resetPlayerStatusEffects();
 
     if (this.wave === 2) {
       this.wave = 3;
@@ -6819,6 +6939,13 @@ class Game {
 
     // 玩家平滑移動與絕對邊界限制 (移動嚴禁超出畫面)
     const p = this.player;
+
+    // 安全防護屏障：若場上無活躍之美杜莎 Boss (Stage 3 Phase 2+)，強制清除石化減速，絕不外溢至後續波次或關卡
+    const hasActiveMedusa = this.currentBoss && this.currentBoss.stage === 3 && this.currentBoss.phase >= 2 && !this.currentBoss.dead && !this.currentBoss.dying;
+    if (!hasActiveMedusa && p.gorgonSlowActive) {
+      p.gorgonSlowActive = false;
+      p.gorgonPurgeTimer = 0;
+    }
 
     // 石化狀態解除倒數計時（如使用光束砲高溫融化解除）
     if (p.gorgonPurgeTimer && p.gorgonPurgeTimer > 0) {
@@ -7912,33 +8039,39 @@ class Game {
         ctx.shadowBlur = 5 + rk * 3;
       }
       if (rk >= 3) {
-        // Rank 3+: 烈焰殘影光尾
-        ctx.fillStyle = b.color;
-        ctx.globalAlpha = 0.4;
-        ctx.beginPath();
-        ctx.arc(b.x, b.y + 6, b.r * 0.7, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1.0;
+        // Rank 3+: 烈焰殘影光尾 (嚴格排除音波、神鐮、光刃、光束等特殊幾何武器，絕不繪製突兀實心圓圈)
+        if (b.type !== 'sonic_wave' && b.type !== 'chronos_scythe' && b.type !== 'plasma_blade' && b.type !== 'beam') {
+          ctx.fillStyle = b.color;
+          ctx.globalAlpha = 0.4;
+          ctx.beginPath();
+          ctx.arc(b.x, b.y + 6, b.r * 0.7, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 1.0;
+        }
       }
       if (rk >= 4) {
-        // Rank 4+: 熾烈電弧環繞
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.2;
-        const arcAng = (this.time * 18 + b.x) % (Math.PI * 2);
-        ctx.beginPath();
-        ctx.arc(b.x, b.y, b.r + 3, arcAng, arcAng + 1.2);
-        ctx.stroke();
+        // Rank 4+: 熾烈電弧環繞 (排除音波、神鐮、光刃、光束)
+        if (b.type !== 'sonic_wave' && b.type !== 'chronos_scythe' && b.type !== 'plasma_blade' && b.type !== 'beam') {
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.2;
+          const arcAng = (this.time * 18 + b.x) % (Math.PI * 2);
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, b.r + 3, arcAng, arcAng + 1.2);
+          ctx.stroke();
+        }
       }
       if (rk >= 5) {
-        // Rank 5 MAX: 弒神金曜星芒十字光暈
-        ctx.strokeStyle = '#facc15';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(b.x - b.r - 4, b.y);
-        ctx.lineTo(b.x + b.r + 4, b.y);
-        ctx.moveTo(b.x, b.y - b.r - 4);
-        ctx.lineTo(b.x, b.y + b.r + 4);
-        ctx.stroke();
+        // Rank 5 MAX: 弒神金曜星芒十字光暈 (排除音波與神鐮，避免在寬域彈道上出現突兀十字)
+        if (b.type !== 'sonic_wave' && b.type !== 'chronos_scythe') {
+          ctx.strokeStyle = '#facc15';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(b.x - b.r - 4, b.y);
+          ctx.lineTo(b.x + b.r + 4, b.y);
+          ctx.moveTo(b.x, b.y - b.r - 4);
+          ctx.lineTo(b.x, b.y + b.r + 4);
+          ctx.stroke();
+        }
       }
 
       if (b.type === 'spirit') {
@@ -8131,14 +8264,33 @@ class Game {
           ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
         }
       } else if (b.type === 'sonic_wave') {
-        // 音波震盪弧面擴散
-        ctx.strokeStyle = 'rgba(51, 224, 224, 0.85)';
-        ctx.lineWidth = 4;
-        ctx.shadowColor = '#33e0e0';
-        ctx.shadowBlur = 12;
+        // 超聲震盪重砲：高科技同心超音速衝擊波弧光紋理 (前緣高亮白青，後掠同心震盪，絕無圓形殘影)
+        ctx.save();
+        // 1. 最外層超強高頻衝擊波前緣
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 4.5;
+        ctx.shadowColor = '#38bdf8';
+        ctx.shadowBlur = 18;
         ctx.beginPath();
         ctx.arc(b.x, b.y, b.r, Math.PI * 1.15, Math.PI * 1.85);
         ctx.stroke();
+
+        // 2. 次層青藍能量聲波
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.85)';
+        ctx.lineWidth = 3.2;
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, Math.max(10, b.r - 12), Math.PI * 1.18, Math.PI * 1.82);
+        ctx.stroke();
+
+        // 3. 內層虛線微波震盪脈衝
+        ctx.strokeStyle = 'rgba(103, 232, 249, 0.6)';
+        ctx.lineWidth = 2.0;
+        ctx.setLineDash([8, 5]);
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, Math.max(6, b.r - 24), Math.PI * 1.22, Math.PI * 1.78);
+        ctx.stroke();
+        ctx.restore();
       } else if (b.type === 'emerald_pulse') {
         // 翡翠靈泉擴散環
         ctx.strokeStyle = 'rgba(72, 229, 131, 0.85)';
@@ -8210,17 +8362,42 @@ class Game {
         ctx.fillStyle = '#f59e0b';
         ctx.fillRect(b.x - 6, b.y - 15, 12, 30);
       } else if (b.type === 'chronos_scythe') {
-        // 時序輪迴神鐮
+        // 時序輪迴神鐮：流線型命運月牙死神之刃 (金黃 + 虛空紫流光，徹底消除圓形實心/殘影)
         ctx.save();
         ctx.translate(b.x, b.y);
-        ctx.rotate(this.time * 6);
-        ctx.strokeStyle = '#ffd700';
-        ctx.lineWidth = 4.5;
+        ctx.rotate(this.time * 7);
+        // 主弧光刀刃 (金黃漸層)
+        const bladeGrad = ctx.createLinearGradient(-b.r, -b.r, b.r, b.r);
+        bladeGrad.addColorStop(0, '#ffffff');
+        bladeGrad.addColorStop(0.3, '#ffd700');
+        bladeGrad.addColorStop(0.8, '#c084fc');
+        bladeGrad.addColorStop(1, '#9333ea');
+        
+        ctx.strokeStyle = bladeGrad;
+        ctx.lineWidth = 5.5;
         ctx.shadowColor = '#ffd700';
         ctx.shadowBlur = 18;
         ctx.beginPath();
-        ctx.arc(0, 0, b.r, 0, Math.PI * 1.2);
+        // 外弧月牙
+        ctx.arc(0, 0, b.r, -Math.PI * 0.45, Math.PI * 0.45);
         ctx.stroke();
+
+        // 內刃鋒銳高光
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.arc(0, 0, b.r - 4, -Math.PI * 0.35, Math.PI * 0.35);
+        ctx.stroke();
+
+        // 鋒刃兩端時空耀星
+        ctx.fillStyle = '#fde047';
+        ctx.shadowColor = '#ffd700';
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(Math.cos(-Math.PI * 0.45) * b.r, Math.sin(-Math.PI * 0.45) * b.r, 3.5, 0, Math.PI * 2);
+        ctx.arc(Math.cos(Math.PI * 0.45) * b.r, Math.sin(Math.PI * 0.45) * b.r, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+
         ctx.restore();
       } else if (b.type === 'satellite_laser') {
         // 軌道衛星雷射
@@ -8547,6 +8724,43 @@ class Game {
       }
     });
 
+    // 7.4 戰術視覺化：Boss 與附屬核心（金羽錨點 / 天雷法鼓 / 蛇髮魔鏡）間的高能能量連結光束
+    if (this.currentBoss && !this.currentBoss.dead && !this.currentBoss.dying && this.bossMinions && this.bossMinions.length > 0) {
+      const b = this.currentBoss;
+      this.bossMinions.forEach(m => {
+        if (m.dead) return;
+        ctx.save();
+        let beamColor = '#ffd700';
+        let glowCol = '#f59e0b';
+        if (m.type === 'thunder_drum_anchor' || m.type === 'thunder_drum') {
+          beamColor = '#38bdf8'; glowCol = '#0284c7';
+        } else if (m.type === 'gorgon_hex_mirror' || m.type === 'gorgon_shadow') {
+          beamColor = '#c084fc'; glowCol = '#9333ea';
+        }
+        ctx.strokeStyle = beamColor;
+        ctx.shadowColor = glowCol;
+        ctx.shadowBlur = 10;
+        ctx.lineWidth = b.invulnerable ? 2.8 : 1.5;
+        ctx.setLineDash([8, 6]);
+        ctx.lineDashOffset = -this.time * 30;
+        ctx.beginPath();
+        ctx.moveTo(b.x, b.y);
+        ctx.lineTo(m.x, m.y);
+        ctx.stroke();
+
+        // 沿著連結光束向錨點流動之能量脈衝粒子
+        const pulseT = (this.time * 2.2 + (m.x || 0) * 0.01) % 1.0;
+        const px = b.x + (m.x - b.x) * pulseT;
+        const py = b.y + (m.y - b.y) * pulseT;
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.arc(px, py, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      });
+    }
+
     // 7.5 神話機制專屬附屬實體渲染 (Sprite 圖形化管線：全量採用專屬 AI Sprite 與動態 HUD 儀表，告別圓圈)
     if (this.bossMinions && this.bossMinions.length > 0) {
       this.bossMinions.forEach(m => {
@@ -8709,6 +8923,30 @@ class Game {
           ctx.stroke();
         }
 
+        // 2.5 戰術瞄準指示準星 (🎯 弱點目標 / 優先擊破)
+        if (this.currentBoss && (this.currentBoss.invulnerable || m.type.includes('anchor') || m.type === 'thunder_drum_anchor' || m.type === 'gorgon_hex_mirror')) {
+          ctx.save();
+          const retRot = this.time * 3.5;
+          ctx.strokeStyle = '#ff4766';
+          ctx.lineWidth = 2.2;
+          ctx.shadowColor = '#ff4766';
+          ctx.shadowBlur = 10;
+          const retR = Math.max(spriteW, spriteH) / 2 + 7;
+          ctx.beginPath();
+          ctx.arc(0, 0, retR, retRot, retRot + Math.PI * 0.45);
+          ctx.arc(0, 0, retR, retRot + Math.PI, retRot + Math.PI * 1.45);
+          ctx.stroke();
+
+          // 懸浮弱點標籤
+          ctx.fillStyle = '#ff4766';
+          ctx.font = 'bold 10px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.shadowBlur = 4;
+          const retLabelY = -Math.max(spriteW, spriteH) / 2 - 20;
+          ctx.fillText('🎯 優先擊破弱點', 0, retLabelY);
+          ctx.restore();
+        }
+
         // 3. 戰術頂部懸浮名牌
         ctx.shadowBlur = 0;
         ctx.fillStyle = '#ffffff';
@@ -8770,13 +9008,43 @@ class Game {
       // 8.2 渲染神話機神光環、電弧與神格氣場
       this.renderBossAuras(ctx, b, this.time);
 
-      // 無敵時發出金色護盾光環
+      // 8.25 無敵神盾：高科技六角能量蜂巢力場與戰術 IMMUNE 浮空文字
       if (b.invulnerable) {
-        ctx.strokeStyle = 'rgba(245, 188, 56, 0.85)';
-        ctx.lineWidth = 4;
+        ctx.save();
+        const shieldR = b.hitboxRadius + 18;
+        const shieldPulse = 1.0 + Math.sin(this.time * 8) * 0.04;
+        ctx.scale(shieldPulse, shieldPulse);
+
+        // 外層旋轉六角能量力場
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 3.5;
+        ctx.shadowColor = '#ff9138';
+        ctx.shadowBlur = 18;
         ctx.beginPath();
-        ctx.arc(0, 0, b.hitboxRadius + 14, 0, Math.PI * 2);
+        const hexAngle = this.time * 1.5;
+        for (let s = 0; s < 6; s++) {
+          const a = hexAngle + (s / 6) * Math.PI * 2;
+          const hx = Math.cos(a) * shieldR;
+          const hy = Math.sin(a) * shieldR;
+          if (s === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+        }
+        ctx.closePath();
         ctx.stroke();
+
+        // 內層半透明防護力場
+        ctx.fillStyle = 'rgba(245, 188, 56, 0.16)';
+        ctx.fill();
+
+        // 懸浮 IMMUNE 無敵警示標記
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '900 13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
+        ctx.lineWidth = 4;
+        ctx.strokeText('🛡️ IMMUNE 無敵', 0, -shieldR - 10);
+        ctx.fillText('🛡️ IMMUNE 無敵', 0, -shieldR - 10);
+        ctx.restore();
       }
 
       // 8.3 繪製 Boss 主體機甲

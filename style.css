@@ -229,6 +229,35 @@ canvas#gameCanvas {
   background: rgba(51, 224, 224, 0.85);
   box-shadow: 0 0 8px var(--cyan);
 }
+.boss-tactical-alert {
+  margin-top: 5px;
+  padding: 5px 12px;
+  background: rgba(10, 15, 30, 0.94);
+  border: 1px solid var(--magenta);
+  border-left: 4px solid var(--magenta);
+  border-radius: 4px;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.03em;
+  box-shadow: 0 0 12px rgba(224, 64, 154, 0.45);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+  animation: tacticalPulse 2.2s infinite ease-in-out;
+}
+@keyframes tacticalPulse {
+  0%, 100% {
+    border-color: rgba(224, 64, 154, 0.85);
+    border-left-color: var(--magenta);
+    box-shadow: 0 0 8px rgba(224, 64, 154, 0.4);
+  }
+  50% {
+    border-color: var(--cyan);
+    border-left-color: #67ffff;
+    box-shadow: 0 0 16px rgba(51, 224, 224, 0.65);
+  }
+}
 
 /* 大招警告橫幅 */
 #ultimateWarning {
