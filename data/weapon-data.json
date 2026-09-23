@@ -167,7 +167,7 @@
       "type": "dart",
       "description": "極高速藍色超空泡標槍，100% 貫穿所有敵人，每穿透一名目標傷害遞增 20%。",
       "maxRank": 5,
-      "baseDamage": 55,
+      "baseDamage": 85,
       "fireRate": 2,
       "specialEffect": "100% 貫穿，每穿透一個目標傷害遞增 20%",
       "ranks": [
@@ -175,35 +175,35 @@
           "rank": 1,
           "name": "雙發穿甲鏢",
           "darts": 2,
-          "damage": 55,
+          "damage": 85,
           "effect": "雙鏢直線高速穿透"
         },
         {
           "rank": 2,
           "name": "三叉空泡槍",
           "darts": 3,
-          "damage": 70,
+          "damage": 113,
           "effect": "三鏢齊發，穿透增傷 20%"
         },
         {
           "rank": 3,
           "name": "四向高速破甲鏢",
           "darts": 4,
-          "damage": 90,
+          "damage": 141,
           "effect": "四鏢排列，穿透增傷 25%"
         },
         {
           "rank": 4,
           "name": "五聯撕空金鏢",
           "darts": 5,
-          "damage": 115,
+          "damage": 169,
           "effect": "穿透增傷 30%，附加碎甲硬直"
         },
         {
           "rank": 5,
           "name": "超空泡湮滅神標",
           "darts": 5,
-          "damage": 150,
+          "damage": 225,
           "effect": "【MAX 終極特化】穿透時觸發空泡音爆，引發直線連環衝擊波"
         }
       ],
@@ -273,7 +273,7 @@
       "type": "chakram",
       "description": "向前拋出飛旋青玉輪刃，在敵陣盤旋後迴旋返航，飛行路徑直接粉碎碰觸到的普通敵彈！",
       "maxRank": 5,
-      "baseDamage": 60,
+      "baseDamage": 140,
       "fireRate": 1.5,
       "specialEffect": "盤旋切削敵機，飛行中粉碎一切碰觸的普通敵彈",
       "ranks": [
@@ -281,35 +281,35 @@
           "rank": 1,
           "name": "單旋青玉輪",
           "count": 1,
-          "damage": 60,
+          "damage": 140,
           "effect": "向前盤旋 3 秒後迴旋折返"
         },
         {
           "rank": 2,
           "name": "雙曜風雷刃",
           "count": 2,
-          "damage": 75,
+          "damage": 185,
           "effect": "雙飛輪左右迴旋交叉切割"
         },
         {
           "rank": 3,
           "name": "三清旋風輪",
           "count": 2,
-          "damage": 95,
+          "damage": 230,
           "effect": "碎彈範圍擴大 30%，附帶風雷牽引"
         },
         {
           "rank": 4,
           "name": "四方玉虛陣輪",
           "count": 3,
-          "damage": 120,
+          "damage": 275,
           "effect": "三飛輪盤旋全場，切削頻率翻倍"
         },
         {
           "rank": 5,
           "name": "太上風雷無極輪",
           "count": 3,
-          "damage": 155,
+          "damage": 365,
           "effect": "【MAX 終極特化】迴旋生成青玉風暴，吸收敵彈並釋放雷刃"
         }
       ],
@@ -437,7 +437,7 @@
       "type": "explosive",
       "description": "高溫拋射重裝熔岩火球，著彈生成持續高溫熔岩燃燒池，灼燒敵機並降低移速 40%。",
       "maxRank": 5,
-      "baseDamage": 90,
+      "baseDamage": 420,
       "fireRate": 1.2,
       "specialEffect": "熔岩燃燒池持續灼燒，降低敵方移動速度 40%",
       "ranks": [
@@ -445,35 +445,35 @@
           "rank": 1,
           "name": "熔岩火球",
           "radius": 50,
-          "damage": 90,
+          "damage": 420,
           "effect": "爆破生成 3 秒熔岩燃燒池"
         },
         {
           "rank": 2,
           "name": "雙重地熱榴彈",
           "radius": 65,
-          "damage": 125,
+          "damage": 560,
           "effect": "雙彈拋射，燃燒 DPS 提高 30%"
         },
         {
           "rank": 3,
           "name": "熾焰裂變熔爐",
           "radius": 80,
-          "damage": 170,
+          "damage": 700,
           "effect": "熔岩池擴大，敵方移速減緩 40%"
         },
         {
           "rank": 4,
           "name": "日核地幔震波",
           "radius": 100,
-          "damage": 230,
+          "damage": 840,
           "effect": "熔岩持續 5 秒，灼燒傷害翻倍"
         },
         {
           "rank": 5,
           "name": "恆星坍縮熔核",
           "radius": 125,
-          "damage": 310,
+          "damage": 1120,
           "effect": "【MAX 終極特化】高溫熔岩池可直接燒熔並消解途經之敵彈"
         }
       ],
@@ -642,49 +642,49 @@
     },
     {
       "id": "cryo_spire",
-      "name": "永凍冰錐尖塔",
+      "name": "玄天冰魄凌柱",
       "icon": "assets/icons/weapons/weapon_13.png",
       "slot": "passive",
       "type": "cryo",
-      "description": "空中凝結寒冰符文，週期性召喚巨型永凍冰錐直接轟擊敵陣，引發霜爆使全場減速 50%。",
+      "description": "天頂隨機垂降巨大永凍冰魄尖塔，下墜轟擊目標造成大範圍霜寒凍結與高額穿透，無須手動裝備。",
       "maxRank": 5,
-      "baseDamage": 120,
+      "baseDamage": 480,
       "fireRate": 0.6,
-      "specialEffect": "天降巨型冰錐轟擊，引發範圍霜爆減速 50%",
+      "specialEffect": "天降巨型冰魄尖塔轟擊，造成大範圍霜寒凍結與高額穿透傷害",
       "ranks": [
         {
           "rank": 1,
-          "name": "霜凍冰錐",
+          "name": "玄天霜柱",
           "spires": 1,
-          "damage": 120,
-          "effect": "每隔 3 秒天降 1 根冰錐轟擊敵機"
+          "damage": 480,
+          "effect": "天頂垂降永凍冰柱轟擊敵機"
         },
         {
           "rank": 2,
-          "name": "雙星極寒刺",
+          "name": "雙魄極寒凌",
           "spires": 2,
-          "damage": 160,
-          "effect": "召喚 2 根冰錐，減速效果達 40%"
+          "damage": 640,
+          "effect": "垂降 2 根永凍尖塔，霜凍範圍擴增"
         },
         {
           "rank": 3,
-          "name": "三棱永凍塔",
+          "name": "三界冰魄陣",
           "spires": 2,
-          "damage": 210,
-          "effect": "冰錐著彈生成冰霜地刺，持續 3 秒"
+          "damage": 800,
+          "effect": "冰塔著彈產生冰魄地刺，持續穿刺敵陣"
         },
         {
           "rank": 4,
-          "name": "四極冰河裂",
+          "name": "四維寒天裂",
           "spires": 3,
-          "damage": 280,
-          "effect": "召喚 3 根冰錐，減速效果達 60%"
+          "damage": 960,
+          "effect": "垂降 3 根巨型尖塔，附加群體減速 60%"
         },
         {
           "rank": 5,
-          "name": "絕對零度天墜",
+          "name": "絕對零度玄天墜",
           "spires": 4,
-          "damage": 380,
+          "damage": 1280,
           "effect": "【MAX 終極特化】冰爆引發絕對零度，瞬間凍結周遭敵機 1.5 秒"
         }
       ],
@@ -799,49 +799,49 @@
     },
     {
       "id": "sonic_cannon",
-      "name": "裂變音浪重砲",
+      "name": "超聲震盪重砲",
       "icon": "assets/icons/weapons/weapon_16.png",
       "slot": "main",
       "type": "sonic",
-      "description": "向前噴發巨大的月牙形超音波衝擊波，強大推力震碎行進中的普通敵彈，並使敵機短暫癱瘓。",
+      "description": "放射半圓弧音波震盪圈，擊退敵人並抵銷路徑上的所有敵方常規子彈。",
       "maxRank": 5,
-      "baseDamage": 95,
-      "fireRate": 1,
-      "specialEffect": "月牙音浪推進，震碎路徑普通敵彈並擊退敵機",
+      "baseDamage": 320,
+      "fireRate": 1.1,
+      "specialEffect": "放射半圓弧音波震盪圈，擊退敵人並抵銷路徑上的所有敵方常規子彈",
       "ranks": [
         {
           "rank": 1,
           "name": "音爆重管",
-          "damage": 95,
-          "width": 70,
-          "effect": "向前發射月牙音波衝擊"
+          "damage": 320,
+          "width": 85,
+          "effect": "向前放射半圓弧音波震盪圈"
         },
         {
           "rank": 2,
           "name": "雙相共振音浪",
-          "damage": 130,
-          "width": 95,
-          "effect": "音浪寬度擴大，擊碎前方普通敵彈"
+          "damage": 430,
+          "width": 107,
+          "effect": "音浪寬度擴大，擊碎前方常規敵彈"
         },
         {
           "rank": 3,
           "name": "高頻裂地衝擊",
-          "damage": 175,
-          "width": 120,
-          "effect": "敵機被命中硬直癱瘓 0.5 秒"
+          "damage": 540,
+          "width": 129,
+          "effect": "音浪範圍擴大，附加強擊退效果"
         },
         {
           "rank": 4,
           "name": "次聲波滅絕嘯",
-          "damage": 235,
-          "width": 150,
+          "damage": 650,
+          "width": 151,
           "effect": "音浪橫跨大半個螢幕，擊退力翻倍"
         },
         {
           "rank": 5,
           "name": "泰坦超音震世音爆",
-          "damage": 320,
-          "width": 190,
+          "damage": 870,
+          "width": 195,
           "effect": "【MAX 終極特化】全屏覆蓋雙重音浪，徹底湮滅所經路徑全部小型敵彈"
         }
       ],
@@ -862,38 +862,38 @@
       "type": "lightning",
       "description": "高壓電漿闪電在敵群間狂暴連鎖跳躍，命中附加感電易傷效果。",
       "maxRank": 5,
-      "baseDamage": 110,
+      "baseDamage": 180,
       "fireRate": 2.2,
       "specialEffect": "跳躍連鎖 4 次，命中目標受到所有傷害 +25%",
       "ranks": [
         {
           "rank": 1,
           "name": "雷弧初現",
-          "damage": 110,
+          "damage": 180,
           "effect": "連鎖 3 個目標，每次連鎖衰減 15%"
         },
         {
           "rank": 2,
           "name": "天劫奔雷",
-          "damage": 145,
+          "damage": 240,
           "effect": "連鎖增至 4 目標，衰減降至 10%"
         },
         {
           "rank": 3,
           "name": "九天雷暴",
-          "damage": 190,
+          "damage": 300,
           "effect": "連鎖增至 5 目標，附加感電易傷 +25%"
         },
         {
           "rank": 4,
           "name": "滅世雷殛",
-          "damage": 250,
+          "damage": 360,
           "effect": "連鎖 6 目標，電弧爆炸消滅周圍輕型子彈"
         },
         {
           "rank": 5,
           "name": "神威天劫鏈",
-          "damage": 330,
+          "damage": 480,
           "effect": "【MAX 終極特化】連鎖無限次數直至敵全滅，暴擊率 +30%"
         }
       ]
@@ -910,38 +910,38 @@
       "type": "energy",
       "description": "投擲熱核耀斑信標，週期性引爆全屏微日冕衝擊波，蒸發子彈並灼燒敵群。",
       "maxRank": 5,
-      "baseDamage": 135,
+      "baseDamage": 260,
       "fireRate": 1.8,
       "specialEffect": "爆發日冕衝擊波，消散敵彈並留下高溫等離子火圈",
       "ranks": [
         {
           "rank": 1,
           "name": "微型耀斑",
-          "damage": 135,
+          "damage": 260,
           "effect": "釋放 80px 日冕爆發，消解中心敵彈"
         },
         {
           "rank": 2,
           "name": "日珥噴發",
-          "damage": 175,
+          "damage": 345,
           "effect": "範圍擴增至 110px，持續燃燒 2 秒"
         },
         {
           "rank": 3,
           "name": "破曉恆星核",
-          "damage": 225,
+          "damage": 430,
           "effect": "衝擊波範圍 140px，消解半徑內全量彈幕"
         },
         {
           "rank": 4,
           "name": "超新星耀斑",
-          "damage": 295,
+          "damage": 515,
           "effect": "雙信標同時引爆，造成引力震懾"
         },
         {
           "rank": 5,
           "name": "太古熾陽狂怒",
-          "damage": 380,
+          "damage": 685,
           "effect": "【MAX 終極特化】全螢幕耀斑大清屏，灼燒每秒造成 120 傷害"
         }
       ]
@@ -958,38 +958,38 @@
       "type": "melee_projectile",
       "description": "向前連續揮砍雙月等離子弧刃，切削穿透敵陣並直接切斷敵方子彈。",
       "maxRank": 5,
-      "baseDamage": 85,
+      "baseDamage": 130,
       "fireRate": 3.5,
       "specialEffect": "近身切削消彈，對近距離目標造成雙倍重擊傷害",
       "ranks": [
         {
           "rank": 1,
           "name": "等離子光刃",
-          "damage": 85,
+          "damage": 130,
           "effect": "單發月牙光刃，切削前方路徑敵彈"
         },
         {
           "rank": 2,
           "name": "雙月連斬",
-          "damage": 115,
+          "damage": 172,
           "effect": "左右交替雙月光刃，刃面寬度 +30%"
         },
         {
           "rank": 3,
           "name": "裂變旋風斬",
-          "damage": 155,
+          "damage": 214,
           "effect": "扇形三道光刃，近身目標爆發裂甲"
         },
         {
           "rank": 4,
           "name": "神聖裂解劍陣",
-          "damage": 205,
+          "damage": 256,
           "effect": "射程加長 50%，消除所有中型彈幕"
         },
         {
           "rank": 5,
           "name": "太虛滅絕神刃",
-          "damage": 275,
+          "damage": 340,
           "effect": "【MAX 終極特化】全方位光刃風暴，近距傷害 x2.5"
         }
       ]
@@ -1054,38 +1054,38 @@
       "type": "heavy_lance",
       "description": "超重型神聖破甲光錐，無視 Boss 神話護盾造成 300% 破盾衝擊與貫穿核損。",
       "maxRank": 5,
-      "baseDamage": 320,
+      "baseDamage": 580,
       "fireRate": 1.2,
       "specialEffect": "貫穿全屏，無視 Boss 護盾直接摧毀神話機制實體",
       "ranks": [
         {
           "rank": 1,
           "name": "天啟金矛",
-          "damage": 320,
+          "damage": 580,
           "effect": "超長貫穿光錐，對護盾造成 150% 傷害"
         },
         {
           "rank": 2,
           "name": "聖耀穿星錐",
-          "damage": 410,
+          "damage": 760,
           "effect": "槍尖引發震波，破盾傷害提升至 200%"
         },
         {
           "rank": 3,
           "name": "神罰滅都槍",
-          "damage": 520,
+          "damage": 940,
           "effect": "無視 Boss 護盾直接造成本體穿透傷害"
         },
         {
           "rank": 4,
           "name": "天崩弒神矛",
-          "damage": 650,
+          "damage": 1120,
           "effect": "命中引發光之十字大爆發，消解全屏敵彈"
         },
         {
           "rank": 5,
           "name": "創世天啟終焉錐",
-          "damage": 820,
+          "damage": 1480,
           "effect": "【MAX 終極特化】300% 破盾傷害，破盾瞬間癱瘓 Boss 3 秒"
         }
       ]
@@ -1246,38 +1246,38 @@
       "type": "time_scythe",
       "description": "撕裂時空的紫金神鐮，揮出巨型時空半月波斬，重度延滯全場時間並秒殺殘血雜兵。",
       "maxRank": 5,
-      "baseDamage": 280,
+      "baseDamage": 620,
       "fireRate": 1.5,
       "specialEffect": "巨型半屏紫金鐮芒，降低命中目標移速 50%，秒殺 20% 生命以下非 Boss 敵機",
       "ranks": [
         {
           "rank": 1,
           "name": "時間裂片",
-          "damage": 280,
+          "damage": 620,
           "effect": "揮出 140px 時空弧光，減速敵人 30%"
         },
         {
           "rank": 2,
           "name": "命運輪迴斬",
-          "damage": 360,
+          "damage": 820,
           "effect": "弧光擴展至 200px，斬殺 15% 生命以下雜兵"
         },
         {
           "rank": 3,
           "name": "時序因果律",
-          "damage": 460,
+          "damage": 1020,
           "effect": "命中 Boss 凍結其技能冷卻計時 2 秒"
         },
         {
           "rank": 4,
           "name": "萬劫斷魂波",
-          "damage": 580,
+          "damage": 1220,
           "effect": "全螢幕紫金巨鐮橫掃，斬殺 25% 生命以下雜兵"
         },
         {
           "rank": 5,
           "name": "終焉時間吞噬者",
-          "damage": 750,
+          "damage": 1620,
           "effect": "【MAX 終極特化】全場時間靜止 1.5 秒，鐮刃暴擊傷害 x3"
         }
       ]

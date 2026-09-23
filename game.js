@@ -1459,14 +1459,61 @@ class DataStore {
     this.studentName = localStorage.getItem('starfall_student_name') || '測試學員';
     this.studentGrade = localStorage.getItem('starfall_student_grade') || '三年級';
     this.isCloudSynced = false;
-    // 整局已抽取的題目 ID 集合，保證同一局內完全零重複
+    // 整局已抽取的題目 ID 與題幹指紋集合，保證同一局內完全零重複
     this.sessionUsedQuestionIds = new Set();
+    this.sessionUsedFingerprints = new Set();
+
+    // 跨局持久化：題幹指紋級已掌握熟練題 (Mastered) 與未雪恥錯題集 (Mistakes)
+    this.masteredFingerprints = new Set();
+    this.mistakeMap = {}; // fingerprint -> question object
+    this.loadFingerprintsFromStorage();
+
     this.initIndexedDB();
+  }
+
+  // 取得題目內容指紋（忽略標點與空格，徹底解決同一題幹掛不同 ID 的重複問題）
+  getQuestionFingerprint(text) {
+    if (!text) return '';
+    return String(text)
+      .trim()
+      .replace(/[\s\r\n\t]/g, '')
+      .replace(/[「」『』""''，。、？！：；,.?!:;]/g, '')
+      .toLowerCase();
+  }
+
+  // 載入跨局題幹指紋作答記錄
+  loadFingerprintsFromStorage() {
+    try {
+      const savedMastered = localStorage.getItem('starfall_mastered_fingerprints_v2');
+      if (savedMastered) {
+        const arr = JSON.parse(savedMastered);
+        if (Array.isArray(arr)) {
+          arr.forEach(fp => this.masteredFingerprints.add(fp));
+        }
+      }
+      const savedMistakes = localStorage.getItem('starfall_mistake_fingerprints_v2');
+      if (savedMistakes) {
+        this.mistakeMap = JSON.parse(savedMistakes) || {};
+      }
+    } catch (e) {
+      console.warn('Failed loading fingerprint storage:', e);
+    }
+  }
+
+  // 儲存跨局題幹指紋作答記錄至本機
+  saveFingerprintsToStorage() {
+    try {
+      localStorage.setItem('starfall_mastered_fingerprints_v2', JSON.stringify([...this.masteredFingerprints]));
+      localStorage.setItem('starfall_mistake_fingerprints_v2', JSON.stringify(this.mistakeMap));
+    } catch (e) {
+      console.warn('Failed saving fingerprint storage:', e);
+    }
   }
 
   // 重置當前遊戲局的題目抽取紀錄 (新遊戲開始時呼叫)
   resetSessionQuestions() {
-    this.sessionUsedQuestionIds.clear();
+    if (this.sessionUsedQuestionIds) this.sessionUsedQuestionIds.clear();
+    if (this.sessionUsedFingerprints) this.sessionUsedFingerprints.clear();
   }
 
   // 取得指定學員的專屬作答進度映射表 (100% 獨立隔離)
@@ -1810,6 +1857,23 @@ class DataStore {
       p.avenged = false;
     }
 
+    // 跨局題幹指紋更新 (Mastered vs Mistake，杜絕不同 ID 但同題幹之重複題)
+    const qText = attempt.question || (this.questionBank && (this.questionBank.find(q => q.question_id === qid) || {}).question) || '';
+    const fp = this.getQuestionFingerprint(qText);
+    if (fp) {
+      if (attempt.correct) {
+        this.masteredFingerprints.add(fp);
+        delete this.mistakeMap[fp];
+        this.saveFingerprintsToStorage();
+      } else {
+        if (!this.masteredFingerprints.has(fp)) {
+          const qObj = this.questionBank && this.questionBank.find(q => q.question_id === qid);
+          this.mistakeMap[fp] = qObj ? { ...qObj } : { question_id: qid, question: qText, grade: attempt.student_grade };
+          this.saveFingerprintsToStorage();
+        }
+      }
+    }
+
     try {
       localStorage.setItem(`starfall_progress_${sid}`, JSON.stringify(sidMap));
     } catch (e) {}
@@ -2134,7 +2198,7 @@ class DataStore {
   }
 
   pickAdaptiveQuestions(count = 5) {
-    if (this.questionBank.length === 0) return [];
+    if (!this.questionBank || this.questionBank.length === 0) return [];
     const sid = this.currentStudentId || 'S0001';
     const sidProgress = this.getStudentProgressMap(sid);
 
@@ -2150,21 +2214,53 @@ class DataStore {
     if (!this.sessionUsedQuestionIds) {
       this.sessionUsedQuestionIds = new Set();
     }
+    if (!this.sessionUsedFingerprints) {
+      this.sessionUsedFingerprints = new Set();
+    }
 
-    // 1. 本局未作答題目池（嚴格排除本局同一 run 已作答過的題目，徹底零重複）
-    let availablePool = pool.filter(q => !this.sessionUsedQuestionIds.has(q.question_id));
-    // 若題庫全部被刷完（極端情況），清空 session 快取重啟新循環
+    // 1. 本局未作答題目池（嚴格排除本局同一 run 已抽過的題目 ID 與題幹指紋，徹底零重複）
+    let availablePool = pool.filter(q => {
+      if (this.sessionUsedQuestionIds.has(q.question_id)) return false;
+      const fp = this.getQuestionFingerprint(q.question);
+      if (this.sessionUsedFingerprints.has(fp)) return false;
+      return true;
+    });
+
+    // 若本局題庫全部被刷完（極端情況），清空 session 快取重啟新循環（但仍排除跨局已掌握熟練題）
     if (availablePool.length < count) {
       this.sessionUsedQuestionIds.clear();
-      availablePool = [...pool];
+      this.sessionUsedFingerprints.clear();
+      availablePool = pool.filter(q => {
+        const fp = this.getQuestionFingerprint(q.question);
+        return !this.masteredFingerprints.has(fp);
+      });
+      if (availablePool.length < count) {
+        availablePool = [...pool];
+      }
     }
 
     const selected = [];
+    const selectedFps = new Set();
 
     // 2. 錯題主動復仇機制：優先摻入 1~2 題上一輪/歷史尚未雪恥復仇的錯題 (p.wrong > 0 && !p.avenged)
-    const unavengedMistakes = availablePool.filter(q => {
+    const unavengedMistakes = [];
+    // (A) 從 mistakeMap 優先提取 (包含跨局儲存之錯題)
+    if (this.mistakeMap) {
+      Object.entries(this.mistakeMap).forEach(([fp, mq]) => {
+        if (!this.masteredFingerprints.has(fp) && !this.sessionUsedFingerprints.has(fp) && !selectedFps.has(fp)) {
+          unavengedMistakes.push(mq);
+        }
+      });
+    }
+    // (B) 比對 sidProgress 中尚未雪恥的題目
+    availablePool.forEach(q => {
+      const fp = this.getQuestionFingerprint(q.question);
       const p = sidProgress[q.question_id];
-      return p && p.wrong > 0 && !p.avenged;
+      if (p && p.wrong > 0 && !p.avenged && !this.masteredFingerprints.has(fp)) {
+        if (!unavengedMistakes.some(m => this.getQuestionFingerprint(m.question) === fp)) {
+          unavengedMistakes.push(q);
+        }
+      }
     });
 
     if (unavengedMistakes.length > 0) {
@@ -2172,55 +2268,85 @@ class DataStore {
       const mistakeTargetCount = Math.min(2, Math.min(count - 1, unavengedMistakes.length));
       for (let i = 0; i < mistakeTargetCount; i++) {
         const mq = unavengedMistakes[i];
+        const fp = this.getQuestionFingerprint(mq.question);
         selected.push({
           ...mq,
           isReview: true,
           isRevenge: true
         });
+        selectedFps.add(fp);
         this.sessionUsedQuestionIds.add(mq.question_id);
+        this.sessionUsedFingerprints.add(fp);
       }
     }
 
     // 3. 剩餘題數嚴格自「從未作答過的全新題目」中抽取 (ZERO REPEAT for mastered questions)
     const remainingNeeded = count - selected.length;
-    const freshQuestions = availablePool.filter(q => {
-      if (this.sessionUsedQuestionIds.has(q.question_id)) return false;
+    const freshQuestions = [];
+    const seenFreshFp = new Set();
+
+    for (const q of availablePool) {
+      if (this.sessionUsedQuestionIds.has(q.question_id)) continue;
+      const fp = this.getQuestionFingerprint(q.question);
+      if (!fp || this.sessionUsedFingerprints.has(fp) || selectedFps.has(fp)) continue;
+      if (this.masteredFingerprints.has(fp)) continue; // 100% 排除已答對指紋 (包含題庫中不同 ID 的同一題目)
+      if (seenFreshFp.has(fp)) continue; // 排除同一輪內重複題幹
       const p = sidProgress[q.question_id];
-      return !p || p.attempts === 0;
-    });
+      if (p && p.attempts > 0 && p.wrong === 0) continue; // 排除已答對題
+
+      freshQuestions.push(q);
+      seenFreshFp.add(fp);
+    }
 
     if (freshQuestions.length >= remainingNeeded) {
       // 全新題目充足：100% 抽取全新題目，已答對題目機率嚴格為 0%！
       freshQuestions.sort(() => Math.random() - 0.5);
       for (let i = 0; i < remainingNeeded; i++) {
         const fq = freshQuestions[i];
+        const fp = this.getQuestionFingerprint(fq.question);
         selected.push({
           ...fq,
           isReview: false,
           isRevenge: false
         });
+        selectedFps.add(fp);
         this.sessionUsedQuestionIds.add(fq.question_id);
+        this.sessionUsedFingerprints.add(fp);
       }
     } else {
-      // 若全新題目不足（例如學員已刷了幾千題），先取完所有剩餘新題
+      // 若全新題目不足（例如學員已刷了數千題），先取完所有剩餘新題
       freshQuestions.forEach(fq => {
+        const fp = this.getQuestionFingerprint(fq.question);
         selected.push({ ...fq, isReview: false, isRevenge: false });
+        selectedFps.add(fp);
         this.sessionUsedQuestionIds.add(fq.question_id);
+        this.sessionUsedFingerprints.add(fp);
       });
 
       const stillNeeded = count - selected.length;
-      // 剩餘名額從可用池中依權重補足（優先未熟練題）
-      const remainingOthers = availablePool.filter(q => !this.sessionUsedQuestionIds.has(q.question_id));
+      // 剩餘名額從可用池中補足（嚴格優先未熟練題，依指紋去重）
+      const remainingOthers = [];
+      const seenOtherFp = new Set();
+      for (const oq of availablePool) {
+        if (this.sessionUsedQuestionIds.has(oq.question_id)) continue;
+        const fp = this.getQuestionFingerprint(oq.question);
+        if (!fp || this.sessionUsedFingerprints.has(fp) || selectedFps.has(fp) || seenOtherFp.has(fp)) continue;
+        remainingOthers.push(oq);
+        seenOtherFp.add(fp);
+      }
       remainingOthers.sort(() => Math.random() - 0.5);
       for (let i = 0; i < stillNeeded && i < remainingOthers.length; i++) {
         const oq = remainingOthers[i];
+        const fp = this.getQuestionFingerprint(oq.question);
         const p = sidProgress[oq.question_id];
         selected.push({
           ...oq,
           isReview: !!(p && p.attempts > 0),
           isRevenge: !!(p && p.wrong > 0 && !p.avenged)
         });
+        selectedFps.add(fp);
         this.sessionUsedQuestionIds.add(oq.question_id);
+        this.sessionUsedFingerprints.add(fp);
       }
     }
 
@@ -2235,28 +2361,28 @@ const STARFALL_WEAPONS_CATALOG = [
   { id: 'multishot', name: '多管神機砲', isPassive: false, tier: 'C', tierName: 'C 級・基礎主砲', icon: 'assets/icons/weapons/weapon_1.png', tag: '主動・主砲', baseDmg: 36, desc: '經典高機動速射多管機砲，連續命中目標累積裂甲破防印記（最高 +50% 傷害）。' },
   { id: 'beam_cannon', name: '金陽聚焦光束', isPassive: false, tier: 'A', tierName: 'A 級・強襲主力', icon: 'assets/icons/weapons/weapon_2.png', tag: '主動・穿透', baseDmg: 240, desc: '筆直貫穿全螢幕之金色光柱，「熱能融解」穿透護盾造成敵方最大生命持續灼燒。' },
   { id: 'spirit_bullet', name: '靈能聚變核心', isPassive: true, tier: 'C', tierName: 'C 級・守護輔助', icon: 'assets/icons/weapons/weapon_3.png', tag: '被動・聚變', baseDmg: 110, desc: '慢速向前浮游之幽藍靈核，向周遭放射電漿弧，自機靈丸蓄力速度加快 30%。' },
-  { id: 'kinetic_dart', name: '超空泡穿甲鏢', isPassive: false, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_4.png', tag: '主動・穿刺', baseDmg: 68, desc: '極高速藍色超空泡標槍，100% 貫穿所有敵人，每穿透一名目標傷害遞增 20%。' },
+  { id: 'kinetic_dart', name: '超空泡穿甲鏢', isPassive: false, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_4.png', tag: '主動・穿刺', baseDmg: 85, desc: '極高速藍色超空泡標槍，100% 貫穿所有敵人，每穿透一名目標傷害遞增 20%。' },
   { id: 'homing_missile', name: '烈陽核融導彈', isPassive: false, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_5.png', tag: '主動・索敵', baseDmg: 58, desc: '巡弋微型核融飛彈，自動尋標最危險敵機，命中引發大範圍熱核爆轟與火環。' },
-  { id: 'jade_chakram', name: '青玉風雷飛輪', isPassive: false, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_6.png', tag: '主動・削彈', baseDmg: 80, desc: '向前拋射的旋轉碧玉刃輪，在空中超高速旋轉，直接削碎切斷接觸的敵方子彈！' },
+  { id: 'jade_chakram', name: '青玉風雷飛輪', isPassive: false, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_6.png', tag: '主動・削彈', baseDmg: 140, desc: '向前拋射的旋轉碧玉刃輪，在空中超高速旋轉，直接削碎切斷接觸的敵方子彈！' },
   { id: 'combat_wingman', name: '神鳥隨行僚機', isPassive: true, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_7.png', tag: '被動・僚機', baseDmg: 40, desc: '雙聯神鳥僚機伴隨兩翼，形成極致扇形綠色雷射交叉火網，持續壓制前線。' },
   { id: 'prism_wingman', name: '虹光折射星核', isPassive: true, tier: 'A', tierName: 'A 級・強襲主力', icon: 'assets/icons/weapons/weapon_8.png', tag: '被動・折射', baseDmg: 60, desc: '高科技浮游稜鏡，折射主砲光束，形成多角度偏折射線鎖定多重目標。' },
-  { id: 'grenade_launcher', name: '熾陽熔岩噴射核', isPassive: false, tier: 'S', tierName: 'S 級・毀滅神話', icon: 'assets/icons/weapons/weapon_9.png', tag: '主動・地熱', baseDmg: 150, desc: '拋物線熔岩榴彈，引爆留下 5 秒半徑 75px 熔岩領域，焚毀進入敵機並蒸發敵彈。' },
+  { id: 'grenade_launcher', name: '熾陽熔岩噴射核', isPassive: false, tier: 'S', tierName: 'S 級・毀滅神話', icon: 'assets/icons/weapons/weapon_9.png', tag: '主動・地熱', baseDmg: 420, desc: '拋物線熔岩榴彈，引爆留下 5 秒半徑 75px 熔岩領域，焚毀進入敵機並蒸發敵彈。' },
   { id: 'singularity_core', name: '虛空重力奇點', isPassive: true, tier: 'C', tierName: 'C 級・守護輔助', icon: 'assets/icons/weapons/weapon_10.png', tag: '被動・黑洞', baseDmg: 80, desc: '重力黑洞漩渦，停留在戰場中產生強大引力，吸引雜兵並吞噬途經敵彈。' },
   { id: 'quantum_shield', name: '量子偏折護盾', isPassive: true, tier: 'C', tierName: 'C 級・守護輔助', icon: 'assets/icons/weapons/weapon_11.png', tag: '被動・神盾', baseDmg: 75, desc: '微型能量護盾環繞自機，每 8 秒自動刷新一次致命衝擊抵禦並反彈光刃。' },
   { id: 'taiji_array', name: '陰陽太極法陣', isPassive: false, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_12.png', tag: '主動・法陣', baseDmg: 75, desc: '旋轉的陰陽八卦符印，對目標附加五行震懾，使其攻擊力與移速降低 30%。' },
-  { id: 'cryo_spire', name: '玄天冰魄凌柱', isPassive: true, tier: 'S', tierName: 'S 級・毀滅神話', icon: 'assets/icons/weapons/weapon_13.png', tag: '被動・天降', baseDmg: 160, desc: '天頂隨機垂降巨大永凍冰魄尖塔，下墜轟擊目標造成大範圍霜寒凍結與高額穿透，無須手動裝備。' },
+  { id: 'cryo_spire', name: '玄天冰魄凌柱', isPassive: true, tier: 'S', tierName: 'S 級・毀滅神話', icon: 'assets/icons/weapons/weapon_13.png', tag: '被動・天降', baseDmg: 480, desc: '天頂隨機垂降巨大永凍冰魄尖塔，下墜轟擊目標造成大範圍霜寒凍結與高額穿透，無須手動裝備。' },
   { id: 'emerald_spring', name: '翡翠靈泉護陣', isPassive: true, tier: 'C', tierName: 'C 級・守護輔助', icon: 'assets/icons/weapons/weapon_14.png', tag: '被動・光環', baseDmg: 65, desc: '週期性向外擴散綠色靈能修復波，清除近身彈幕，並有 15% 機率修復戰機裝甲。' },
   { id: 'time_dilation', name: '躍遷時空擴張', isPassive: true, tier: 'C', tierName: 'C 級・守護輔助', icon: 'assets/icons/weapons/weapon_15.png', tag: '被動・超頻', baseDmg: 0, desc: '戰鬥空間超頻擴展，全武器冷卻縮短 12%，移速與擦彈同步半徑大幅提升。' },
-  { id: 'sonic_cannon', name: '超聲震盪重砲', isPassive: false, tier: 'S', tierName: 'S 級・毀滅神話', icon: 'assets/icons/weapons/weapon_16.png', tag: '主動・音波', baseDmg: 125, desc: '放射半圓弧音波震盪圈，擊退敵人並抵銷路徑上的所有敵方常規子彈。' },
-  { id: 'chain_lightning', name: '雷公天劫鏈弧', isPassive: false, tier: 'A', tierName: 'A 級・強襲主力', icon: 'assets/icons/weapons/weapon_17.png', tag: '主動・連鎖', baseDmg: 88, desc: '發射高壓天劫電弧，在敵機群間連鎖彈跳最多 4 次，附加電漿麻痺與高額破盾。' },
-  { id: 'solar_flare', name: '熾陽破曉耀斑', isPassive: false, tier: 'A', tierName: 'A 級・強襲主力', icon: 'assets/icons/weapons/weapon_18.png', tag: '主動・灼熱', baseDmg: 115, desc: '射出高溫破曉日冕日珥，貫穿路徑上所有敵機與反彈魔鏡，引發連續太陽耀斑焚燒。' },
-  { id: 'plasma_blade', name: '裂變等離子刃', isPassive: false, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_19.png', tag: '主動・弧刃', baseDmg: 92, desc: '向前橫掃雙聯高能等離子月牙光刃，強力斬裂切碎前方敵陣並劈消敵方子彈。' },
+  { id: 'sonic_cannon', name: '超聲震盪重砲', isPassive: false, tier: 'S', tierName: 'S 級・毀滅神話', icon: 'assets/icons/weapons/weapon_16.png', tag: '主動・音波', baseDmg: 320, desc: '放射半圓弧音波震盪圈，擊退敵人並抵銷路徑上的所有敵方常規子彈。' },
+  { id: 'chain_lightning', name: '雷公天劫鏈弧', isPassive: false, tier: 'A', tierName: 'A 級・強襲主力', icon: 'assets/icons/weapons/weapon_17.png', tag: '主動・連鎖', baseDmg: 180, desc: '發射高壓天劫電弧，在敵機群間連鎖彈跳最多 4 次，附加電漿麻痺與高額破盾。' },
+  { id: 'solar_flare', name: '熾陽破曉耀斑', isPassive: false, tier: 'A', tierName: 'A 級・強襲主力', icon: 'assets/icons/weapons/weapon_18.png', tag: '主動・灼熱', baseDmg: 260, desc: '射出高溫破曉日冕日珥，貫穿路徑上所有敵機與反彈魔鏡，引發連續太陽耀斑焚燒。' },
+  { id: 'plasma_blade', name: '裂變等離子刃', isPassive: false, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_19.png', tag: '主動・弧刃', baseDmg: 130, desc: '向前橫掃雙聯高能等離子月牙光刃，強力斬裂切碎前方敵陣並劈消敵方子彈。' },
   { id: 'nano_swarm', name: '奈米蝕甲蟲群', isPassive: true, tier: 'A', tierName: 'A 級・強襲主力', icon: 'assets/icons/weapons/weapon_20.png', tag: '被動・蝕甲', baseDmg: 45, desc: '釋放自律奈米機械蟲群，主動附著敵機持續腐蝕裝甲，使目標承受傷害增加 30%。' },
-  { id: 'photon_lance', name: '天啟破城光錐', isPassive: false, tier: 'S', tierName: 'S 級・毀滅神話', icon: 'assets/icons/weapons/weapon_21.png', tag: '主動・貫穿', baseDmg: 280, desc: '凝聚超相對論光子尖錐，無視護盾防禦全屏直線貫穿，並粉碎所有沿途魔鏡障壁！' },
+  { id: 'photon_lance', name: '天啟破城光錐', isPassive: false, tier: 'S', tierName: 'S 級・毀滅神話', icon: 'assets/icons/weapons/weapon_21.png', tag: '主動・貫穿', baseDmg: 580, desc: '凝聚超相對論光子尖錐，無視護盾防禦全屏直線貫穿，並粉碎所有沿途魔鏡障壁！' },
   { id: 'laser_array', name: '星陣軌道壁壘', isPassive: true, tier: 'B', tierName: 'B 級・戰術壓制', icon: 'assets/icons/weapons/weapon_22.png', tag: '被動・環衛', baseDmg: 52, desc: '雙聯浮游衛星雷射環繞機體，對接近的外環目標自動鎖定發射交織聚焦光束。' },
   { id: 'hyper_thruster', name: '疾風超導噴流', isPassive: true, tier: 'C', tierName: 'C 級・守護輔助', icon: 'assets/icons/weapons/weapon_23.png', tag: '被動・機動', baseDmg: 0, desc: '超導向量推進引擎，機體移動速度大幅提升 25%，擦彈判定半徑擴大 15px。' },
   { id: 'aegis_reflector', name: '神聖防衛折光稜鏡', isPassive: true, tier: 'A', tierName: 'A 級・強襲主力', icon: 'assets/icons/weapons/weapon_24.png', tag: '被動・偏折', baseDmg: 60, desc: '懸浮於兩翼之防禦折射晶體，週期性將靠近戰機的敵方子彈轉化為同步能量或偏折反彈。' },
-  { id: 'chronos_scythe', name: '時序輪迴神鐮', isPassive: false, tier: 'S', tierName: 'S 級・毀滅神話', icon: 'assets/icons/weapons/weapon_25.png', tag: '主動・時空', baseDmg: 260, desc: '時空裂隙凝聚之命運死神巨鐮，橫跨戰場劃過造成極大範圍斬擊，並使周遭敵速減緩 50%。' }
+  { id: 'chronos_scythe', name: '時序輪迴神鐮', isPassive: false, tier: 'S', tierName: 'S 級・毀滅神話', icon: 'assets/icons/weapons/weapon_25.png', tag: '主動・時空', baseDmg: 620, desc: '時空裂隙凝聚之命運死神巨鐮，橫跨戰場劃過造成極大範圍斬擊，並使周遭敵速減緩 50%。' }
 ];
 
 // 六大真融合武器常數定義 (雙素材 Lv.3+ 解鎖)
@@ -2910,10 +3036,12 @@ class Game {
         document.activeElement.blur();
       }
       try {
-        const isNew = studentSelect && studentSelect.value === '__new__';
-        const name = (nameInput && nameInput.value.trim()) || '學員';
-        const grade = (gradeSelect && gradeSelect.value) || '三年級';
-        await this.dataStore.syncStudentProfile(name, grade, isNew);
+        const currentName = this.dataStore.studentName || '學員';
+        const inputName = (nameInput && nameInput.value.trim()) || '';
+        const isExplicitNew = studentSelect && studentSelect.value === '__new__' && inputName !== '' && inputName !== currentName;
+        const name = inputName || currentName;
+        const grade = (gradeSelect && gradeSelect.value) || this.dataStore.studentGrade || '三年級';
+        await this.dataStore.syncStudentProfile(name, grade, isExplicitNew);
         this.updatePermissionUI();
 
         const select = document.getElementById('startStageSelect');
@@ -3380,7 +3508,7 @@ class Game {
     const gl = this.arsenal.grenade_launcher;
     if (gl && gl.rank > 0 && this.isWeaponActiveEquipped('grenade_launcher')) {
       gl.timer += dt;
-      if (gl.timer >= 1.2 / rateMult) {
+      if (gl.timer >= 0.85 / rateMult) {
         gl.timer = 0;
         this.fireGrenade(gl.rank, gl.quality);
       }
@@ -3416,7 +3544,7 @@ class Game {
     const cs = this.arsenal.cryo_spire;
     if (cs && cs.rank > 0) {
       cs.timer += dt;
-      if (cs.timer >= 2.8 / rateMult) {
+      if (cs.timer >= 1.60 / rateMult) {
         cs.timer = 0;
         this.fireCryoSpires(cs.rank, cs.quality);
       }
@@ -3439,7 +3567,7 @@ class Game {
     const sn = this.arsenal.sonic_cannon;
     if (sn && sn.rank > 0 && this.isWeaponActiveEquipped('sonic_cannon')) {
       sn.timer += dt;
-      if (sn.timer >= 1.05 / rateMult) {
+      if (sn.timer >= 0.90 / rateMult) {
         sn.timer = 0;
         this.fireSonicCannon(sn.rank, sn.quality);
       }
@@ -3485,7 +3613,7 @@ class Game {
     const pl = this.arsenal.photon_lance;
     if (pl && pl.rank > 0 && this.isWeaponActiveEquipped('photon_lance')) {
       pl.timer += dt;
-      if (pl.timer >= 1.20 / rateMult) {
+      if (pl.timer >= 0.85 / rateMult) {
         pl.timer = 0;
         this.firePhotonLance(pl.rank, pl.quality);
       }
@@ -3513,7 +3641,7 @@ class Game {
     const cs2 = this.arsenal.chronos_scythe;
     if (cs2 && cs2.rank > 0 && this.isWeaponActiveEquipped('chronos_scythe')) {
       cs2.timer += dt;
-      if (cs2.timer >= 1.40 / rateMult) {
+      if (cs2.timer >= 0.95 / rateMult) {
         cs2.timer = 0;
         this.fireChronosScythe(cs2.rank, cs2.quality);
       }
@@ -3587,7 +3715,7 @@ class Game {
   fireKineticDarts(rank, quality = 'common') {
     const qMult = this.getQualityMultiplier(quality);
     const darts = 2 + Math.floor(rank * 0.7);
-    const dmg = (68 + rank * 22) * qMult;
+    const dmg = (85 + rank * 28) * qMult;
     const spreadX = 14;
     const startX = this.player.x - ((darts - 1) * spreadX) / 2;
     for (let i = 0; i < darts; i++) {
@@ -3623,7 +3751,7 @@ class Game {
   fireJadeChakrams(rank, quality = 'common') {
     const qMult = this.getQualityMultiplier(quality);
     const count = 1 + Math.floor(rank * 0.5);
-    const dmg = (80 + rank * 26) * qMult;
+    const dmg = (140 + rank * 45) * qMult;
     for (let i = 0; i < count; i++) {
       const side = (i % 2 === 0 ? 1 : -1);
       const b = new Bullet(this.player.x + side * 15, this.player.y - 15, side * 140, -420, true, dmg, 'chakram', rank);
@@ -3744,7 +3872,7 @@ class Game {
     const b = new Bullet(
       this.player.x, this.player.y - 15,
       (Math.random() - 0.5) * 70, -440,
-      true, (130 + rank * 48) * (isMeltdown ? 1.5 : 1.0) * qMult, 'grenade', rank
+      true, (420 + rank * 140) * (isMeltdown ? 1.5 : 1.0) * qMult, 'grenade', rank
     );
     b.blastRadius = (55 + rank * 16) * (isMeltdown ? 1.4 : 1.0);
     b.isMeltdown = isMeltdown;
@@ -3821,7 +3949,7 @@ class Game {
     const count = 1 + Math.floor(rank * 0.8);
     for (let i = 0; i < count; i++) {
       const tx = 40 + Math.random() * (this.W - 80);
-      const b = new Bullet(tx, -40, 0, 750, true, (160 + rank * 55) * qMult, 'cryo_spire', rank);
+      const b = new Bullet(tx, -40, 0, 750, true, (480 + rank * 160) * qMult, 'cryo_spire', rank);
       b.r = 14 + rank * 3;
       b.color = '#67ffff';
       b.targetY = 160 + Math.random() * 260;
@@ -3852,7 +3980,7 @@ class Game {
   fireSonicCannon(rank, quality = 'common') {
     const qMult = this.getQualityMultiplier(quality);
     const width = 85 + rank * 22;
-    const dmg = (135 + rank * 48) * qMult;
+    const dmg = (320 + rank * 110) * qMult;
     const wave = new Bullet(this.player.x, this.player.y - 20, 0, -520, true, dmg, 'sonic_wave', rank);
     wave.waveWidth = width;
     wave.r = width / 2;
@@ -3869,7 +3997,7 @@ class Game {
   // 17. 雷公天劫鏈弧 (chain_lightning)
   fireChainLightning(rank, quality = 'common') {
     const qMult = this.getQualityMultiplier(quality);
-    const dmg = (68 + rank * 24) * qMult;
+    const dmg = (180 + rank * 60) * qMult;
     const b = new Bullet(this.player.x, this.player.y - 18, 0, -820, true, dmg, 'chain_lightning', rank);
     b.r = 6 + rank * 1.0;
     b.color = '#38bdf8';
@@ -3882,7 +4010,7 @@ class Game {
   // 18. 熾陽破曉耀斑 (solar_flare)
   fireSolarFlare(rank, quality = 'common') {
     const qMult = this.getQualityMultiplier(quality);
-    const dmg = (88 + rank * 30) * qMult;
+    const dmg = (260 + rank * 85) * qMult;
     const b = new Bullet(this.player.x, this.player.y - 20, 0, -680, true, dmg, 'solar_flare', rank);
     b.r = 12 + rank * 2;
     b.pierce = 99; // 貫穿一切，不被反彈魔鏡阻擋
@@ -3897,7 +4025,7 @@ class Game {
   // 19. 裂變等離子刃 (plasma_blade)
   firePlasmaBlade(rank, quality = 'common') {
     const qMult = this.getQualityMultiplier(quality);
-    const dmg = (72 + rank * 25) * qMult;
+    const dmg = (130 + rank * 42) * qMult;
     const angles = [-0.22, 0.22];
     angles.forEach(ang => {
       const vx = Math.sin(ang) * 620;
@@ -3942,7 +4070,7 @@ class Game {
   // 21. 天啟破城光錐 (photon_lance)
   firePhotonLance(rank, quality = 'common') {
     const qMult = this.getQualityMultiplier(quality);
-    const dmg = (220 + rank * 75) * qMult;
+    const dmg = (580 + rank * 180) * qMult;
     const b = new Bullet(this.player.x, this.player.y - 24, 0, -1020, true, dmg, 'photon_lance', rank);
     b.r = 16 + rank * 3;
     b.pierce = 99; // 絕對貫穿
@@ -4013,7 +4141,7 @@ class Game {
   // 25. 時序輪迴神鐮 (chronos_scythe)
   fireChronosScythe(rank, quality = 'common') {
     const qMult = this.getQualityMultiplier(quality);
-    const dmg = (195 + rank * 60) * qMult;
+    const dmg = (620 + rank * 200) * qMult;
     const b = new Bullet(this.player.x, this.player.y - 28, (Math.random() - 0.5) * 60, -420, true, dmg, 'chronos_scythe', rank);
     b.r = 30 + rank * 5;
     b.pierce = 99;
@@ -6407,6 +6535,7 @@ class Game {
 
     this.dataStore.recordAttempt({
       question_id: q.question_id,
+      question: q.question,
       selected_option: 'ABCD'[selectedIdx],
       correct: isCorrect,
       timestamp: new Date().toISOString(),
@@ -7250,9 +7379,8 @@ class Game {
             this.damageBoss(this.currentBoss, b.damage, 'grenade', 'grenade');
           }
         }
-        if (b.isMeltdown) {
-          this.lavaPools.push({ x: b.x, y: b.y, r: 75, life: 5.0, dps: 190 });
-        }
+        const poolDps = b.isMeltdown ? 260 : (75 + (b.rank || 1) * 28);
+        this.lavaPools.push({ x: b.x, y: b.y, r: b.blastRadius || 75, life: 5.0, dps: poolDps });
       }
 
       if (b.life <= 0 || b.y < -50 || b.y > this.H + 50 || b.x < -50 || b.x > this.W + 50) {
