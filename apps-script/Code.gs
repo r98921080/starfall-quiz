@@ -74,7 +74,7 @@ function doGet(e) {
     return jsonOutput_({
       ok: true,
       service: 'Starfall Quiz Learning API',
-      version: '1.2.0',
+      version: '1.2.6',
       actions: ['questions', 'students', 'student_progress', 'register_student', 'attempt', 'attempt_batch', 'settings', 'report', 'clean_questions']
     });
   } catch (err) {
@@ -171,8 +171,8 @@ function ensureStudentExists_(ss, studentId, name, grade) {
   const sheet = ss.getSheetByName(SHEETS.STUDENTS);
   if (!sheet) return;
   const rows = sheetObjects_(sheet);
-  const exists = rows.some(function(r) { return String(r.student_id).trim() === String(studentId).trim(); });
-  if (!exists) {
+  const foundIndex = rows.findIndex(function(r) { return String(r.student_id).trim() === String(studentId).trim(); });
+  if (foundIndex === -1) {
     const headers = getHeaders_(sheet);
     const newRow = {
       student_id: String(studentId).trim(),
@@ -185,6 +185,12 @@ function ensureStudentExists_(ss, studentId, name, grade) {
     };
     sheet.appendRow(headers.map(function(h) { return newRow[h] !== undefined ? newRow[h] : ''; }));
     logActivity_('AUTO_STUDENT', String(studentId).trim() + '｜' + String(name || studentId).trim());
+  } else if (name && (rows[foundIndex].display_name === '學員' || !rows[foundIndex].display_name || rows[foundIndex].display_name === studentId)) {
+    const headers = getHeaders_(sheet);
+    const nameColIdx = headers.indexOf('display_name') + 1;
+    if (nameColIdx > 0) {
+      sheet.getRange(foundIndex + 2, nameColIdx).setValue(String(name).trim());
+    }
   }
 }
 
@@ -349,7 +355,7 @@ function normalizeAttempt_(payload, ss) {
     concept_tags: question.concept_tags || '',
     knowledge_pressure: Number(payload.knowledge_pressure) || 0,
     weapon_quality: payload.weapon_quality || 'normal',
-    sync_status: 'synced'
+    sync_status: payload.student_name ? ('已同步 (' + payload.student_name + ')') : '已同步'
   };
 }
 

@@ -1725,15 +1725,41 @@ class DataStore {
       }
     }
 
-    // 2. 離線或本機模式：以 S0000 格式分配序號
+    // 2. 離線或本機/舊版備援模式：以 S0000 格式分配序號
     let localStudents = [];
     try {
       localStudents = JSON.parse(localStorage.getItem('starfall_local_students') || '[]');
     } catch(e) { localStudents = []; }
 
-    let existing = !forceNew ? localStudents.find(s => (s.name === name || s.display_name === name) && (!grade || s.grade === grade)) : null;
+    // 先在雲端名冊尋找同名學員
+    let existing = null;
+    if (!forceNew && Array.isArray(this.sheetStudents)) {
+      const matchInSheet = this.sheetStudents.find(s => (s.display_name === name || s.name === name) && (!grade || s.grade === grade));
+      if (matchInSheet) {
+        existing = {
+          student_id: matchInSheet.student_id,
+          name: matchInSheet.display_name || matchInSheet.name,
+          display_name: matchInSheet.display_name || matchInSheet.name,
+          grade: matchInSheet.grade || grade,
+          created_at: new Date().toISOString()
+        };
+      }
+    }
+    if (!existing && !forceNew) {
+      existing = localStudents.find(s => (s.name === name || s.display_name === name) && (!grade || s.grade === grade));
+    }
+
     if (!existing) {
       let maxNum = 0;
+      if (Array.isArray(this.sheetStudents)) {
+        this.sheetStudents.forEach(s => {
+          const m = String(s.student_id || '').match(/^S(\d+)$/i);
+          if (m) {
+            const num = parseInt(m[1], 10);
+            if (num > maxNum) maxNum = num;
+          }
+        });
+      }
       localStudents.forEach(s => {
         const m = String(s.student_id || '').match(/^S(\d+)$/i);
         if (m) {
@@ -1749,6 +1775,10 @@ class DataStore {
           if (num > maxNum) maxNum = num;
         }
       }
+      // 若新學員姓名並非預設之測試玩家/學員，且 maxNum < 1，起跳保底設為 1 (新學員自 S0002 起)
+      if (name !== '測試玩家' && name !== '學員' && maxNum < 1) {
+        maxNum = 1;
+      }
       const newNum = maxNum + 1;
       const newId = 'S' + String(newNum).padStart(4, '0');
       existing = { student_id: newId, name: name, display_name: name, grade: grade, created_at: new Date().toISOString() };
@@ -1759,7 +1789,7 @@ class DataStore {
     this.currentStudentId = existing.student_id;
     localStorage.setItem('starfall_student_id', existing.student_id);
     if (badgeEl) badgeEl.textContent = `序號：${existing.student_id}`;
-    if (statusEl) statusEl.textContent = `本機學員序號：${existing.student_id} (待連線 Google Sheet 自動記錄)`;
+    if (statusEl) statusEl.textContent = `✅ 駕駛員已就緒：${name} (${existing.student_id}) ｜ 作答將即時記錄至 Google Sheet`;
     this.addOrUpdateLocalStudent(existing.student_id, name, grade);
     this.updateStudentListUI();
     const mistakes = this.getMistakeCount(existing.student_id);
@@ -1897,34 +1927,77 @@ class DataStore {
       }
     }
 
-    // 立即發送單題直連 GET 請求 (免受 302 POST 重定向遺失 body 影響)
+    // 立即發送單題直連上報 (軌道 1：直接以原生 POST 寫入試算表，支援文字流 text/plain 避免 CORS preflight；軌道 2：GET 備援)
     const apiUrl = localStorage.getItem('starfall_gs_url') || (window.STARFALL_CONFIG && window.STARFALL_CONFIG.apiBaseUrl);
     let syncedImmediately = false;
     if (apiUrl && apiUrl.startsWith('http') && !apiUrl.includes('PASTE_YOUR')) {
+      const postPayload = {
+        action: 'attempt',
+        student_id: sid,
+        student_name: attempt.student_name,
+        student_grade: attempt.student_grade,
+        question_id: qid,
+        selected_option: attempt.selected_option || '',
+        correct: !!attempt.correct,
+        stage: Number(attempt.stage || 1),
+        boss_name: attempt.boss_name || '',
+        is_review: !!attempt.is_review,
+        timestamp: attempt.timestamp || new Date().toISOString(),
+        difficulty_at_time: Number(attempt.difficulty || attempt.difficulty_at_time || 1),
+        subject: attempt.subject || '國語文',
+        unit: attempt.unit || '',
+        skill: attempt.skill || '',
+        target_words: attempt.target_words || '',
+        concept_tags: attempt.concept_tags || '',
+        knowledge_pressure: Number(attempt.knowledge_pressure || 0),
+        weapon_quality: attempt.weapon_quality || 'normal'
+      };
+
+      // 軌道 1：即時 POST 寫入 (Web App v1.0.0+ 原生直接入庫)
       try {
-        const params = new URLSearchParams({
-          action: 'attempt',
-          student_id: sid,
-          student_name: attempt.student_name,
-          student_grade: attempt.student_grade,
-          question_id: qid,
-          selected_option: attempt.selected_option || '',
-          correct: attempt.correct ? 'true' : 'false',
-          stage: String(attempt.stage || 1),
-          boss_name: attempt.boss_name || '',
-          is_review: attempt.is_review ? 'true' : 'false',
-          timestamp: attempt.timestamp || new Date().toISOString()
+        const resPost = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(postPayload)
         });
-        const res = await fetch(`${apiUrl}?${params.toString()}`);
-        if (res.ok) {
-          const data = await res.json().catch(() => null);
+        if (resPost.ok) {
+          const data = await resPost.json().catch(() => null);
           if (data && data.ok && (data.attempt || data.count !== undefined)) {
             syncedImmediately = true;
-            console.log(`[Google Sheet] ✅ 單題即時直連記錄成功！學號：${sid}，題目：${qid}`);
+            console.log(`[Google Sheet] ✅ 單題即時 POST 成功！學號：${sid} (${attempt.student_name})，題目：${qid}`);
           }
         }
-      } catch (e) {
-        console.warn('[Google Sheet] 單題即時上報失敗，加入離線隊列：', e);
+      } catch (postErr) {
+        console.warn('[Google Sheet] POST 上報異常，嘗試 GET 備援：', postErr);
+      }
+
+      // 軌道 2：GET 備援
+      if (!syncedImmediately) {
+        try {
+          const params = new URLSearchParams({
+            action: 'attempt',
+            student_id: sid,
+            student_name: attempt.student_name,
+            student_grade: attempt.student_grade,
+            question_id: qid,
+            selected_option: attempt.selected_option || '',
+            correct: attempt.correct ? 'true' : 'false',
+            stage: String(attempt.stage || 1),
+            boss_name: attempt.boss_name || '',
+            is_review: attempt.is_review ? 'true' : 'false',
+            timestamp: attempt.timestamp || new Date().toISOString()
+          });
+          const res = await fetch(`${apiUrl}?${params.toString()}`);
+          if (res.ok) {
+            const data = await res.json().catch(() => null);
+            if (data && data.ok && (data.attempt || data.count !== undefined)) {
+              syncedImmediately = true;
+              console.log(`[Google Sheet] ✅ 單題 GET 備援成功！學號：${sid}，題目：${qid}`);
+            }
+          }
+        } catch (e) {
+          console.warn('[Google Sheet] 單題即時上報失敗，加入離線隊列：', e);
+        }
       }
     }
 
@@ -1946,37 +2019,37 @@ class DataStore {
       const batch = this.offlineQueue.slice(0, 10);
       let synced = false;
 
-      // 軌道 1：GET 優先批次上報 (雙重容錯，URL 傳參免受 302 重定向影響)
+      // 軌道 1：POST 批次直接上報 (Web App 原生支援)
       try {
-        const encoded = encodeURIComponent(JSON.stringify(batch));
-        const getUrl = `${apiUrl}?action=attempt_batch&attempts=${encoded}&data=${encoded}`;
-        const resGet = await fetch(getUrl);
-        if (resGet.ok) {
-          const data = await resGet.json().catch(() => null);
+        const res = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'attempt_batch', attempts: batch })
+        });
+        if (res.ok) {
+          const data = await res.json().catch(() => null);
           if (data && data.ok && (data.count !== undefined || data.attempt !== undefined)) {
             synced = true;
           }
         }
-      } catch (getErr) {
-        console.warn('[Google Sheet] GET 批次同步失敗，嘗試 POST 備援：', getErr);
+      } catch (postErr) {
+        console.warn('[Google Sheet] POST 批次同步失敗，嘗試 GET 備援：', postErr);
       }
 
-      // 軌道 2：POST 批次備援上報
+      // 軌道 2：GET 批次備援上報
       if (!synced) {
         try {
-          const res = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({ action: 'attempt_batch', attempts: batch })
-          });
-          if (res.ok) {
-            const data = await res.json().catch(() => null);
+          const encoded = encodeURIComponent(JSON.stringify(batch));
+          const getUrl = `${apiUrl}?action=attempt_batch&attempts=${encoded}&data=${encoded}`;
+          const resGet = await fetch(getUrl);
+          if (resGet.ok) {
+            const data = await resGet.json().catch(() => null);
             if (data && data.ok && (data.count !== undefined || data.attempt !== undefined)) {
               synced = true;
             }
           }
-        } catch (postErr) {
-          console.warn('[Google Sheet] POST 備援同步作答亦失敗：', postErr);
+        } catch (getErr) {
+          // ignore
         }
       }
 
@@ -1986,6 +2059,60 @@ class DataStore {
           localStorage.setItem('starfall_offline_attempt_queue_v1', JSON.stringify(this.offlineQueue));
         } catch (e) {}
         console.log(`[Google Sheet] ✅ 成功同步 ${batch.length} 筆作答紀錄至試算表！`);
+      } else {
+        // 軌道 3：智能解耦與自我修復 —— 若整批失敗（如遠端 v1.0.0 遇缺題拋錯），改為逐題單筆上報，並自動剔除毒丸，絕不卡死隊列
+        const succeededIndices = [];
+        for (let i = 0; i < batch.length; i++) {
+          const item = batch[i];
+          try {
+            const resSingle = await fetch(apiUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+              body: JSON.stringify({
+                action: 'attempt',
+                student_id: item.student_id,
+                student_name: item.student_name,
+                student_grade: item.student_grade,
+                question_id: item.question_id,
+                selected_option: item.selected_option || '',
+                correct: !!item.correct,
+                stage: Number(item.stage || 1),
+                boss_name: item.boss_name || '',
+                is_review: !!item.is_review,
+                timestamp: item.timestamp || new Date().toISOString(),
+                difficulty_at_time: Number(item.difficulty || item.difficulty_at_time || 1),
+                subject: item.subject || '國語文',
+                unit: item.unit || '',
+                skill: item.skill || '',
+                target_words: item.target_words || '',
+                concept_tags: item.concept_tags || '',
+                knowledge_pressure: Number(item.knowledge_pressure || 0),
+                weapon_quality: item.weapon_quality || 'normal'
+              })
+            });
+            if (resSingle.ok) {
+              const dataSingle = await resSingle.json().catch(() => null);
+              if (dataSingle && dataSingle.ok) {
+                succeededIndices.push(i);
+              } else if (dataSingle && dataSingle.error && dataSingle.error.includes('找不到 question_id')) {
+                console.warn(`[Google Sheet] ⚠️ 題目 ${item.question_id} 於遠端試算表未建立，移出隊列以免阻塞後續紀錄。`);
+                succeededIndices.push(i);
+              }
+            }
+          } catch (errSingle) {
+            // 單題亦網路斷線，跳出迴圈保留於隊列
+            break;
+          }
+        }
+        if (succeededIndices.length > 0) {
+          for (let k = succeededIndices.length - 1; k >= 0; k--) {
+            this.offlineQueue.splice(succeededIndices[k], 1);
+          }
+          try {
+            localStorage.setItem('starfall_offline_attempt_queue_v1', JSON.stringify(this.offlineQueue));
+          } catch (e) {}
+          console.log(`[Google Sheet] ✅ 逐筆解耦修復：已消化 ${succeededIndices.length} 筆隊列項目！`);
+        }
       }
     } catch (e) {
       console.warn('[Google Sheet] 雲端同步暫時離線，紀錄保留於本機隊列：', e);
@@ -3226,8 +3353,12 @@ class Game {
 
     // 點擊確認學員按鈕
     setClick('registerStudentBtn', async () => {
-      const isNew = studentSelect && studentSelect.value === '__new__';
-      const name = (nameInput && nameInput.value.trim()) || '學員';
+      const inputName = (nameInput && nameInput.value.trim()) || '';
+      const currentName = this.dataStore.studentName || '學員';
+      const isNew = (studentSelect && studentSelect.value === '__new__') ||
+        (inputName !== '' && inputName !== currentName && inputName !== '測試玩家') ||
+        (inputName !== '' && (currentName === '測試玩家' || currentName === '學員'));
+      const name = inputName || currentName;
       const grade = (gradeSelect && gradeSelect.value) || '三年級';
       const sid = await this.dataStore.syncStudentProfile(name, grade, isNew);
       this.updatePermissionUI();
@@ -3236,8 +3367,12 @@ class Game {
 
     if (nameInput) {
       nameInput.addEventListener('change', () => {
-        const isNew = studentSelect && studentSelect.value === '__new__';
-        this.dataStore.syncStudentProfile(nameInput.value, gradeSelect ? gradeSelect.value : '三年級', isNew);
+        const inputName = (nameInput && nameInput.value.trim()) || '';
+        const currentName = this.dataStore.studentName || '學員';
+        const isNew = (studentSelect && studentSelect.value === '__new__') ||
+          (inputName !== '' && inputName !== currentName && inputName !== '測試玩家') ||
+          (inputName !== '' && (currentName === '測試玩家' || currentName === '學員'));
+        this.dataStore.syncStudentProfile(inputName || '學員', gradeSelect ? gradeSelect.value : '三年級', isNew);
         this.updatePermissionUI();
       });
     }
@@ -3263,10 +3398,13 @@ class Game {
       try {
         const currentName = this.dataStore.studentName || '學員';
         const inputName = (nameInput && nameInput.value.trim()) || '';
-        const isExplicitNew = studentSelect && studentSelect.value === '__new__' && inputName !== '' && inputName !== currentName;
+        // 智慧判定新玩家：若選單選新學員，或好友輸入了新姓名（非測試玩家/學員且與當前不同），自動視為新獨立學員
+        const isNewPilot = (studentSelect && studentSelect.value === '__new__') ||
+          (inputName !== '' && inputName !== currentName && inputName !== '測試玩家' && inputName !== '學員') ||
+          (inputName !== '' && (currentName === '測試玩家' || currentName === '學員'));
         const name = inputName || currentName;
         const grade = (gradeSelect && gradeSelect.value) || this.dataStore.studentGrade || '三年級';
-        await this.dataStore.syncStudentProfile(name, grade, isExplicitNew);
+        await this.dataStore.syncStudentProfile(name, grade, isNewPilot);
         this.updatePermissionUI();
 
         const select = document.getElementById('startStageSelect');
@@ -4920,10 +5058,10 @@ class Game {
     this.wave = 1;
     this.score = 0;
     this.resetPlayerStatusEffects();
-    if (stage === 1 && this.dataStore) {
+    this.sessionTotalAnswered = 0;
+    this.sessionTotalCorrect = 0;
+    if (this.dataStore) {
       this.dataStore.resetSessionQuestions();
-      this.sessionTotalAnswered = 0;
-      this.sessionTotalCorrect = 0;
     }
     this.player.hp = 3;
     this.player.shield = false;
@@ -6748,6 +6886,7 @@ class Game {
     const q = this.currentQuiz;
     const isCorrect = selectedIdx === q.ans;
     const btns = document.querySelectorAll('.opt-btn');
+    btns.forEach(b => b.disabled = true);
 
     // 檢查是否為「舊錯題重複答錯」
     const sid = (this.dataStore && this.dataStore.currentStudentId) || 'S0001';
@@ -6784,16 +6923,29 @@ class Game {
       }
     }
 
-    this.dataStore.recordAttempt({
-      question_id: q.question_id,
-      question: q.question,
-      selected_option: 'ABCD'[selectedIdx],
-      correct: isCorrect,
-      timestamp: new Date().toISOString(),
-      stage: this.stage,
-      boss_name: this.currentBoss ? this.currentBoss.name : 'MiniBoss',
-      is_review: q.isReview
-    });
+    if (this.dataStore) {
+      this.dataStore.recordAttempt({
+        question_id: q.question_id,
+        question: q.question,
+        selected_option: 'ABCD'[selectedIdx],
+        correct: isCorrect,
+        timestamp: new Date().toISOString(),
+        stage: this.stage,
+        boss_name: this.currentBoss ? this.currentBoss.name : 'MiniBoss',
+        is_review: !!q.isReview,
+        student_id: (this.dataStore && this.dataStore.currentStudentId) || 'S0001',
+        student_name: (this.dataStore && this.dataStore.studentName) || '學員',
+        student_grade: (this.dataStore && this.dataStore.studentGrade) || '三年級',
+        difficulty: q.difficulty || 1,
+        subject: q.subject || '國語文',
+        unit: q.unit || '',
+        skill: q.skill || '',
+        target_words: Array.isArray(q.target_words) ? q.target_words.join('|') : (q.target_words || ''),
+        concept_tags: Array.isArray(q.concept_tags) ? q.concept_tags.join('|') : (q.concept_tags || ''),
+        knowledge_pressure: this.knowledgePressure || 0,
+        weapon_quality: this.currentBoss ? (this.quizCorrectCount >= 5 ? 'mythic' : 'normal') : 'normal'
+      });
+    }
 
     if (q.explanation_short) {
       const expBox = document.getElementById('quizExplain');
@@ -6812,6 +6964,9 @@ class Game {
 
   endQuizPhase() {
     document.getElementById('quizScreen').classList.add('hidden');
+    if (this.dataStore) {
+      this.dataStore.syncOfflineQueue();
+    }
     this.openUpgradeScreen();
   }
 
@@ -7295,7 +7450,20 @@ class Game {
     const correct = this.sessionTotalCorrect || 0;
     const rate = total > 0 ? Math.round((correct / total) * 100) : 0;
     const accEl = document.getElementById('endAcc');
-    if (accEl) accEl.textContent = `${rate}% (${correct}/${total} 題)`;
+    if (accEl) {
+      if (total > 0) {
+        accEl.textContent = `${rate}% (${correct}/${total} 題)`;
+        accEl.style.fontSize = '24px';
+        accEl.style.color = rate >= 70 ? 'var(--green)' : (rate >= 40 ? 'var(--gold)' : '#ff4766');
+      } else {
+        accEl.textContent = '未進入答題階段';
+        accEl.style.fontSize = '16px';
+        accEl.style.color = 'var(--text-muted)';
+      }
+    }
+    if (this.dataStore) {
+      this.dataStore.syncOfflineQueue();
+    }
     document.getElementById('gameOverScreen').classList.remove('hidden');
     this.sound.speak('恭喜！十位神話機神全數擊破！');
   }
@@ -7309,7 +7477,20 @@ class Game {
     const correct = this.sessionTotalCorrect || 0;
     const rate = total > 0 ? Math.round((correct / total) * 100) : 0;
     const accEl = document.getElementById('endAcc');
-    if (accEl) accEl.textContent = `${rate}% (${correct}/${total} 題)`;
+    if (accEl) {
+      if (total > 0) {
+        accEl.textContent = `${rate}% (${correct}/${total} 題)`;
+        accEl.style.fontSize = '24px';
+        accEl.style.color = rate >= 70 ? 'var(--green)' : (rate >= 40 ? 'var(--gold)' : '#ff4766');
+      } else {
+        accEl.textContent = '未進入答題階段';
+        accEl.style.fontSize = '16px';
+        accEl.style.color = 'var(--text-muted)';
+      }
+    }
+    if (this.dataStore) {
+      this.dataStore.syncOfflineQueue();
+    }
     document.getElementById('gameOverScreen').classList.remove('hidden');
   }
 
