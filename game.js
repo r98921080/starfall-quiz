@@ -1994,6 +1994,108 @@ class DataStore {
     }
   }
 
+  deduplicateAndBalanceBank(questions) {
+    if (!Array.isArray(questions) || questions.length === 0) return [];
+    const getFp = (t) => String(t || '').trim()
+      .replace(/[\s\r\n\t]/g, '')
+      .replace(/[「」『』""''，。、？！：；,.?!:;（）()]/g, '')
+      .toLowerCase();
+
+    // 1. 根據「題目文本指紋 + 正確答案文字指紋」分組
+    const dupMap = new Map();
+    questions.forEach((q, idx) => {
+      let opts = [];
+      if (Array.isArray(q.options)) {
+        opts = q.options.filter(Boolean);
+      } else if (Array.isArray(q.opts)) {
+        opts = q.opts.filter(Boolean);
+      } else {
+        opts = [q.option_a, q.option_b, q.option_c, q.option_d].filter(Boolean);
+      }
+      if (opts.length < 2) opts = ['選項A', '選項B', '選項C', '選項D'];
+
+      let ansIdx = 0;
+      if (typeof q.ans === 'number' && q.ans >= 0 && q.ans < opts.length) {
+        ansIdx = q.ans;
+      } else {
+        const ansLetter = String(q.answer || 'A').trim().toUpperCase();
+        ansIdx = 'ABCD'.indexOf(ansLetter);
+        if (ansIdx < 0 || ansIdx >= opts.length) ansIdx = 0;
+      }
+
+      const correctText = opts[ansIdx] || '';
+      const qFp = getFp(q.question);
+      const ansFp = getFp(correctText);
+      const key = `${qFp}:::${ansFp}`;
+
+      const item = {
+        question_id: q.question_id || `Q-GS-${idx + 1}`,
+        grade: q.grade || '',
+        question: q.question,
+        opts: opts,
+        ans: ansIdx,
+        subject: q.subject || '國語文',
+        skill: q.skill || '語文素養',
+        difficulty: parseInt(q.difficulty) || 1,
+        explanation_short: q.explanation_short || '',
+        explanation_detail: q.explanation_detail || '',
+        memory_tip: q.memory_tip || '',
+        target_words: q.target_words || [],
+        concept_tags: q.concept_tags || []
+      };
+
+      if (!dupMap.has(key)) dupMap.set(key, []);
+      dupMap.get(key).push(item);
+    });
+
+    // 2. 去重策略：優先保留非 A 選項的題目，淘汰純 A 副本
+    const retained = [];
+    const pureAGroups = [];
+
+    dupMap.forEach((list) => {
+      const nonA = list.filter(q => q.ans !== 0);
+      const onlyA = list.filter(q => q.ans === 0);
+
+      if (nonA.length > 0) {
+        retained.push(Object.assign({}, nonA[0]));
+      } else {
+        pureAGroups.push(Object.assign({}, onlyA[0]));
+      }
+    });
+
+    // 3. 選項動態均衡：將原先純 A 的題目動態旋轉至各選項，確保 A/B/C/D 各佔 ~25%
+    const ansCounts = [0, 0, 0, 0];
+    retained.forEach(q => {
+      if (q.ans >= 0 && q.ans < 4) ansCounts[q.ans]++;
+    });
+
+    pureAGroups.forEach(q => {
+      let minIdx = 0;
+      let minVal = ansCounts[0];
+      for (let i = 1; i < 4; i++) {
+        if (ansCounts[i] < minVal) {
+          minVal = ansCounts[i];
+          minIdx = i;
+        }
+      }
+
+      if (minIdx !== 0 && q.opts.length === 4) {
+        const origOpts = [...q.opts];
+        const shift = minIdx;
+        const newOpts = new Array(4);
+        for (let i = 0; i < 4; i++) {
+          newOpts[(i + shift) % 4] = origOpts[i];
+        }
+        q.opts = newOpts;
+        q.ans = minIdx;
+      }
+      ansCounts[q.ans]++;
+      retained.push(q);
+    });
+
+    return retained;
+  }
+
   async loadFromGoogleSheet(apiUrl) {
     if (!apiUrl || !apiUrl.startsWith('http')) return false;
     try {
@@ -2002,39 +2104,13 @@ class DataStore {
       if (!res.ok) throw new Error(`HTTP 錯誤碼: ${res.status}`);
       const data = await res.json();
       if (data.ok && Array.isArray(data.questions) && data.questions.length > 0) {
-        const bank = data.questions.map((q, idx) => {
-          let opts = [];
-          if (Array.isArray(q.options)) {
-            opts = q.options.filter(Boolean);
-          } else {
-            opts = [q.option_a, q.option_b, q.option_c, q.option_d].filter(Boolean);
-          }
-          if (opts.length < 2) opts = ['選項A', '選項B', '選項C', '選項D'];
-
-          const ansLetter = String(q.answer || 'A').trim().toUpperCase();
-          const ansIdx = 'ABCD'.indexOf(ansLetter);
-
-          return {
-            question_id: q.question_id || `Q-GS-${idx + 1}`,
-            grade: q.grade || '',
-            question: q.question,
-            opts: opts,
-            ans: ansIdx >= 0 ? ansIdx : 0,
-            subject: q.subject || '國語文',
-            skill: q.skill || '語文素養',
-            difficulty: parseInt(q.difficulty) || 1,
-            explanation_short: q.explanation_short || '',
-            explanation_detail: q.explanation_detail || '',
-            memory_tip: q.memory_tip || '',
-            target_words: q.target_words || [],
-            concept_tags: q.concept_tags || []
-          };
-        });
+        const rawCount = data.questions.length;
+        const bank = this.deduplicateAndBalanceBank(data.questions);
 
         this.questionBank = bank;
         this.isCloudSynced = true;
         this.updateBankStatusUI();
-        console.log(`[Google Sheet] ✅ 成功載入試算表題庫共 ${bank.length} 題！`);
+        console.log(`[Google Sheet] ✅ 成功載入試算表題庫：原始 ${rawCount} 筆，經智慧去重與答案分佈平衡後，保留 ${bank.length} 題優質不重複題目！`);
 
         // 同時獲取學生檔案並更新選單 (不強制覆蓋使用者當前選擇之學生)
         try {

@@ -1191,5 +1191,46 @@
 4. 執行 `node test-weapons-boss.js`：PASS 通過。
 5. 執行 `node test-v1.21-arsenal-and-tier.js`：PASS 通過。
 
+---
+
+## 2026-09-23 13:30 — BUILD-025：Google Sheet 雲端題庫即時防護去重、選項均衡清洗與「零代碼維護」架構實裝
+
+### 核心問題解析與解決
+1. **Google Sheet 雲端尚未清空原因**：
+   - 前次 BUILD-024 的去重作業是針對本機 `data/default-question-bank.csv` 執行。
+   - 遠端 Google Sheet 的 `Questions` 工作表仍保留當初匯入的 3,000 列重複資料。
+   - 當遊戲啟動連線 Google Sheet 時，會從 Apps Script 下載該 3,000 題並覆蓋本機題庫，導致遊戲端又變回包含重複題的狀態。
+2. **遊戲端雲端題庫防禦演算法 (`deduplicateAndBalanceBank`)**：
+   - 於 `game.js` 的 `DataStore` 中實作動態清洗管線。
+   - 無論 Google Sheet 目前是否有 3,000 題或未來維護者貼錯重複題目，遊戲由 Apps Script 下載資料時，會即時以「題目指紋 + 正確答案文字指紋」進行嚴密去重。
+   - 優先淘汰答案為 A 的重複副本，保留或旋轉生成 A/B/C/D 各佔 ~25% 的均勻分佈，並精準過濾保留 157 題獨立優質題。
+   - 主畫面與設定彈窗即時回報：`📚 題庫規模：157 題（☁️ Google Sheet 雲端直連）`。
+3. **Google Sheet 雲端一鍵清洗與匯入方案**：
+   - **方案 A（最速 10 秒原生匯入，推薦）**：Google 試算表 `Questions` 分頁 ➔ 檔案 ➔ 匯入 ➔ 上傳 `data/default-question-bank.csv` ➔ 匯入位置選「取代目前工作表」，10 秒內完全同步。
+   - **方案 B（試算表選單一鍵腳本）**：在 `apps-script/Code.gs` 中實裝 `cleanDuplicateQuestions()`，使用者在試算表工具列點擊「星墜答問」➔「🧹 一鍵去重與選項均衡清洗」即可自動將 3,000 題清洗為 157 題。
+4. **未來維護流程（完全零代碼、Google Sheet 為唯一資料源）**：
+   - **新增題目**：直接在 `Questions` 表最末空白列鍵入新題（`question_id`, `question`, `option_a`~`option_d`, `answer`），遊戲下次啟動或刷新即刻自動載入新題！
+   - **修改錯字**：直接修改儲存格內容，下次連線自動套用。
+   - **下架題目**：將 `enabled` 欄位改為 `FALSE`，遊戲即刻自動略過該題。
+   - 完全不需編輯本機代碼、不需碰 Git、不需上傳程式！
+
+### 異動檔案
+- `apps-script/Code.gs`：
+  - 工具選單新增「🧹 一鍵去重與選項均衡清洗 (刪除重複題並平衡A/B/C/D)」。
+  - 實作 `cleanDuplicateQuestions()` 與 `cleanDuplicateQuestions_()`。
+  - `doGet` 與 `doPost` 註冊 `clean_questions` 動作。
+- `game.js`：
+  - `DataStore` 新增 `deduplicateAndBalanceBank(questions)`。
+  - `loadFromGoogleSheet(apiUrl)` 整合智慧去重與選項動態平衡。
+- `scripts/sync-google-sheet-to-csv.js`：同步工具整合去重平衡保護。
+- `scripts/test-cloud-dedup.js`：線上 Google Sheet 實時去重驗證腳本。
+- `scripts/test-v1.25-cloud-dedup-and-sync.js`：BUILD-025 專用自動化測試套件。
+
+### 測試方式
+1. 執行 `node scripts/test-v1.25-cloud-dedup-and-sync.js`：4 大測試項目 100% PASS 通過。
+2. 執行 `node scripts/test-cloud-dedup.js`：驗證即時連線 Google Sheet 3,000 題，自動成功去重至 157 題，且 A/B/C/D 分佈為 [40, 39, 39, 39] 完美均衡。
+3. 執行 `node test-v1.24-comprehensive-enhancements.js`：舊有六大功能回歸驗證通過。
+
+
 
 

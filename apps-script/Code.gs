@@ -32,6 +32,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('星墜答問')
     .addItem('初始化與檢查資料表', 'setupStarfall')
+    .addItem('🧹 一鍵去重與選項均衡清洗 (刪除重複題並平衡A/B/C/D)', 'cleanDuplicateQuestions')
     .addItem('更新家長報表', 'refreshReports')
     .addItem('建立測試作答資料', 'createDemoAttempts')
     .addToUi();
@@ -66,11 +67,15 @@ function doGet(e) {
     }
     if (action === 'settings') return jsonOutput_(getSettings_());
     if (action === 'report') return jsonOutput_(getReportData_(e && e.parameter));
+    if (action === 'clean_questions') {
+      const result = cleanDuplicateQuestions_();
+      return jsonOutput_({ ok: true, message: '去重清洗完成', result: result });
+    }
     return jsonOutput_({
       ok: true,
       service: 'Starfall Quiz Learning API',
       version: '1.2.0',
-      actions: ['questions', 'students', 'student_progress', 'register_student', 'attempt', 'attempt_batch', 'settings', 'report']
+      actions: ['questions', 'students', 'student_progress', 'register_student', 'attempt', 'attempt_batch', 'settings', 'report', 'clean_questions']
     });
   } catch (err) {
     return jsonOutput_({ ok: false, error: String(err.message || err) });
@@ -87,6 +92,10 @@ function doPost(e) {
     if (action === 'refresh_reports') {
       refreshReports();
       return jsonOutput_({ ok: true, message: '報表已更新。' });
+    }
+    if (action === 'clean_questions') {
+      const result = cleanDuplicateQuestions_();
+      return jsonOutput_({ ok: true, message: '去重清洗完成', result: result });
     }
     return jsonOutput_({ ok: false, error: '不支援的 action：' + action });
   } catch (err) {
@@ -675,3 +684,143 @@ function coerceValue_(value) {
   if (text !== '' && !isNaN(Number(text))) return Number(text);
   return value;
 }
+
+/**
+ * 試算表選單專用：一鍵去重與選項均衡清洗
+ */
+function cleanDuplicateQuestions() {
+  const ui = SpreadsheetApp.getUi();
+  const resp = ui.alert(
+    '確認執行題庫去重與選項平衡清洗',
+    '此操作將會：\n1. 比對 Questions 工作表中的重複題目\n2. 優先刪除重複且答案為 A 的題目\n3. 針對全 A 題目自動旋轉選項，平衡 A/B/C/D 正確答案比例（各約 25%）\n\n確定要開始執行清洗嗎？',
+    ui.ButtonSet.YES_NO
+  );
+  if (resp !== ui.Button.YES) return;
+
+  try {
+    const result = cleanDuplicateQuestions_();
+    ui.alert(
+      '清洗完成！',
+      '去重清洗作業已成功執行完成：\n' +
+      '• 原始題目數：' + result.originalCount + ' 列\n' +
+      '• 刪除重複題數：' + result.deletedCount + ' 列\n' +
+      '• 清洗後保留題目數：' + result.cleanCount + ' 列\n' +
+      '• A/B/C/D 正確答案已均衡分配！',
+      ui.ButtonSet.OK
+    );
+  } catch (err) {
+    ui.alert('清洗失敗', '錯誤原因：' + String(err.message || err), ui.ButtonSet.OK);
+  }
+}
+
+/**
+ * 核心清洗邏輯：讀取 Questions 工作表，去重、優先去 A、旋轉平衡選項並寫回
+ */
+function cleanDuplicateQuestions_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SHEETS.QUESTIONS);
+  if (!sheet) throw new Error('找不到 Questions 工作表');
+
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return { originalCount: 0, deletedCount: 0, cleanCount: 0 };
+
+  const headers = data[0].map(function(h) { return String(h || '').trim().toLowerCase(); });
+  const qIdx = headers.indexOf('question');
+  const aIdx = headers.indexOf('option_a');
+  const bIdx = headers.indexOf('option_b');
+  const cIdx = headers.indexOf('option_c');
+  const dIdx = headers.indexOf('option_d');
+  const ansIdx = headers.indexOf('answer');
+
+  if (qIdx === -1 || ansIdx === -1) {
+    throw new Error('Questions 工作表缺少 question 或 answer 標題列');
+  }
+
+  const getFp = function(t) {
+    return String(t || '').trim()
+      .replace(/[\s\r\n\t]/g, '')
+      .replace(/[「」『』""''，。、？！：；,.?!:;（）()]/g, '')
+      .toLowerCase();
+  };
+
+  const getCorrectText = function(row) {
+    const ansLetter = String(row[ansIdx] || 'A').toUpperCase().trim();
+    const map = { A: aIdx, B: bIdx, C: cIdx, D: dIdx };
+    return row[map[ansLetter] || aIdx] || '';
+  };
+
+  const originalRows = data.slice(1);
+  const dupMap = {};
+  originalRows.forEach(function(row) {
+    if (!row || !row[qIdx]) return;
+    const qFp = getFp(row[qIdx]);
+    const ansFp = getFp(getCorrectText(row));
+    const key = qFp + ':::' + ansFp;
+    if (!dupMap[key]) dupMap[key] = [];
+    dupMap[key].push(row);
+  });
+
+  const retained = [];
+  const pureAGroups = [];
+
+  Object.keys(dupMap).forEach(function(key) {
+    const list = dupMap[key];
+    const nonA = list.filter(function(r) { return String(r[ansIdx] || '').toUpperCase().trim() !== 'A'; });
+    const onlyA = list.filter(function(r) { return String(r[ansIdx] || '').toUpperCase().trim() === 'A'; });
+
+    if (nonA.length > 0) {
+      retained.push(nonA[0].slice());
+    } else {
+      pureAGroups.push(onlyA[0].slice());
+    }
+  });
+
+  const ansCounts = { A: 0, B: 0, C: 0, D: 0 };
+  retained.forEach(function(r) {
+    const a = String(r[ansIdx] || 'A').toUpperCase().trim();
+    if (ansCounts[a] !== undefined) ansCounts[a]++;
+  });
+
+  const letters = ['A', 'B', 'C', 'D'];
+  pureAGroups.forEach(function(r) {
+    let minLetter = 'A';
+    let minVal = ansCounts['A'];
+    letters.forEach(function(l) {
+      if (ansCounts[l] < minVal) {
+        minVal = ansCounts[l];
+        minLetter = l;
+      }
+    });
+
+    if (minLetter !== 'A' && aIdx !== -1 && bIdx !== -1 && cIdx !== -1 && dIdx !== -1) {
+      const origOpts = [r[aIdx], r[bIdx], r[cIdx], r[dIdx]];
+      const targetIdx = letters.indexOf(minLetter);
+      const shift = targetIdx;
+      const newOpts = new Array(4);
+      for (let i = 0; i < 4; i++) {
+        newOpts[(i + shift) % 4] = origOpts[i];
+      }
+      r[aIdx] = newOpts[0];
+      r[bIdx] = newOpts[1];
+      r[cIdx] = newOpts[2];
+      r[dIdx] = newOpts[3];
+      r[ansIdx] = minLetter;
+    }
+    ansCounts[r[ansIdx]]++;
+    retained.push(r);
+  });
+
+  // 清除舊資料並寫回清洗後的去重資料
+  sheet.clearContents();
+  const outputRows = [data[0]].concat(retained);
+  sheet.getRange(1, 1, outputRows.length, outputRows[0].length).setValues(outputRows);
+
+  logActivity_('CLEAN_QUESTIONS', '去重清洗完成，原列數: ' + originalRows.length + '，清洗後列數: ' + retained.length);
+
+  return {
+    originalCount: originalRows.length,
+    deletedCount: originalRows.length - retained.length,
+    cleanCount: retained.length
+  };
+}
+
