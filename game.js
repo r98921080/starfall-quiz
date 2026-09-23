@@ -195,7 +195,8 @@ class BgmEngine {
   }
 
   // ----------------------------------------------------
-  // Stage 1: 機甲庫巴・烈焰暴君 (瑪利歐風格・8-Bit NES 方波晶片音樂・輕快跳步主題)
+  // ----------------------------------------------------
+  // Stage 1: 機甲庫巴・烈焰暴君 (瑪利歐風格・8-Bit NES 方波晶片音樂・272步完整長篇大循環)
   // ----------------------------------------------------
   tickStage1Mario(t, s, m, b, sub) {
     // 1. 輕快 8-Bit 鼓點
@@ -209,22 +210,76 @@ class BgmEngine {
       this.playHihat(t, 0.05);
     }
 
-    // 2. 8-Bit 方波跳步貝斯 (C3 - G3 - C4 - E3 - A3)
-    const marioBass = [130.81, 196.00, 261.63, 164.81, 220.00, 196.00, 174.61, 164.81];
+    // 2. 8-Bit 方波跳步 Walking Bassline (隨小節主題旋律自動對位)
+    const marioBassLine = [
+      // Intro (4 beats)
+      146.83, 146.83, 146.83, 196.00,
+      // Part A1 (8 beats: C - A - F - G)
+      130.81, 164.81, 196.00, 220.00, 174.61, 220.00, 196.00, 246.94,
+      130.81, 164.81, 196.00, 220.00, 196.00, 246.94, 130.81, 196.00,
+      // Part A2 (8 beats)
+      130.81, 164.81, 196.00, 220.00, 174.61, 220.00, 196.00, 246.94,
+      130.81, 164.81, 196.00, 220.00, 196.00, 246.94, 130.81, 196.00,
+      // Part B1 (8 beats: C - F - C - G)
+      130.81, 196.00, 174.61, 220.00, 130.81, 196.00, 196.00, 246.94,
+      130.81, 196.00, 174.61, 220.00, 196.00, 246.94, 130.81, 196.00,
+      // Part B2 (8 beats: Ab - Bb - C)
+      207.65, 207.65, 233.08, 233.08, 261.63, 261.63, 196.00, 196.00,
+      // Part C (8 beats: Castle / Coin fanfare)
+      130.81, 130.81, 130.81, 130.81, 174.61, 174.61, 196.00, 196.00
+    ];
     if (sub === 0 || sub === 2) {
-      this.playSquareWave(t, marioBass[(m * 4 + b) % marioBass.length], 0.08, 0.18);
+      const bIdx = Math.floor(s / 4) % marioBassLine.length;
+      this.playSquareWave(t, marioBassLine[bIdx], 0.08, 0.16);
     }
 
-    // 3. 瑪利歐風格輕快經典主題琶音旋律 (C大調快樂動感)
-    const marioMelody = [
+    // 3. 瑪利歐地上世界經典主旋律（272 步長篇循環組曲，約 34 秒無重複大循環）
+    // Intro(16) + Theme A(32) + Theme A(32) + Theme B1(32) + Theme B2(32) + Theme C(32) + Reprise A(32) + Reprise B(64) = 272 steps
+    const intro = [
       659.25, 659.25, 0, 659.25, 0, 523.25, 659.25, 0,
-      783.99, 0, 0, 0, 392.00, 0, 0, 0,
-      523.25, 0, 0, 392.00, 0, 0, 329.63, 0,
-      0, 440.00, 0, 493.88, 0, 466.16, 440.00, 0
+      783.99, 0, 0, 0, 392.00, 0, 0, 0
     ];
-    const note = marioMelody[s % marioMelody.length];
+    const partA = [
+      523.25, 0, 0, 392.00, 0, 0, 329.63, 0,
+      0, 440.00, 0, 493.88, 0, 466.16, 440.00, 0,
+      392.00, 659.25, 783.99, 880.00, 0, 698.46, 783.99, 0,
+      659.25, 0, 523.25, 587.33, 493.88, 0, 0, 0
+    ];
+    const partB1 = [
+      0, 0, 783.99, 739.99, 698.46, 622.25, 0, 659.25,
+      0, 415.30, 440.00, 523.25, 0, 440.00, 523.25, 587.33,
+      0, 0, 783.99, 739.99, 698.46, 622.25, 0, 659.25,
+      0, 1046.50, 0, 1046.50, 1046.50, 0, 0, 0
+    ];
+    const partB2 = [
+      0, 0, 783.99, 739.99, 698.46, 622.25, 0, 659.25,
+      0, 415.30, 440.00, 523.25, 0, 440.00, 523.25, 587.33,
+      0, 0, 622.25, 0, 0, 587.33, 0, 0,
+      523.25, 0, 0, 0, 0, 0, 0, 0
+    ];
+    const partC = [
+      523.25, 523.25, 0, 523.25, 0, 523.25, 587.33, 0,
+      659.25, 523.25, 0, 440.00, 392.00, 0, 0, 0,
+      523.25, 523.25, 0, 523.25, 0, 523.25, 587.33, 659.25,
+      0, 0, 0, 0, 0, 0, 0, 0
+    ];
+
+    if (!this._marioFullTrack) {
+      this._marioFullTrack = [...intro, ...partA, ...partA, ...partB1, ...partB2, ...partC, ...partA, ...partB1, ...partB2];
+    }
+    const stepIdx = s % this._marioFullTrack.length;
+    const note = this._marioFullTrack[stepIdx];
     if (note > 0) {
       this.playSquareWave(t, note, 0.10, 0.22);
+    }
+
+    // 4. 第二聲道和聲伴奏 (前奏立體和弦)
+    const marioHarmony = [
+      329.63, 329.63, 0, 329.63, 0, 261.63, 329.63, 0,
+      392.00, 0, 0, 0, 196.00, 0, 0, 0
+    ];
+    if (stepIdx < 16 && marioHarmony[stepIdx] > 0) {
+      this.playSquareWave(t, marioHarmony[stepIdx], 0.08, 0.12);
     }
   }
 
@@ -3285,6 +3340,9 @@ class Game {
     this.quizQueue = [];
     this.currentQuiz = null;
     this.quizCorrectCount = 0;
+    this.sessionTotalAnswered = 0;
+    this.sessionTotalCorrect = 0;
+    this.runConsecutiveCorrectStreak = 0;
     this.quizTimer = 0;
     this.quizTimerMax = 15;
     this.waveTimer = 0;
@@ -5377,6 +5435,7 @@ class Game {
     this.resetPlayerStatusEffects();
     this.sessionTotalAnswered = 0;
     this.sessionTotalCorrect = 0;
+    this.runConsecutiveCorrectStreak = 0;
     if (this.dataStore) {
       this.dataStore.resetSessionQuestions();
     }
@@ -7465,6 +7524,7 @@ class Game {
     this.sessionTotalAnswered = (this.sessionTotalAnswered || 0) + 1;
     if (isCorrect) {
       this.sessionTotalCorrect = (this.sessionTotalCorrect || 0) + 1;
+      this.runConsecutiveCorrectStreak = (this.runConsecutiveCorrectStreak || 0) + 1;
       this.quizCorrectCount++;
       btns[selectedIdx].classList.add('correct');
       this.sound.playLaser(1100);
@@ -7475,6 +7535,7 @@ class Game {
         this.showToast('✨ 錯題雪恥成功！知識壓力 -1，裝甲修復 +1');
       }
     } else {
+      this.runConsecutiveCorrectStreak = 0;
       btns[selectedIdx].classList.add('wrong');
       btns[q.ans].classList.add('correct');
       this.sound.playExplosion(false);
@@ -7544,7 +7605,10 @@ class Game {
     screen.classList.remove('hidden');
 
     const correct = Math.max(0, Math.min(5, this.quizCorrectCount || 0));
-    document.getElementById('upgradeCorrectCount').textContent = `${correct}/5`;
+    const canUnlockSTier = (this.sessionTotalCorrect > 40) && (this.runConsecutiveCorrectStreak >= 20);
+    const sUnlockStatus = canUnlockSTier
+      ? '🌟 達成超凡成就！解鎖【S 級】神話裝備庫 (保障 1 款 S 級神兵)'
+      : `解鎖【A 級】主力裝備庫 (🔥 S 級神兵需總對 >40 題且連對 20 題，當前: ${this.sessionTotalCorrect || 0}/40, 連對 ${this.runConsecutiveCorrectStreak || 0}/20)`;
 
     const tierHeaderLabels = [
       '0 題答對 // 應急生存補給 (無解鎖武器)',
@@ -7552,7 +7616,7 @@ class Game {
       '2 題答對 // 解鎖【C 級】基礎裝備庫',
       '3 題答對 // 解鎖【B 級】裝備庫 (保障 1 款 B 級)',
       '4 題答對 // 解鎖【A 級】主力裝備庫 (保障 1 款 A 級)',
-      '5 題滿分 // 解鎖【S 級】神話裝備庫 (保障 1 款 S 級神兵)'
+      `5 題滿分 // ${sUnlockStatus}`
     ];
     document.getElementById('upgradeQualityBadge').textContent = tierHeaderLabels[correct] || tierHeaderLabels[1];
 
@@ -7700,6 +7764,12 @@ class Game {
       return curRank < 5;
     });
 
+    // S 級神兵雙門檻限制：必須該輪累積總答對超過 40 題，且三選一前連續答對達 20 題以上！
+    const canUnlockSTier = (this.sessionTotalCorrect > 40) && (this.runConsecutiveCorrectStreak >= 20);
+    if (!canUnlockSTier) {
+      candidateWeapons = candidateWeapons.filter(w => w.tier !== 'S');
+    }
+
     // 強勢武器門檻與稀有度抑制 (如超聲震盪重砲 sonic_cannon 清彈範圍過大)：
     // 1. 必須本輪 5 題全部答對 (5/5 滿分) 才有資格出現在三選一候選池中 (未滿分 0% 機率)
     // 2. 即使 5 題全部答對，出現機率亦大幅調降 (僅 20% 機率納入池中，出現機率降低 80%)
@@ -7727,7 +7797,7 @@ class Game {
     // 答對 1 或 2 題：只有 C 級武器
     // 答對 3 題：B 級及以下（B 或 C 級），保障 1 個 B 級
     // 答對 4 題：A 級及以下（A, B, C 級），保障 1 個 A 級
-    // 答對 5 題：S 級及以下（S, A, B, C 級），保障 1 個 S 級
+    // 答對 5 題：若達成 S 級雙門檻則解鎖 S 級神話庫 (保障 1 個 S 級)；否則一律降級為 A 級主力裝備庫 (保障 1 個 A 級)
     const chosenWpns = [];
 
     if (correctCount === 1 || correctCount === 2) {
@@ -7750,13 +7820,24 @@ class Game {
       const remainPool = candidateWeapons.filter(w => (w.tier === 'A' || w.tier === 'B' || w.tier === 'C') && !chosenWpns.some(cw => cw.id === w.id));
       chosenWpns.push(...pickRandom(remainPool, 3 - chosenWpns.length));
     } else if (correctCount >= 5) {
-      const sPool = candidateWeapons.filter(w => w.tier === 'S');
-      if (sPool.length > 0) {
-        const guaranteed = sPool[Math.floor(Math.random() * sPool.length)];
-        chosenWpns.push(guaranteed);
+      if (canUnlockSTier) {
+        const sPool = candidateWeapons.filter(w => w.tier === 'S');
+        if (sPool.length > 0) {
+          const guaranteed = sPool[Math.floor(Math.random() * sPool.length)];
+          chosenWpns.push(guaranteed);
+        }
+        const remainPool = candidateWeapons.filter(w => (w.tier === 'S' || w.tier === 'A' || w.tier === 'B' || w.tier === 'C') && !chosenWpns.some(cw => cw.id === w.id));
+        chosenWpns.push(...pickRandom(remainPool, 3 - chosenWpns.length));
+      } else {
+        // 未達 S 級神兵解鎖門檻：取消 5 題滿分保底 S 級，改為保障 1 款 A 級武器，其餘為 A/B/C 級，S 級武器嚴格 0% 出現！
+        const aPool = candidateWeapons.filter(w => w.tier === 'A');
+        if (aPool.length > 0) {
+          const guaranteed = aPool[Math.floor(Math.random() * aPool.length)];
+          chosenWpns.push(guaranteed);
+        }
+        const remainPool = candidateWeapons.filter(w => (w.tier === 'A' || w.tier === 'B' || w.tier === 'C') && !chosenWpns.some(cw => cw.id === w.id));
+        chosenWpns.push(...pickRandom(remainPool, 3 - chosenWpns.length));
       }
-      const remainPool = candidateWeapons.filter(w => (w.tier === 'S' || w.tier === 'A' || w.tier === 'B' || w.tier === 'C') && !chosenWpns.some(cw => cw.id === w.id));
-      chosenWpns.push(...pickRandom(remainPool, 3 - chosenWpns.length));
     }
 
     const tierQualityMap = {
@@ -8889,7 +8970,10 @@ class Game {
     });
 
     // 危險預警計時
-    this.hazardTelegraphs.forEach(h => { h.life -= dt; });
+    this.hazardTelegraphs.forEach(h => {
+      if (h.maxLife === undefined) h.maxLife = h.life;
+      h.life -= dt;
+    });
     this.hazardTelegraphs = this.hazardTelegraphs.filter(h => h.life > 0);
 
     // 靈丸純白擴散衝擊波生命週期
@@ -9159,6 +9243,256 @@ class Game {
     });
   }
 
+  // ------------------------------------------------------------
+  // 高精緻危險預警線渲染器 (向量導軌、流光粒子、電弧閃電與金羽風道)
+  // ------------------------------------------------------------
+  renderHazardLineTelegraph(ctx, h) {
+    const x1 = h.x1 !== undefined ? h.x1 : (h.x || 0);
+    const y1 = h.y1 !== undefined ? h.y1 : 0;
+    const x2 = h.x2 !== undefined ? h.x2 : x1;
+    const y2 = h.y2 !== undefined ? h.y2 : this.H;
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const len = Math.hypot(dx, dy) || 1;
+    const ang = Math.atan2(dy, dx);
+    const halfW = Math.max(10, (h.width || 24) / 2);
+    const maxLife = h.maxLife || h.life || 1.0;
+    const progress = Math.max(0, Math.min(1.0, 1.0 - (h.life / maxLife)));
+    const colorStr = String(h.color || 'rgba(255, 71, 102, 0.6)');
+
+    // 判斷主題類型 (雷公閃電 / 迦樓羅神羽 / 熾焰熔岩 / 怨念紅光)
+    const isThunder = h.subType === 'thunder' || colorStr.includes('56, 189, 248') || colorStr.includes('51, 224, 224') || colorStr.includes('38bdf8') || colorStr.includes('33e0e0');
+    const isFeather = h.subType === 'feather' || colorStr.includes('255, 215, 0') || colorStr.includes('245, 188, 56') || colorStr.includes('ffd700') || colorStr.includes('f5bc38');
+    const isFire = h.subType === 'fire' || colorStr.includes('234, 88, 12') || colorStr.includes('255, 145, 56') || colorStr.includes('ea580c') || colorStr.includes('ff9138');
+
+    ctx.save();
+    ctx.translate(x1, y1);
+    ctx.rotate(ang);
+
+    // 1. 柔和羽化危險能量流光走廊 (取代原本生硬的長方形單調色塊)
+    const corridorGrad = ctx.createLinearGradient(0, -halfW, 0, halfW);
+    const rgbPrefix = isThunder ? '56, 189, 248' : (isFeather ? '255, 215, 0' : (isFire ? '234, 88, 12' : '255, 71, 102'));
+    const coreAlpha = (0.12 + 0.16 * progress).toFixed(3);
+    const midAlpha = (0.05 + 0.08 * progress).toFixed(3);
+    corridorGrad.addColorStop(0, `rgba(${rgbPrefix}, 0)`);
+    corridorGrad.addColorStop(0.25, `rgba(${rgbPrefix}, ${midAlpha})`);
+    corridorGrad.addColorStop(0.5, `rgba(${rgbPrefix}, ${coreAlpha})`);
+    corridorGrad.addColorStop(0.75, `rgba(${rgbPrefix}, ${midAlpha})`);
+    corridorGrad.addColorStop(1, `rgba(${rgbPrefix}, 0)`);
+    ctx.fillStyle = corridorGrad;
+    ctx.fillRect(0, -halfW, len, halfW * 2);
+
+    // 2. 兩側能量約束導軌 (動態流光光纖細線)
+    ctx.strokeStyle = isThunder ? '#38bdf8' : (isFeather ? '#ffd700' : (isFire ? '#f59e0b' : '#ff4766'));
+    ctx.lineWidth = 1.6;
+    ctx.shadowColor = ctx.strokeStyle;
+    ctx.shadowBlur = 8;
+    ctx.setLineDash([8, 8]);
+    ctx.lineDashOffset = -this.time * 70;
+    ctx.beginPath();
+    ctx.moveTo(0, -halfW);
+    ctx.lineTo(len, -halfW);
+    ctx.moveTo(0, halfW);
+    ctx.lineTo(len, halfW);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 3. 沿著預警方向流動的警示箭頭 (Chevrons)
+    const chevronDist = 70;
+    const chevronOffset = (this.time * 110) % chevronDist;
+    ctx.strokeStyle = isThunder ? 'rgba(224, 242, 254, 0.85)' : (isFeather ? 'rgba(254, 240, 138, 0.85)' : 'rgba(255, 255, 255, 0.85)');
+    ctx.lineWidth = 2.0;
+    for (let cx = chevronOffset; cx < len; cx += chevronDist) {
+      ctx.beginPath();
+      ctx.moveTo(cx - 8, -halfW * 0.45);
+      ctx.lineTo(cx + 4, 0);
+      ctx.lineTo(cx - 8, halfW * 0.45);
+      ctx.stroke();
+    }
+
+    // 4. 特色主題渲染
+    if (isThunder) {
+      // ⚡ 雷公・九天閃電電弧折線 (隨時間跳動的高壓電芒)
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      const segLen = 25;
+      for (let sx = segLen; sx <= len; sx += segLen) {
+        const jitterY = (Math.sin(this.time * 28 + sx * 0.1) * 0.5 + (Math.random() - 0.5) * 0.7) * (halfW * 0.65);
+        ctx.lineTo(sx, jitterY);
+      }
+      ctx.strokeStyle = 'rgba(240, 249, 255, 0.95)';
+      ctx.lineWidth = 2.2;
+      ctx.shadowColor = '#38bdf8';
+      ctx.shadowBlur = 14;
+      ctx.stroke();
+
+      // 靜電微粒火花
+      for (let p = 0; p < 3; p++) {
+        const px = ((this.time * 200 + p * 130) % len);
+        const py = Math.sin(this.time * 18 + p) * (halfW * 0.5);
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(px, py, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (isFeather) {
+      // 🪶 迦樓羅・金羽旋風流光 (金色神羽羽刃沿風道穿梭)
+      for (let f = 0; f < 3; f++) {
+        const fx = ((this.time * 160 + f * (len / 3)) % len);
+        const fy = Math.sin(this.time * 8 + f * 2) * (halfW * 0.35);
+        ctx.save();
+        ctx.translate(fx, fy);
+        ctx.fillStyle = '#ffd700';
+        ctx.shadowColor = '#f59e0b';
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.moveTo(9, 0);
+        ctx.quadraticCurveTo(0, -4, -7, 0);
+        ctx.quadraticCurveTo(0, 4, 9, 0);
+        ctx.fill();
+        ctx.restore();
+      }
+    } else {
+      // 中心核心雷射聚焦光束
+      ctx.strokeStyle = isFire ? 'rgba(255, 237, 213, 0.9)' : 'rgba(255, 255, 255, 0.9)';
+      ctx.lineWidth = 1.5 + progress * 2.0;
+      ctx.shadowColor = isFire ? '#ea580c' : '#ff4766';
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(len, 0);
+      ctx.stroke();
+    }
+
+    // 5. 終點/目標命中點發光瞄準環 (Target Reticle)
+    ctx.strokeStyle = ctx.strokeStyle;
+    ctx.lineWidth = 2.0;
+    ctx.beginPath();
+    ctx.arc(len, 0, Math.min(halfW, 16), 0, Math.PI * 2);
+    ctx.stroke();
+
+    // 6. 臨近爆發時的極限危險閃爍
+    if (progress > 0.75) {
+      const flashPulse = Math.sin(this.time * 40) * 0.5 + 0.5;
+      ctx.fillStyle = `rgba(255, 255, 255, ${flashPulse * 0.35})`;
+      ctx.fillRect(0, -halfW * 0.6, len, halfW * 1.2);
+    }
+
+    ctx.restore();
+  }
+
+  // ------------------------------------------------------------
+  // 高精緻危險預警圈渲染器 (旋轉神鳥法陣、雷霆磁暴圈、動態倒數收縮環)
+  // ------------------------------------------------------------
+  renderHazardCircleTelegraph(ctx, h) {
+    const x = h.x;
+    const y = h.y;
+    const r = Math.max(16, h.r || 40);
+    const maxLife = h.maxLife || h.life || 1.0;
+    const progress = Math.max(0, Math.min(1.0, 1.0 - (h.life / maxLife)));
+    const colorStr = String(h.color || 'rgba(51, 224, 224, 0.6)');
+
+    const isThunder = h.subType === 'thunder' || colorStr.includes('56, 189, 248') || colorStr.includes('51, 224, 224') || colorStr.includes('38bdf8') || colorStr.includes('33e0e0');
+    const isFeather = h.subType === 'feather' || colorStr.includes('255, 215, 0') || colorStr.includes('245, 188, 56') || colorStr.includes('ffd700') || colorStr.includes('f5bc38') || this.stage === 3;
+    const mainColor = isThunder ? '#38bdf8' : (isFeather ? '#ffd700' : (colorStr.includes('179, 89, 255') ? '#c084fc' : '#ff4766'));
+
+    ctx.save();
+    ctx.translate(x, y);
+
+    // 1. 柔和擴散光暈底層 (漸層取代單調色塊)
+    const radGrad = ctx.createRadialGradient(0, 0, r * 0.2, 0, 0, r);
+    radGrad.addColorStop(0, `${mainColor}22`);
+    radGrad.addColorStop(0.7, `${mainColor}11`);
+    radGrad.addColorStop(1, `${mainColor}44`);
+    ctx.fillStyle = radGrad;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 2. 雙層旋轉法陣光環
+    const rot = this.time * 2.8;
+    ctx.strokeStyle = mainColor;
+    ctx.lineWidth = 2.4;
+    ctx.shadowColor = mainColor;
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // 內層逆轉刻度環
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 5]);
+    ctx.lineDashOffset = rot * 15;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.82, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 3. 四方羅盤刻度針
+    ctx.lineWidth = 2.0;
+    for (let k = 0; k < 4; k++) {
+      const a = (k * Math.PI) / 2;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * (r - 8), Math.sin(a) * (r - 8));
+      ctx.lineTo(Math.cos(a) * (r + 4), Math.sin(a) * (r + 4));
+      ctx.stroke();
+    }
+
+    // 4. 動態收縮倒數環 (Countdown Shrink Ring)
+    const shrinkR = r * (1.0 - progress);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.arc(0, 0, Math.max(4, shrinkR), 0, Math.PI * 2);
+    ctx.stroke();
+
+    // 5. 核心主題符印
+    if (isFeather) {
+      // 🪶 迦樓羅神羽炸彈符印：中心旋轉金羽＋倒數刻度
+      ctx.fillStyle = '#ffd700';
+      ctx.shadowColor = '#f59e0b';
+      ctx.shadowBlur = 12;
+      ctx.rotate(rot * 0.5);
+      ctx.beginPath();
+      ctx.moveTo(0, -r * 0.35);
+      ctx.quadraticCurveTo(r * 0.15, 0, 0, r * 0.35);
+      ctx.quadraticCurveTo(-r * 0.15, 0, 0, -r * 0.35);
+      ctx.fill();
+    } else if (isThunder) {
+      // ⚡ 雷公天雷符印：中心閃電十字與靜電芒刺
+      ctx.strokeStyle = '#e0f2fe';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.25, -r * 0.1);
+      ctx.lineTo(0, r * 0.1);
+      ctx.lineTo(-r * 0.05, r * 0.15);
+      ctx.lineTo(r * 0.25, -r * 0.1);
+      ctx.stroke();
+    } else {
+      // 菱形警示核心
+      ctx.fillStyle = mainColor;
+      ctx.beginPath();
+      const dr = r * 0.25;
+      ctx.moveTo(0, -dr);
+      ctx.lineTo(dr, 0);
+      ctx.lineTo(0, dr);
+      ctx.lineTo(-dr, 0);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // 6. 臨爆發急速警告脈衝 (Progress > 0.8)
+    if (progress > 0.8) {
+      const flash = Math.sin(this.time * 36) * 0.5 + 0.5;
+      ctx.fillStyle = `rgba(255, 255, 255, ${flash * 0.4})`;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
   // ============================================================
   // Canvas 渲染系統 (高細節機甲與戰場可讀性)
   // ============================================================
@@ -9177,22 +9511,13 @@ class Game {
     // 1. 各關卡專屬神話動態背景 (Stage 1~10 依神話 Boss 招式定制)
     this.renderStageBackground(ctx);
 
-    // 2. 危險預警線與預警圈 (Telegraphs)
+    // 2. 高精緻動態危險預警線與預警圈 (Telegraphs - 徹底告別生硬長方形色塊)
     this.hazardTelegraphs.forEach(h => {
-      ctx.save();
       if (h.type === 'line') {
-        ctx.fillStyle = h.color || 'rgba(255, 71, 102, 0.4)';
-        ctx.fillRect(h.x1 - h.width / 2, h.y1, h.width, h.y2 - h.y1);
+        this.renderHazardLineTelegraph(ctx, h);
       } else if (h.type === 'circle') {
-        ctx.strokeStyle = h.color || 'rgba(51, 224, 224, 0.6)';
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.arc(h.x, h.y, h.r, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.fillStyle = h.color.replace('0.5', '0.15');
-        ctx.fill();
+        this.renderHazardCircleTelegraph(ctx, h);
       }
-      ctx.restore();
     });
 
     // 2.5 Boss / 小Boss 震撼降臨召喚法陣與空間裂隙衝擊波
@@ -9757,22 +10082,47 @@ class Game {
       } else if (eb.type === 'floating_feather') {
         const img = this.images.fx_golden_feather;
         ctx.translate(eb.x, eb.y);
-        ctx.rotate(Math.sin(this.time * 4 + eb.x) * 0.4);
+        const floatRot = Math.sin(this.time * 4 + eb.x) * 0.4;
+        ctx.rotate(floatRot);
         if (img && img.complete && img.naturalWidth > 0) {
           ctx.globalCompositeOperation = 'lighter';
-          ctx.drawImage(img, -18, -18, 36, 36);
+          ctx.drawImage(img, -20, -20, 40, 40);
         } else {
-          ctx.fillStyle = '#ffd700'; ctx.shadowColor = '#ff9138'; ctx.shadowBlur = 14;
+          ctx.fillStyle = '#ffd700'; ctx.shadowColor = '#f59e0b'; ctx.shadowBlur = 14;
           ctx.beginPath();
-          ctx.moveTo(14, 0); ctx.quadraticCurveTo(0, -7, -12, 0); ctx.quadraticCurveTo(0, 7, 14, 0); ctx.fill();
+          ctx.moveTo(16, 0); ctx.quadraticCurveTo(0, -8, -14, 0); ctx.quadraticCurveTo(0, 8, 16, 0); ctx.fill();
         }
-        // 爆炸倒數環狀指示
+        // 迦樓羅神羽定時炸彈精緻倒數盤 (3.0s 倒數收縮環 + 旋轉風術刻度 + 臨爆急速紅光)
         const fuseRatio = Math.max(0, (eb.detonateTimer || 0) / 3.0);
-        ctx.strokeStyle = `rgba(255, 71, 102, ${0.4 + 0.6 * (1 - fuseRatio)})`;
-        ctx.lineWidth = 2.5;
+        const dangerPulse = Math.sin(this.time * (10 + (1 - fuseRatio) * 30)) * 0.5 + 0.5;
+
+        // 外層旋轉風旋刻度環
+        ctx.strokeStyle = `rgba(255, 215, 0, ${0.35 + 0.3 * (1 - fuseRatio)})`;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        ctx.lineDashOffset = -this.time * 35;
         ctx.beginPath();
-        ctx.arc(0, 0, 20, 0, Math.PI * 2 * fuseRatio);
+        ctx.arc(0, 0, 26, 0, Math.PI * 2);
         ctx.stroke();
+        ctx.setLineDash([]);
+
+        // 核心倒數時鐘進度弧 (隨時間收縮)
+        ctx.strokeStyle = fuseRatio < 0.3 ? `rgba(255, 71, 102, ${0.7 + 0.3 * dangerPulse})` : '#ffd700';
+        ctx.lineWidth = 2.8;
+        ctx.shadowColor = fuseRatio < 0.3 ? '#ff4766' : '#ffd700';
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(0, 0, 22, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * fuseRatio);
+        ctx.stroke();
+
+        // 臨爆發時 (小於 1 秒) 的外擴能量預警圈
+        if (fuseRatio < 0.35) {
+          ctx.strokeStyle = `rgba(255, 71, 102, ${0.4 + 0.5 * dangerPulse})`;
+          ctx.lineWidth = 2.0;
+          ctx.beginPath();
+          ctx.arc(0, 0, 34 + dangerPulse * 6, 0, Math.PI * 2);
+          ctx.stroke();
+        }
       } else if (eb.type === 'boulder') {
         // 阿特拉斯巨大隕石巨岩
         const img = this.images.fx_rock_shard;
