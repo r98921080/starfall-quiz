@@ -1945,6 +1945,7 @@ class DataStore {
 
           return {
             question_id: q.question_id || `Q-GS-${idx + 1}`,
+            grade: q.grade || '',
             question: q.question,
             opts: opts,
             ans: ansIdx >= 0 ? ansIdx : 0,
@@ -1961,6 +1962,7 @@ class DataStore {
 
         this.questionBank = bank;
         this.isCloudSynced = true;
+        this.updateBankStatusUI();
         console.log(`[Google Sheet] ✅ 成功載入試算表題庫共 ${bank.length} 題！`);
 
         // 同時獲取學生檔案並更新選單 (不強制覆蓋使用者當前選擇之學生)
@@ -1992,6 +1994,25 @@ class DataStore {
     return false;
   }
 
+  updateBankStatusUI() {
+    const count = this.questionBank ? this.questionBank.length : 0;
+    const isCloud = this.isCloudSynced;
+    const statusEl = document.getElementById('studentSyncStatus');
+    const sourceLabel = isCloud ? '☁️ Google Sheet 雲端直連' : '💾 本機題庫就緒';
+    if (statusEl) {
+      statusEl.innerHTML = `📚 題庫規模：<b style="color:var(--cyan-bright); font-size:12px;">${count.toLocaleString()}</b> 題（${sourceLabel}）`;
+    }
+    const gsStatusBox = document.getElementById('gsStatusBox');
+    if (gsStatusBox) {
+      gsStatusBox.innerHTML = `
+        <span style="color:${isCloud ? 'var(--green)' : 'var(--cyan)'}; font-weight:800;">${isCloud ? '✅ Google Sheet 題庫已就緒！' : 'ℹ️ 當前為本機題庫狀態'}</span><br>
+        已對接題庫總數：<b>${count.toLocaleString()}</b> 題（${isCloud ? '雲端試算表直連' : '本機離線備援'}）。<br>
+        綁定學生：<b>${this.studentName || 'S0001'}</b> (${this.currentStudentId || 'S0001'})<br>
+        作答歷程將即時寫入試算表 <code>Attempts</code> 分頁！
+      `;
+    }
+  }
+
   async loadInitialData() {
     try {
       const [bossRes, wpnRes, fusRes] = await Promise.all([
@@ -2010,14 +2031,16 @@ class DataStore {
     try {
       const csvText = await fetch('data/default-question-bank.csv').then(r => r.text());
       this.questionBank = this.parseCSV(csvText);
+      this.updateBankStatusUI();
     } catch (e) {
       console.warn('Failed loading CSV bank:', e);
     }
 
-    // 2. 檢測 Google Sheet 設定並主動連線載入 136 題雲端題庫
+    // 2. 檢測 Google Sheet 設定並主動連線載入 3000 題雲端題庫
     const apiUrl = localStorage.getItem('starfall_gs_url') || (window.STARFALL_CONFIG && window.STARFALL_CONFIG.apiBaseUrl);
     if (apiUrl && apiUrl.startsWith('http') && !apiUrl.includes('PASTE_YOUR')) {
       await this.loadFromGoogleSheet(apiUrl);
+      this.updateBankStatusUI();
     }
   }
 
@@ -2052,6 +2075,7 @@ class DataStore {
     const headers = lines[0].map(h => h.toLowerCase());
     const idx = (name) => headers.indexOf(name);
     const qidIdx = idx('question_id');
+    const gradeIdx = idx('grade');
     const qIdx = idx('question');
     const aIdx = idx('option_a');
     const bIdx = idx('option_b');
@@ -2077,6 +2101,7 @@ class DataStore {
 
       bank.push({
         question_id: r[qidIdx] || `Q-${i}`,
+        grade: r[gradeIdx] || '',
         question: r[qIdx],
         opts: opts,
         ans: ansNum,
@@ -2091,11 +2116,30 @@ class DataStore {
     return bank;
   }
 
+  isGradeMatch(qGrade, sGrade) {
+    if (!sGrade || !qGrade) return true;
+    const qg = String(qGrade).trim();
+    const sg = String(sGrade).trim();
+    if (qg === sg) return true;
+    if (qg.includes(sg) || sg.includes(qg)) return true;
+    if (sg === '國中' && qg.startsWith('國中')) return true;
+    return false;
+  }
+
   pickAdaptiveQuestions(count = 5) {
     if (this.questionBank.length === 0) return [];
     const sid = this.currentStudentId || 'S0001';
     const sidProgress = this.getStudentProgressMap(sid);
-    const pool = [...this.questionBank];
+
+    // 若設定了特定學員年級，優先篩選符合該年級之題目池（若符合年級之題數充足時）
+    let pool = [...this.questionBank];
+    if (this.studentGrade) {
+      const gradeMatched = this.questionBank.filter(q => this.isGradeMatch(q.grade, this.studentGrade));
+      if (gradeMatched.length >= count) {
+        pool = gradeMatched;
+      }
+    }
+
     // 檢查題庫中是否尚有未作答新題目或尚未復仇之弱點題目
     const hasUnmastered = pool.some(q => {
       const p = sidProgress[q.question_id];
@@ -2968,6 +3012,13 @@ class Game {
       document.getElementById('gsOverlay').classList.remove('hidden');
       const savedUrl = localStorage.getItem('starfall_gs_url') || (window.STARFALL_CONFIG && window.STARFALL_CONFIG.apiBaseUrl) || '';
       document.getElementById('gsUrlInput').value = savedUrl;
+      const count = this.dataStore.questionBank ? this.dataStore.questionBank.length : 0;
+      const isCloud = this.dataStore.isCloudSynced;
+      document.getElementById('gsStatusBox').innerHTML = `
+        <span style="color:${isCloud ? 'var(--green)' : 'var(--cyan)'}; font-weight:800;">${isCloud ? '✅ Google Sheet 題庫已就緒！' : 'ℹ️ 當前題庫狀態'}</span><br>
+        目前遊戲內題庫總數：<b>${count.toLocaleString()}</b> 題（${isCloud ? '雲端試算表直連' : '本機題庫就緒'}）。<br>
+        點擊下方「連線診斷測試」或「儲存設定」即可立即重新同步雲端試算表最新題目！
+      `;
     };
     document.getElementById('openGsBtn').onclick = openGs;
     document.getElementById('pauseGsBtn').onclick = () => {
