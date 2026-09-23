@@ -34,7 +34,7 @@ class BgmEngine {
 
   setStage(stage = 1) {
     const prevStage = this.stage;
-    this.stage = Math.max(1, Math.min(10, stage));
+    this.stage = Math.max(1, Math.min(12, stage));
     this.step = 0;
     if (this.isPlaying && (prevStage !== this.stage || !this.currentAudio)) {
       this.playStageAudio(this.stage);
@@ -119,47 +119,141 @@ class BgmEngine {
     const b = Math.floor((s % 16) / 4); // 當前拍 0~3
     const sub = s % 4; // 拍內細分 0~3
 
-    // 根據當前關卡風格執行專屬神話音樂編排
+    // 根據當前關卡風格執行專屬神話音樂編排 (1-2: 瑪利歐/薩爾達, 3-12: 神話十魔王)
     switch (this.stage) {
       case 1:
-        this.tickStage1Garuda(t, s, m, b, sub);
+        this.tickStage1Mario(t, s, m, b, sub);
         break;
       case 2:
-        this.tickStage2Leigong(t, s, m, b, sub);
+        this.tickStage2Zelda(t, s, m, b, sub);
         break;
       case 3:
-        this.tickStage3Medusa(t, s, m, b, sub);
+        this.tickStage1Garuda(t, s, m, b, sub);
         break;
       case 4:
-        this.tickStage4Taotie(t, s, m, b, sub);
+        this.tickStage2Leigong(t, s, m, b, sub);
         break;
       case 5:
-        this.tickStage5Atlas(t, s, m, b, sub);
+        this.tickStage3Medusa(t, s, m, b, sub);
         break;
       case 6:
-        this.tickStage6Athena(t, s, m, b, sub);
+        this.tickStage4Taotie(t, s, m, b, sub);
         break;
       case 7:
-        this.tickStage7Hydra(t, s, m, b, sub);
+        this.tickStage5Atlas(t, s, m, b, sub);
         break;
       case 8:
-        this.tickStage8Cyclops(t, s, m, b, sub);
+        this.tickStage6Athena(t, s, m, b, sub);
         break;
       case 9:
-        this.tickStage9Tamamo(t, s, m, b, sub);
+        this.tickStage7Hydra(t, s, m, b, sub);
         break;
       case 10:
+        this.tickStage8Cyclops(t, s, m, b, sub);
+        break;
+      case 11:
+        this.tickStage9Tamamo(t, s, m, b, sub);
+        break;
+      case 12:
         this.tickStage10Tiamat(t, s, m, b, sub);
         break;
       default:
-        this.tickStage1Garuda(t, s, m, b, sub);
+        this.tickStage1Mario(t, s, m, b, sub);
     }
 
     this.step++;
   }
 
   // ----------------------------------------------------
-  // Stage 1: 迦樓羅・裂空王 (印度風格天空之神・印度Bhairav調式・竹笛Bansuri・梵音和聲)
+  // Stage 1: 機甲庫巴・烈焰暴君 (瑪利歐風格・8-Bit NES 方波晶片音樂・輕快跳步主題)
+  // ----------------------------------------------------
+  tickStage1Mario(t, s, m, b, sub) {
+    // 1. 輕快 8-Bit 鼓點
+    if (b === 0 && sub === 0) {
+      this.playKick(t, 'standard');
+    }
+    if ((b === 1 || b === 3) && sub === 0) {
+      this.playSnare(t, 'snap');
+    }
+    if (sub === 2) {
+      this.playHihat(t, 0.05);
+    }
+
+    // 2. 8-Bit 方波跳步貝斯 (C3 - G3 - C4 - E3 - A3)
+    const marioBass = [130.81, 196.00, 261.63, 164.81, 220.00, 196.00, 174.61, 164.81];
+    if (sub === 0 || sub === 2) {
+      this.playSquareWave(t, marioBass[(m * 4 + b) % marioBass.length], 0.08, 0.18);
+    }
+
+    // 3. 瑪利歐風格輕快經典主題琶音旋律 (C大調快樂動感)
+    const marioMelody = [
+      659.25, 659.25, 0, 659.25, 0, 523.25, 659.25, 0,
+      783.99, 0, 0, 0, 392.00, 0, 0, 0,
+      523.25, 0, 0, 392.00, 0, 0, 329.63, 0,
+      0, 440.00, 0, 493.88, 0, 466.16, 440.00, 0
+    ];
+    const note = marioMelody[s % marioMelody.length];
+    if (note > 0) {
+      this.playSquareWave(t, note, 0.10, 0.22);
+    }
+  }
+
+  // ----------------------------------------------------
+  // Stage 2: 災厄加儂・終焉狂瀾 (薩爾達風格・海拉魯荒野傳說・古代長笛・史詩號角・定音戰鼓)
+  // ----------------------------------------------------
+  tickStage2Zelda(t, s, m, b, sub) {
+    // 1. 史詩定音鼓 (Timpani War Drums)
+    if (sub === 0 && (b === 0 || b === 2)) {
+      this.playKick(t, 'deep');
+    }
+    if (s % 8 === 4) {
+      this.playSnare(t, 'snap');
+    }
+    if (s % 4 === 2) {
+      this.playHihat(t, 0.06);
+    }
+
+    // 2. 豎琴/古提琴琶音伴奏 (Bb Major / G Minor 英雄進行)
+    const zeldaArp = [466.16, 587.33, 698.46, 880.00, 698.46, 587.33, 523.25, 466.16];
+    if (sub === 1 || sub === 3) {
+      this.playPluck(t, zeldaArp[(m * 2 + b) % zeldaArp.length], 'harp');
+    }
+
+    // 3. 荒野古笛 (Ancient Flute / Ocarina) 薩爾達史詩主旋律
+    const zeldaMelody = [
+      466.16, 0, 698.46, 0, 698.46, 698.46, 783.99, 880.00,
+      932.33, 0, 0, 0, 880.00, 783.99, 698.46, 0,
+      698.46, 0, 587.33, 0, 466.16, 0, 523.25, 587.33,
+      523.25, 0, 0, 0, 466.16, 0, 0, 0
+    ];
+    const zNote = zeldaMelody[s % zeldaMelody.length];
+    if (zNote > 0) {
+      this.playFlute(t, zNote, 0.32, true, 'reed');
+    }
+
+    // 4. 史詩號角長音和聲
+    if (m % 4 === 0 && b === 0 && sub === 0) {
+      this.playChoirFormant(t, [233.08, 293.66, 349.23], 'Ooh', 1.6);
+    }
+  }
+
+  // 8-Bit 方波晶片發聲器 (Mario 經典音效必備)
+  playSquareWave(t, freq, dur = 0.1, vol = 0.15) {
+    if (!this.ctx) return;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    osc.connect(g);
+    g.connect(this.gainNode);
+    osc.start(t);
+    osc.stop(t + dur);
+  }
+
+  // ----------------------------------------------------
+  // Stage 3: 迦樓羅・裂空王 (印度風格天空之神・印度Bhairav調式・竹笛Bansuri・梵音和聲)
   // ----------------------------------------------------
   tickStage1Garuda(t, s, m, b, sub) {
     // 1. 印度塔布拉手鼓 (Tabla / Dholak)
@@ -631,6 +725,81 @@ class SoundManager {
     if (this.ctx && this.ctx.state === 'suspended') {
       this.ctx.resume();
     }
+  }
+
+  // 瑪利歐風格金幣叮噹聲 (B5 -> E6 雙頻清脆方波)
+  playMarioCoin() {
+    if (!this.ctx || !this.enabled) return;
+    this.ensureContext();
+    const t = this.ctx.currentTime;
+    const osc1 = this.ctx.createOscillator();
+    const g1 = this.ctx.createGain();
+    osc1.type = 'square';
+    osc1.frequency.setValueAtTime(987.77, t); // B5
+    osc1.frequency.setValueAtTime(1318.51, t + 0.08); // E6
+    g1.gain.setValueAtTime(0.25, t);
+    g1.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+    osc1.connect(g1);
+    g1.connect(this.masterGain);
+    osc1.start(t);
+    osc1.stop(t + 0.35);
+  }
+
+  // 瑪利歐風格踩踏打擊聲 (方波頻率快速驟降)
+  playMarioStomp() {
+    if (!this.ctx || !this.enabled) return;
+    this.ensureContext();
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(800, t);
+    osc.frequency.exponentialRampToValueAtTime(120, t + 0.14);
+    g.gain.setValueAtTime(0.3, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+    osc.connect(g);
+    g.connect(this.masterGain);
+    osc.start(t);
+    osc.stop(t + 0.14);
+  }
+
+  // 薩爾達風格經典解謎秘密音效 (8 音經典階梯鈴聲 G5-F#5-D#5-A4-G#4-E5-G#5-C6)
+  playZeldaSecretChime() {
+    if (!this.ctx || !this.enabled) return;
+    this.ensureContext();
+    const t = this.ctx.currentTime;
+    const notes = [783.99, 739.99, 622.25, 440.00, 415.30, 659.25, 830.61, 1046.50];
+    notes.forEach((freq, idx) => {
+      const st = t + idx * 0.09;
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, st);
+      g.gain.setValueAtTime(0.24, st);
+      g.gain.exponentialRampToValueAtTime(0.001, st + 0.25);
+      osc.connect(g);
+      g.connect(this.masterGain);
+      osc.start(st);
+      osc.stop(st + 0.25);
+    });
+  }
+
+  // 薩爾達風格大師之劍能量揮砍
+  playZeldaSwordSlash() {
+    if (!this.ctx || !this.enabled) return;
+    this.ensureContext();
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(1200, t);
+    osc.frequency.exponentialRampToValueAtTime(300, t + 0.12);
+    g.gain.setValueAtTime(0.28, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    osc.connect(g);
+    g.connect(this.masterGain);
+    osc.start(t);
+    osc.stop(t + 0.12);
   }
 
   playLaser(pitch = 880) {
@@ -1248,7 +1417,36 @@ class SoundManager {
     subOsc.stop(t + 1.2);
 
     // 2. Boss 特色屬性音效 (例如雷公雷鳴霹靂、迦樓羅狂風咆哮等)
-    if (stage === 2) {
+    if (stage === 1) {
+      // 瑪利歐風格機甲庫巴：重砲火球與烈焰轟鳴
+      [220, 160, 110].forEach((freq, idx) => {
+        const o = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        const st = t + idx * 0.1;
+        o.type = 'sawtooth';
+        o.frequency.setValueAtTime(freq, st);
+        o.frequency.exponentialRampToValueAtTime(40, st + 0.5);
+        g.gain.setValueAtTime(0.4, st);
+        g.gain.exponentialRampToValueAtTime(0.01, st + 0.5);
+        o.connect(g);
+        g.connect(this.masterGain);
+        o.start(st);
+        o.stop(st + 0.5);
+      });
+    } else if (stage === 2) {
+      // 薩爾達風格加儂：守護者古代死光蓄力蜂鳴與魔怨爆發
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(880, t);
+      o.frequency.linearRampToValueAtTime(1760, t + 0.4);
+      g.gain.setValueAtTime(0.3, t);
+      g.gain.exponentialRampToValueAtTime(0.01, t + 0.5);
+      o.connect(g);
+      g.connect(this.masterGain);
+      o.start(t);
+      o.stop(t + 0.5);
+    } else if (stage === 4) {
       // 雷公：十連雷與霹靂炸裂電弧
       [1200, 850, 480].forEach((freq, idx) => {
         const o = this.ctx.createOscillator();
@@ -1335,8 +1533,15 @@ class SoundManager {
     subOsc.start(t);
     subOsc.stop(t + 2.0);
 
-    // 2. 依據 Boss 神話屬性激發消散音效
+    // 2. 依據 Boss 神話/風格屬性激發消散音效
     if (stage === 1) {
+      // 瑪利歐風格庫巴墜入岩漿與過關金幣音效
+      this.playMarioStomp();
+      setTimeout(() => this.playMarioCoin(), 250);
+    } else if (stage === 2) {
+      // 薩爾達風格加儂破滅與海拉魯秘密寶箱音效
+      this.playZeldaSecretChime();
+    } else if (stage === 3) {
       // 迦樓羅：狂風呼嘯與羽毛散落金鈴
       [1480, 1175, 880].forEach((freq, idx) => {
         const o = this.ctx.createOscillator();
@@ -1351,7 +1556,7 @@ class SoundManager {
         o.start(t + idx * 0.12);
         o.stop(t + idx * 0.12 + 0.6);
       });
-    } else if (stage === 2) {
+    } else if (stage === 4) {
       // 雷公：雷電熄滅失能滋滋聲
       try {
         const noise = this.ctx.createBufferSource();
@@ -2902,7 +3107,7 @@ class Game {
 
     this.state = 'start';
     this.stage = 1;
-    this.maxStage = 10;
+    this.maxStage = 12;
     this.wave = 1;
     this.score = 0;
     this.knowledgePressure = 0;
@@ -3076,16 +3281,19 @@ class Game {
       ['enemy_charger', 'assets/enemies/enemy_charger.png'],
       ['enemy_bomber', 'assets/enemies/enemy_bomber.png'],
       ['boss_mini', 'assets/bosses/boss_mini.png'],
-      ['boss_1', 'assets/bosses/boss_1_garuda.png'],
-      ['boss_2', 'assets/bosses/boss_2_leigong.png'],
-      ['boss_3', 'assets/bosses/boss_3_medusa.png'],
-      ['boss_4', 'assets/bosses/boss_4_taotie.png'],
-      ['boss_5', 'assets/bosses/boss_5_atlas.png'],
-      ['boss_6', 'assets/bosses/boss_6_athena.png'],
-      ['boss_7', 'assets/bosses/boss_7_hydra.png'],
-      ['boss_8', 'assets/bosses/boss_8_cyclops.png'],
-      ['boss_9', 'assets/bosses/boss_9_tamamo.png'],
-      ['boss_10', 'assets/bosses/boss_10_tiamat.png'],
+      ['boss_mini_zelda', 'assets/bosses/boss_mini_zelda.png'],
+      ['boss_1', 'assets/bosses/boss_1_bowser.png'],
+      ['boss_2', 'assets/bosses/boss_2_ganon.png'],
+      ['boss_3', 'assets/bosses/boss_1_garuda.png'],
+      ['boss_4', 'assets/bosses/boss_2_leigong.png'],
+      ['boss_5', 'assets/bosses/boss_3_medusa.png'],
+      ['boss_6', 'assets/bosses/boss_4_taotie.png'],
+      ['boss_7', 'assets/bosses/boss_5_atlas.png'],
+      ['boss_8', 'assets/bosses/boss_6_athena.png'],
+      ['boss_9', 'assets/bosses/boss_7_hydra.png'],
+      ['boss_10', 'assets/bosses/boss_8_cyclops.png'],
+      ['boss_11', 'assets/bosses/boss_9_tamamo.png'],
+      ['boss_12', 'assets/bosses/boss_10_tiamat.png'],
       ['icons', 'assets/icons/weapon_icons.png'],
       // 專屬 AI 生成元素特效
       ['fx_lightning', 'assets/fx/fx_lightning.png'],
@@ -3107,12 +3315,12 @@ class Game {
       ['fx_cluster_bomb', 'assets/fx/fx_cluster_bomb.png'],
       ['fx_feather_shard', 'assets/fx/fx_feather_shard.png']
     ];
-    // 預載 10 大關卡 9:16 垂直神話背景貼圖
-    for (let s = 1; s <= 10; s++) {
+    // 預載 12 大關卡 9:16 垂直背景貼圖
+    for (let s = 1; s <= 12; s++) {
       list.push([`bg_stage_${s}`, `assets/backgrounds/bg_stage_${s}.jpg`]);
     }
-    // 預載 16 款獨立神話武器高畫質圖標
-    for (let i = 1; i <= 16; i++) {
+    // 預載 25 款獨立武器高畫質圖標
+    for (let i = 1; i <= 25; i++) {
       list.push([`weapon_${i}`, `assets/icons/weapons/weapon_${i}.png`]);
     }
     list.forEach(([k, src]) => {
@@ -3405,10 +3613,9 @@ class Game {
         const name = inputName || currentName;
         const grade = (gradeSelect && gradeSelect.value) || this.dataStore.studentGrade || '三年級';
         await this.dataStore.syncStudentProfile(name, grade, isNewPilot);
-        this.updatePermissionUI();
-
+        const isTester = ((this.dataStore && this.dataStore.currentStudentId) || 'S0001') === 'S0001';
         const select = document.getElementById('startStageSelect');
-        const s = (select && parseInt(select.value)) || 1;
+        const s = (isTester && select) ? (parseInt(select.value) || 1) : 1;
         this.startNewGame(s);
         if (this.sound.bgm && !this.sound.bgm.isPlaying) {
           this.sound.bgm.start();
@@ -3467,11 +3674,13 @@ class Game {
     const pauseLabBtn = document.getElementById('pauseLabBtn');
     const pauseGsBtn = document.getElementById('pauseGsBtn');
     const openGsBtn = document.getElementById('openGsBtn');
+    const stageSelectContainer = document.getElementById('stageSelectContainer');
 
     if (labBtn) labBtn.style.display = isTester ? '' : 'none';
     if (pauseLabBtn) pauseLabBtn.style.display = isTester ? '' : 'none';
     if (pauseGsBtn) pauseGsBtn.style.display = isTester ? '' : 'none';
     if (openGsBtn) openGsBtn.style.display = isTester ? '' : 'none';
+    if (stageSelectContainer) stageSelectContainer.style.display = isTester ? '' : 'none';
   }
 
   openHangarModal() {
@@ -4635,8 +4844,8 @@ class Game {
     this.totalDamageDealt += finalDmg;
     this.score += Math.round(finalDmg * 2);
 
-    // 1-3 關魔王背水一戰機制 (HP <= 15% 時觸發絕境機制，鎖血保底防止純暴力秒殺跳過機制)
-    if ((boss.stage === 1 || boss.stage === 2 || boss.stage === 3) && boss.hp <= boss.maxHp * 0.15 && !boss.desperationTriggered && !boss.isMini) {
+    // 3-5 關神話魔王背水一戰機制 (迦樓羅/雷公/美杜莎 HP <= 15% 時觸發絕境機制，鎖血保底防止純暴力秒殺跳過機制)
+    if ((boss.stage === 3 || boss.stage === 4 || boss.stage === 5) && boss.hp <= boss.maxHp * 0.15 && !boss.desperationTriggered && !boss.isMini) {
       boss.hp = Math.max(1, Math.min(boss.hp, Math.floor(boss.maxHp * 0.14)));
       this.triggerBossDesperation(boss);
     }
@@ -4704,8 +4913,32 @@ class Game {
     if (boss.weaknessCooldown && boss.weaknessCooldown > 0) return;
 
     const s = boss.stage || 1;
-    // 1. 迦樓羅 (Stage 1) 弱點：虛空重力奇點 (受重力引力強行壓制，墜地硬直癱瘓 3.5 秒)
-    if (s === 1 && (type === 'singularity' || source === 'singularity')) {
+    // 0A. 機甲庫巴 (Stage 1) 弱點：靈丸蓄力踩踏 (重擊翻滾失衡，倒地硬直癱瘓 3.0 秒)
+    if (s === 1 && (type === 'spirit' || source === 'spirit')) {
+      boss.weaknessCounters.spirit = (boss.weaknessCounters.spirit || 0) + 1;
+      if (boss.weaknessCounters.spirit >= 2) {
+        boss.weaknessCounters.spirit = 0;
+        boss.stunTimer = 3.0;
+        this.sound.playMarioStomp();
+        this.shake(8, 0.3);
+        this.showToast('✨【瑪利歐踩踏剋制】機甲庫巴外殼被靈丸重擊翻滾，癱瘓 3.0 秒！');
+      }
+    }
+
+    // 0B. 災厄加儂 (Stage 2) 弱點：神聖金陽光束 (神聖光矢貫穿魔怨核心，大硬直癱瘓 3.0 秒)
+    if (s === 2 && (type === 'beam' || source === 'beam' || type === 'holy_spear')) {
+      boss.weaknessCounters.light = (boss.weaknessCounters.light || 0) + 1;
+      if (boss.weaknessCounters.light >= 15) {
+        boss.weaknessCounters.light = 0;
+        boss.stunTimer = 3.0;
+        this.sound.playZeldaSecretChime();
+        this.shake(10, 0.35);
+        this.showToast('✨【薩爾達光之印記剋制】災厄加儂被神聖光芒貫穿，怨念消退癱瘓 3.0 秒！');
+      }
+    }
+
+    // 1. 迦樓羅 (Stage 3) 弱點：虛空重力奇點 (受重力引力強行壓制，墜地硬直癱瘓 3.5 秒)
+    if (s === 3 && (type === 'singularity' || source === 'singularity')) {
       boss.weaknessCounters.singularity = (boss.weaknessCounters.singularity || 0) + 1;
       if (boss.weaknessCounters.singularity >= 3) {
         boss.weaknessCounters.singularity = 0;
@@ -4717,8 +4950,8 @@ class Game {
       }
     }
 
-    // 2. 雷公 (Stage 2) 弱點：青玉風雷飛輪 (金屬切割切斷連環雷鼓，電容短路重創 8% 生命並癱瘓 3 秒)
-    if (s === 2 && (type === 'chakram' || source === 'chakram')) {
+    // 2. 雷公 (Stage 4) 弱點：青玉風雷飛輪 (金屬切割切斷連環雷鼓，電容短路重創 8% 生命並癱瘓 3 秒)
+    if (s === 4 && (type === 'chakram' || source === 'chakram')) {
       boss.weaknessCounters.chakram = (boss.weaknessCounters.chakram || 0) + 1;
       if (boss.weaknessCounters.chakram >= 15) {
         boss.weaknessCounters.chakram = 0;
@@ -4731,8 +4964,8 @@ class Game {
       }
     }
 
-    // 3. 美杜莎 (Stage 3) 弱點：玄冰凌柱 (蛇髮群妖受到玄冰絕對急凍，進入 4 秒冰封冬眠！全場蛇彈消解！)
-    if (s === 3 && (type === 'cryo_spire' || source === 'cryo_spire')) {
+    // 3. 美杜莎 (Stage 5) 弱點：玄冰凌柱 (蛇髮群妖受到玄冰絕對急凍，進入 4 秒冰封冬眠！全場蛇彈消解！)
+    if (s === 5 && (type === 'cryo_spire' || source === 'cryo_spire')) {
       boss.weaknessCounters.cryo = (boss.weaknessCounters.cryo || 0) + 1;
       if (boss.weaknessCounters.cryo >= 20) {
         boss.weaknessCounters.cryo = 0;
@@ -4746,7 +4979,7 @@ class Game {
     }
 
     // 3B. 美杜莎石化凝視解鎖：金陽聚焦光束熱能融化石化凝視 (4 秒移速全面恢復)
-    if (s === 3 && (type === 'beam' || source === 'beam')) {
+    if (s === 5 && (type === 'beam' || source === 'beam')) {
       if (this.player.gorgonSlowActive) {
         this.player.gorgonSlowActive = false;
         this.player.gorgonPurgeTimer = 4.0;
@@ -4754,8 +4987,8 @@ class Game {
       }
     }
 
-    // 4. 饕餮 (Stage 4) 弱點：熾陽熔岩榴彈 (貪食吞噬高爆熔岩核，腹內內爆反噬重創 10% 生命！)
-    if (s === 4 && (type === 'grenade' || source === 'grenade')) {
+    // 4. 饕餮 (Stage 6) 弱點：熾陽熔岩榴彈 (貪食吞噬高爆熔岩核，腹內內爆反噬重創 10% 生命！)
+    if (s === 6 && (type === 'grenade' || source === 'grenade')) {
       boss.weaknessCounters.grenade = (boss.weaknessCounters.grenade || 0) + 1;
       if (boss.weaknessCounters.grenade >= 3) {
         boss.weaknessCounters.grenade = 0;
@@ -4770,8 +5003,8 @@ class Game {
       }
     }
 
-    // 6. 雅典娜 (Stage 6) 弱點：五行太極陣盤 (陰陽生剋五行玄機破解埃癸斯神盾，神盾永久碎裂！)
-    if (s === 6 && (type === 'taiji' || source === 'taiji')) {
+    // 6. 雅典娜 (Stage 8) 弱點：五行太極陣盤 (陰陽生剋五行玄機破解埃癸斯神盾，神盾永久碎裂！)
+    if (s === 8 && (type === 'taiji' || source === 'taiji')) {
       boss.weaknessCounters.taiji = (boss.weaknessCounters.taiji || 0) + 1;
       if (boss.weaknessCounters.taiji >= 15) {
         boss.weaknessCounters.taiji = 0;
@@ -4784,8 +5017,8 @@ class Game {
       }
     }
 
-    // 8. 獨眼巨人 (Stage 8) 弱點：裂變音浪重砲 (聽覺中樞共振震裂，打鐵熔爐熄火停擺 4 秒！)
-    if (s === 8 && (type === 'sonic_wave' || source === 'sonic_wave')) {
+    // 8. 獨眼巨人 (Stage 10) 弱點：裂變音浪重砲 (聽覺中樞共振震裂，打鐵熔爐熄火停擺 4 秒！)
+    if (s === 10 && (type === 'sonic_wave' || source === 'sonic_wave')) {
       boss.weaknessCounters.sonic = (boss.weaknessCounters.sonic || 0) + 1;
       if (boss.weaknessCounters.sonic >= 10) {
         boss.weaknessCounters.sonic = 0;
@@ -4797,8 +5030,8 @@ class Game {
       }
     }
 
-    // 9. 玉藻前 (Stage 9) 弱點：金陽聚焦光束 (陽光照破九尾天狐魅影，全數幻象分身當場蒸發幻滅！)
-    if (s === 9 && (type === 'beam' || source === 'beam')) {
+    // 9. 玉藻前 (Stage 11) 弱點：金陽聚焦光束 (陽光照破九尾天狐魅影，全數幻象分身當場蒸發幻滅！)
+    if (s === 11 && (type === 'beam' || source === 'beam')) {
       boss.weaknessCounters.beam = (boss.weaknessCounters.beam || 0) + 1;
       if (boss.weaknessCounters.beam >= 25) {
         boss.weaknessCounters.beam = 0;
@@ -4821,17 +5054,17 @@ class Game {
     this.sound.speak(`${boss.name}：第二型態展開！`);
     this.showToast(`${boss.name} 裝甲全面重組，狂暴攻擊模式啟動！`);
 
-    if (boss.stage === 1) {
+    if (boss.stage === 3) {
       boss.featherBarrierHp = 10000;
       boss.maxFeatherBarrierHp = 10000;
       boss.featherShieldActive = true;
       this.sound.playLaser(1500);
       this.showToast('🦅 迦樓羅展開【金羽天罡神盾屏障】！吸收 10,000 點傷害！');
-    } else if (boss.stage === 2) {
+    } else if (boss.stage === 4) {
       boss.shockCycleTimer = 0;
       boss.shockTelegraphed = false;
       this.showToast('⚡ 雷公激發【九天磁暴】！每 3 秒引發 0.5 秒靜電拘束！');
-    } else if (boss.stage === 3) {
+    } else if (boss.stage === 5) {
       this.player.gorgonSlowActive = true;
       this.showToast('🐍 美杜莎開啟【石化凝視領域】！戰機移速降低 50%！（金陽神光可融化解鎖）');
     }
@@ -4848,7 +5081,7 @@ class Game {
     this.shake(14, 0.5);
   }
 
-  // 1-3 關魔王絕境背水一戰機制 (Desperation Overload)
+  // 3-5 關魔王絕境背水一戰機制 (Desperation Overload - 迦樓羅/雷公/美杜莎)
   triggerBossDesperation(b) {
     if (!b || b.dead || b.dying || b.desperationTriggered || b.isMini) return;
     b.desperationTriggered = true;
@@ -4859,7 +5092,7 @@ class Game {
     this.ebullets = [];
     this.sound.playWarningAlert();
 
-    if (b.stage === 1) {
+    if (b.stage === 3) {
       b.invulnerable = true;
       b.invulnTimer = 999;
       this.sound.playLaser(1400);
@@ -4879,7 +5112,7 @@ class Game {
           angle: ang
         });
       }
-    } else if (b.stage === 2) {
+    } else if (b.stage === 4) {
       b.invulnerable = true;
       b.invulnTimer = 999;
       this.sound.playLaser(1600);
@@ -4905,7 +5138,7 @@ class Game {
         hp: 1200,
         maxHp: 1200
       });
-    } else if (b.stage === 3) {
+    } else if (b.stage === 5) {
       b.invulnerable = true;
       b.invulnTimer = 999;
       this.sound.playLaser(900);
@@ -5137,22 +5370,57 @@ class Game {
 
     this.waveTimer += dt;
     if (this.wave === 1) {
-      if (this.waveTimer % 2.6 < dt) {
-        this.spawnMobWave();
-      }
-      if (this.waveTimer >= 22) {
-        this.wave = 2;
-        this.waveTimer = 0;
-        this.spawnMiniBoss();
+      if (this.stage === 1) {
+        // 第 1 關 (瑪利歐風格)：新手無腦紓壓波次，10 秒雜兵後直接遭遇機甲庫巴（無小Boss）
+        if (this.waveTimer % 2.5 < dt) {
+          this.spawnMobWave();
+        }
+        if (this.waveTimer >= 10) {
+          this.wave = 4;
+          this.waveTimer = 0;
+          this.spawnMajorBoss(1);
+        }
+      } else if (this.stage === 2) {
+        // 第 2 關 (薩爾達風格)：8 秒雜兵暖身，召喚莫力布林巨將小Boss (~10秒擊破，共約20秒通關小Boss階段)
+        if (this.waveTimer % 2.5 < dt) {
+          this.spawnMobWave();
+        }
+        if (this.waveTimer >= 8) {
+          this.wave = 2;
+          this.waveTimer = 0;
+          this.spawnMiniBoss();
+        }
+      } else {
+        // 第 3-12 關：神話魔王標準波次
+        if (this.waveTimer % 2.6 < dt) {
+          this.spawnMobWave();
+        }
+        if (this.waveTimer >= 22) {
+          this.wave = 2;
+          this.waveTimer = 0;
+          this.spawnMiniBoss();
+        }
       }
     } else if (this.wave === 3) {
-      if (this.waveTimer % 2.8 < dt) {
-        this.spawnMobWave();
-      }
-      if (this.waveTimer >= 14) {
-        this.wave = 4;
-        this.waveTimer = 0;
-        this.spawnMajorBoss(this.stage);
+      if (this.stage === 2) {
+        // 第 2 關小Boss後過渡：短暫 4 秒雜兵後召喚大Boss災厄加儂 (~25秒擊破，共約30秒通關大Boss階段)
+        if (this.waveTimer % 2.0 < dt) {
+          this.spawnMobWave();
+        }
+        if (this.waveTimer >= 4) {
+          this.wave = 4;
+          this.waveTimer = 0;
+          this.spawnMajorBoss(2);
+        }
+      } else {
+        if (this.waveTimer % 2.8 < dt) {
+          this.spawnMobWave();
+        }
+        if (this.waveTimer >= 14) {
+          this.wave = 4;
+          this.waveTimer = 0;
+          this.spawnMajorBoss(this.stage);
+        }
       }
     }
   }
@@ -5161,12 +5429,19 @@ class Game {
   spawnMobWave() {
     const stage = this.stage;
     // 依關卡難度權重挑選敵機種類
-    const pool = ['scout', 'scout', 'gunner'];
-    if (stage >= 2) pool.push('gunner', 'star', 'charger');
-    if (stage >= 3) pool.push('star', 'bastion', 'charger', 'bomber');
-    if (stage >= 5) pool.push('star', 'bastion', 'bastion', 'charger', 'bomber', 'bomber'); // 第 5 關高威脅波次
+    let pool = ['scout', 'scout'];
+    if (stage === 1) {
+      pool = ['scout']; // 第 1 關純新手無腦擊殺
+    } else if (stage === 2) {
+      pool = ['scout', 'gunner'];
+    } else {
+      pool.push('gunner');
+      if (stage >= 4) pool.push('star', 'charger');
+      if (stage >= 5) pool.push('star', 'bastion', 'charger', 'bomber');
+      if (stage >= 7) pool.push('star', 'bastion', 'bastion', 'charger', 'bomber', 'bomber');
+    }
 
-    const count = 3 + Math.floor(Math.random() * (stage >= 5 ? 4 : 3));
+    const count = stage === 1 ? 2 : (stage === 2 ? 3 : (3 + Math.floor(Math.random() * (stage >= 7 ? 4 : 3))));
     for (let i = 0; i < count; i++) {
       const type = pool[Math.floor(Math.random() * pool.length)];
       const x = 40 + Math.random() * (this.W - 80);
@@ -5243,13 +5518,28 @@ class Game {
   }
 
   spawnMiniBoss() {
-    const hp = (this.stage && this.stage <= 3) ? 21000 : 50000;
+    let hp = (this.stage && this.stage <= 4) ? 21000 : 50000;
+    let name = '星宿巡察艦・前哨神械';
+    let assetKey = 'boss_mini';
+    let defeatVoiceLine = '「前哨巡察艦動力爐過載...全面撤退！」';
+    let id = 'mini_boss';
+
+    if (this.stage === 2) {
+      // 第 2 關薩爾達風格專屬小Boss：莫力布林巨將・荒野先鋒
+      hp = 10000; // 約 10 秒擊破，提供爽快無腦紓壓體驗
+      name = '莫力布林巨將・荒野先鋒';
+      assetKey = 'boss_mini_zelda';
+      defeatVoiceLine = '莫力布林：吼咕...力量竟被削弱了...！';
+      id = 'mini_boss_zelda';
+    }
+
     this.currentBoss = {
       isBoss: true,
       isMini: true,
-      id: 'mini_boss',
-      defeatVoiceLine: '「前哨巡察艦動力爐過載...全面撤退！」',
-      name: '星宿巡察艦・前哨神械',
+      stage: this.stage,
+      id: id,
+      defeatVoiceLine: defeatVoiceLine,
+      name: name,
       x: this.W / 2,
       y: -60,
       targetY: 135,
@@ -5263,24 +5553,48 @@ class Game {
       shieldType: 'none',
       skillTimer: 0,
       ultimateTimer: 0,
-      assetKey: 'boss_mini'
+      assetKey: assetKey
     };
     this.showBossHUD(this.currentBoss);
     this.triggerBossEntrance(this.currentBoss, true);
   }
 
   spawnMajorBoss(stage) {
-    if (stage && stage >= 1 && stage <= 10) {
+    if (stage && stage >= 1 && stage <= 12) {
       this.stage = stage;
       if (this.sound && this.sound.bgm) {
         this.sound.bgm.setStage(stage);
       }
     }
-    const baseHps = [0, 50400, 56700, 65100, 175000, 195000, 215000, 235000, 255000, 240000, 480000];
+    const baseHps = [
+      0,
+      16000,  // 1: 機甲庫巴・烈焰暴君 (~15-18s 擊破，新手無腦通關)
+      28000,  // 2: 災厄加儂・終焉狂瀾 (~25s 擊破，荒野試煉)
+      50400,  // 3: 迦樓羅・裂空王
+      56700,  // 4: 雷公・震霄
+      65100,  // 5: 美杜莎・返照
+      175000, // 6: 饕餮・萬喰
+      195000, // 7: 阿特拉斯・墜星
+      215000, // 8: 雅典娜・神盾
+      235000, // 9: 許德拉・再生
+      255000, // 10: 獨眼巨人・天爐
+      240000, // 11: 玉藻前・幻械
+      480000  // 12: 提亞瑪特・混沌母艦
+    ];
     const fallbackBossNames = [
-      '', '迦樓羅・裂空王', '雷公・震霄', '美杜莎・返照', '饕餮・萬喰',
-      '阿特拉斯・墜星', '雅典娜・神盾', '許德拉・再生', '獨眼巨人・天爐',
-      '玉藻前・幻械', '提亞瑪特・混沌母艦'
+      '',
+      '機甲庫巴・烈焰暴君',
+      '災厄加儂・終焉狂瀾',
+      '迦樓羅・裂空王',
+      '雷公・震霄',
+      '美杜莎・返照',
+      '饕餮・萬喰',
+      '阿特拉斯・墜星',
+      '雅典娜・神盾',
+      '許德拉・再生',
+      '獨眼巨人・天爐',
+      '玉藻前・幻械',
+      '提亞瑪特・混沌母艦'
     ];
     const bList = this.dataStore.bossData ? this.dataStore.bossData.bosses : [];
     const bData = bList.find(b => b.stage === stage) || {
@@ -5290,8 +5604,8 @@ class Game {
     };
 
     let hp = bData.baseHp || baseHps[stage] || 50400;
-    if (stage <= 3 && hp > 100000) {
-      hp = Math.round(hp * 0.6); // 1-3 關難度實質調降 40%
+    if (stage <= 4 && hp > 100000) {
+      hp = Math.round(hp * 0.6); // 1-4 關難度實質調降
     }
     this.currentBoss = {
       isBoss: true,
@@ -5307,7 +5621,7 @@ class Game {
       maxHp: hp,
       hitboxRadius: bData.hitboxRadius || 50,
       phase: 1,
-      phases: stage === 10 ? 3 : 2,
+      phases: stage === 12 ? 3 : (stage <= 2 ? 1 : 2),
       invulnerable: false,
       invulnTimer: 0,
       shieldType: bData.shieldType || 'none',
@@ -5403,12 +5717,22 @@ class Game {
       const s = b.stage || 1;
       const t = this.time;
       switch (s) {
-        case 1: { // 1. 迦樓羅：8 字型滑翔與高空盤旋 (Lissajous 8-figure dive)
+        case 1: { // 1. 機甲庫巴：豪邁左右重壓彈跳步 (Mario Bowser step)
+          b.x = this.W / 2 + Math.sin(t * 1.5) * 85;
+          b.y = b.targetY + Math.abs(Math.sin(t * 3.0)) * 22;
+          break;
+        }
+        case 2: { // 2. 災厄加儂：魔怨怨念盤旋與突進蓄勢 (Zelda Ganon hover)
+          b.x = this.W / 2 + Math.cos(t * 1.3) * 95;
+          b.y = b.targetY + Math.sin(t * 2.2) * 20;
+          break;
+        }
+        case 3: { // 3. 迦樓羅：8 字型滑翔與高空盤旋 (Lissajous 8-figure dive)
           b.x = this.W / 2 + Math.sin(t * 1.8) * 110;
           b.y = b.targetY + Math.sin(t * 3.6) * 35;
           break;
         }
-        case 2: { // 2. 雷公：Z 字型疾雷折線與雷殛閃現 (Lightning Z-glide & flash teleport)
+        case 4: { // 4. 雷公：Z 字型疾雷折線與雷殛閃現 (Lightning Z-glide & flash teleport)
           b.teleportTimer = (b.teleportTimer || 0) + dt;
           if (b.teleportTimer >= 3.2) {
             b.teleportTimer = 0;
@@ -5426,17 +5750,17 @@ class Game {
           }
           break;
         }
-        case 3: { // 3. 美杜莎：蛇形 S 曲線游弋 (Serpentine S-curve slither)
+        case 5: { // 5. 美杜莎：蛇形 S 曲線游弋 (Serpentine S-curve slither)
           b.x = this.W / 2 + Math.sin(t * 1.3) * 125 + Math.sin(t * 3.9) * 25;
           b.y = b.targetY + Math.cos(t * 2.6) * 24;
           break;
         }
-        case 4: { // 4. 饕餮：重力深陷與貪婪下壓 (Gravitational sink & center pull)
+        case 6: { // 6. 饕餮：重力深陷與貪婪下壓 (Gravitational sink & center pull)
           b.x = this.W / 2 + Math.sin(t * 0.8) * 70;
           b.y = b.targetY + Math.pow(Math.sin(t * 1.4), 2) * 36;
           break;
         }
-        case 5: { // 5. 阿特拉斯：天穹重磅下墜與泰坦重踏 (Titanic ground pound drop)
+        case 7: { // 7. 阿特拉斯：天穹重磅下墜與泰坦重踏 (Titanic ground pound drop)
           b.atlasDropTimer = (b.atlasDropTimer || 0) + dt;
           if (b.atlasDropTimer >= 4.0) {
             b.atlasDropTimer = 0;
@@ -5453,7 +5777,7 @@ class Game {
           }
           break;
         }
-        case 6: { // 6. 雅典娜：軍事正三角巡弋陣型 (Tactical triangle patrol)
+        case 8: { // 8. 雅典娜：軍事正三角巡弋陣型 (Tactical triangle patrol)
           const p = (t * 0.6) % 3;
           const apexY = b.targetY - 20;
           const baseY = b.targetY + 30;
@@ -5471,12 +5795,12 @@ class Game {
           }
           break;
         }
-        case 7: { // 7. 許德拉：九頭蛇身劇毒波狀擺動 (Hydra multi-head sway)
+        case 9: { // 9. 許德拉：九頭蛇身劇毒波狀擺動 (Hydra multi-head sway)
           b.x = this.W / 2 + Math.sin(t * 1.5) * 105;
           b.y = b.targetY + Math.sin(t * 3.0) * 30 + Math.cos(t * 0.8) * 16;
           break;
         }
-        case 8: { // 8. 獨眼巨人：鋼鐵重步梯形前進 (Iron step marching)
+        case 10: { // 10. 獨眼巨人：鋼鐵重步梯形前進 (Iron step marching)
           const stepIdx = Math.floor(t * 1.6) % 6;
           const stepPositions = [this.W * 0.2, this.W * 0.35, this.W * 0.5, this.W * 0.65, this.W * 0.8, this.W * 0.5];
           const targetStepX = stepPositions[stepIdx];
@@ -5484,13 +5808,13 @@ class Game {
           b.y = b.targetY + (stepIdx % 2 === 0 ? 15 : -10);
           break;
         }
-        case 9: { // 9. 玉藻前：天狐幻境魅影穿梭 (Tamamo decoy phasing drift)
+        case 11: { // 11. 玉藻前：天狐幻境魅影穿梭 (Tamamo decoy phasing drift)
           b.x = this.W / 2 + Math.sin(t * 1.2) * 115;
           b.y = b.targetY + Math.cos(t * 1.8) * 28;
           b.phaseShimmer = Math.sin(t * 4.0) > 0.3;
           break;
         }
-        case 10: { // 10. 提亞瑪特：原初混沌宇宙軌道旋轉 (Cosmic orbital revolution)
+        case 12: { // 12. 提亞瑪特：原初混沌宇宙軌道旋轉 (Cosmic orbital revolution)
           const orbitR = b.phase === 3 ? 120 : 95;
           const orbitSpd = b.phase === 3 ? 1.4 : 0.9;
           b.x = this.W / 2 + Math.cos(t * orbitSpd) * orbitR;
@@ -5578,14 +5902,14 @@ class Game {
     });
     this.bossMinions = this.bossMinions.filter(m => !m.dead);
 
-    // 檢查 1-3 關魔王背水一戰機制是否被瓦解
+    // 檢查 3-5 關魔王背水一戰機制是否被瓦解
     if (b.desperationActive) {
       const spiritMinions = this.bossMinions.filter(m => m.requiresSpirit && !m.dead);
       if (spiritMinions.length > 0) {
         b.invulnerable = true;
       }
 
-      if (b.stage === 1) {
+      if (b.stage === 3) {
         const anchors = this.bossMinions.filter(m => m.type === 'garuda_feather_anchor');
         if (anchors.length === 0) {
           b.desperationActive = false;
@@ -5595,7 +5919,7 @@ class Game {
           this.shake(14, 0.45);
           this.cancelAllEnemyBullets('💥【靈能破盾】金羽錨點全數破除！迦樓羅神盾瓦解，陷入 3.0 秒大癱瘓！');
         }
-      } else if (b.stage === 2) {
+      } else if (b.stage === 4) {
         const drums = this.bossMinions.filter(m => m.type === 'thunder_drum_anchor');
         if (drums.length === 0) {
           b.desperationActive = false;
@@ -5606,7 +5930,7 @@ class Game {
           this.shake(14, 0.45);
           this.cancelAllEnemyBullets('💥【靈能破盾】天雷法鼓崩壞！雷公受到 8% 電荷反噬並癱瘓 3.0 秒！');
         }
-      } else if (b.stage === 3) {
+      } else if (b.stage === 5) {
         const mirrors = this.bossMinions.filter(m => m.type === 'gorgon_hex_mirror');
         if (mirrors.length === 0) {
           b.desperationActive = false;
@@ -5650,7 +5974,7 @@ class Game {
     }
 
     // 雷公 Phase 2：每 3 秒引發全場磁暴，戰機強制停頓 0.5 秒
-    if (b.stage === 2 && b.phase >= 2 && !b.dead && !b.dying) {
+    if (b.stage === 4 && b.phase >= 2 && !b.dead && !b.dying) {
       b.shockCycleTimer = (b.shockCycleTimer || 0) + dt;
       if (b.shockCycleTimer >= 2.4 && !b.shockTelegraphed) {
         b.shockTelegraphed = true;
@@ -5676,14 +6000,14 @@ class Game {
     document.getElementById('bossHpGhost').style.width = pct + '%';
     const subTitleEl = document.getElementById('bossSubTitle');
     if (subTitleEl) {
-      if (b.stage === 1 && b.featherBarrierHp > 0) {
+      if (b.stage === 3 && b.featherBarrierHp > 0) {
         subTitleEl.textContent = `🛡️ 金羽神盾: ${Math.round(b.featherBarrierHp)} / ${b.maxFeatherBarrierHp || 10000}`;
         subTitleEl.style.color = '#ffd700';
-      } else if (b.stage === 2 && b.phase >= 2) {
+      } else if (b.stage === 4 && b.phase >= 2) {
         const shockIn = Math.max(0, 3.0 - (b.shockCycleTimer || 0)).toFixed(1);
         subTitleEl.textContent = `⚡ 磁暴拘束倒數: ${shockIn}s`;
         subTitleEl.style.color = '#38bdf8';
-      } else if (b.stage === 3 && b.phase >= 2) {
+      } else if (b.stage === 5 && b.phase >= 2) {
         subTitleEl.textContent = this.player.gorgonSlowActive ? '🗿 石化凝視領域作用中 (移速 -50%)' : '✨ 石化融化中 (移速正常)';
         subTitleEl.style.color = '#d8b4fe';
       }
@@ -5694,24 +6018,24 @@ class Game {
     if (tacAlert) {
       if (b.invulnerable && b.invulnTimer > 0) {
         tacAlert.style.display = 'block';
-        if (b.stage === 1) {
+        if (b.stage === 3) {
           tacAlert.innerHTML = `🛡️ <b>【金羽神盾】Boss 無敵中 (${b.invulnTimer.toFixed(1)}s)</b> ➔ 🎯 <b>戰術指示：先擊破周圍 4 枚金色神羽錨點！</b>`;
-        } else if (b.stage === 2) {
+        } else if (b.stage === 4) {
           tacAlert.innerHTML = `⚡ <b>【超導電牢】Boss 無敵中 (${b.invulnTimer.toFixed(1)}s)</b> ➔ 🎯 <b>戰術指示：先摧毀兩側天雷法鼓！</b>`;
-        } else if (b.stage === 3) {
+        } else if (b.stage === 5) {
           tacAlert.innerHTML = `🪞 <b>【蛇髮魔鏡】鏡面反彈常規子彈</b> ➔ 🎯 <b>戰術指示：擊碎魔鏡或用貫穿光束/榴彈破壞！</b>`;
         } else {
           tacAlert.innerHTML = `🛡️ <b>【神聖無敵】防護罩展開中 (${b.invulnTimer.toFixed(1)}s)</b> ➔ 🎯 <b>戰術指示：閃避彈幕等待過載！</b>`;
         }
-      } else if (b.stage === 3 && b.phase >= 2) {
+      } else if (b.stage === 5 && b.phase >= 2) {
         tacAlert.style.display = 'block';
         tacAlert.innerHTML = this.player.gorgonSlowActive
           ? `🐍 <b>【石化凝視】戰機移速 -50%</b> ➔ 🎯 <b>戰術指示：使用「金陽聚焦光束」熱能可暫時驅散石化！</b>`
           : `✨ <b>【石化暫時驅散】戰機移速正常</b> ➔ 🎯 <b>戰術指示：趁現在全力輸出！</b>`;
-      } else if (b.stage === 1 && b.featherBarrierHp > 0) {
+      } else if (b.stage === 3 && b.featherBarrierHp > 0) {
         tacAlert.style.display = 'block';
         tacAlert.innerHTML = `🛡️ <b>【金羽天罡神盾】吸收傷害中</b> ➔ 🎯 <b>戰術指示：集中火力全力打破護盾！</b>`;
-      } else if (b.stage === 2 && b.phase >= 2) {
+      } else if (b.stage === 4 && b.phase >= 2) {
         tacAlert.style.display = 'block';
         const shockIn = Math.max(0, 3.0 - (b.shockCycleTimer || 0)).toFixed(1);
         tacAlert.innerHTML = `⚡ <b>【九天磁暴】倒數 ${shockIn}s</b> ➔ 🎯 <b>戰術指示：注意每 3 秒引發 0.5s 戰機短路拘束！</b>`;
@@ -5721,8 +6045,44 @@ class Game {
     }
   }
 
-  // 前哨神械 (Mini-Boss) 十大神話魔王招式巡迴武裝投影 (每輪依序巡迴 10 大 Boss 標誌性武裝)
+  // 前哨神械 (Mini-Boss) 與莫力布林巨將攻擊
   executeMiniBossAttack(boss) {
+    if (boss.id === 'mini_boss_zelda' || this.stage === 2) {
+      boss.miniCycle = (boss.miniCycle || 0) + 1;
+      const mStep = boss.miniCycle % 2;
+      if (mStep === 0) {
+        // 莫力布林巨棒重擊：地面震盪波 (紅線預警 0.8s，震出 2 顆飛石，速度慢極易閃避)
+        this.showToast('🐗 莫力布林巨將：荒野巨棒重擊！');
+        this.sound.playMarioStomp();
+        const tx = this.player.x;
+        this.hazardTelegraphs.push({
+          type: 'line', x1: tx, y1: 0, x2: tx, y2: this.H,
+          life: 0.8, width: 28, color: 'rgba(234, 88, 12, 0.6)'
+        });
+        setTimeout(() => {
+          if (!boss || boss.dead) return;
+          this.sound.playExplosion(false);
+          this.shake(6, 0.2);
+          for (let i = -1; i <= 1; i += 2) {
+            const eb = new Bullet(tx, boss.y + 20, i * 70, 160, false, 1, 'rock_fragment');
+            eb.color = '#ea580c'; eb.r = 6;
+            this.ebullets.push(eb);
+          }
+        }, 800);
+      } else {
+        // 莫力布林野蠻突刺：發射 3 顆慢速骨刺飛刃
+        this.showToast('🐗 莫力布林巨將：骨矛投擲！');
+        this.sound.playLaser(600);
+        for (let i = -1; i <= 1; i++) {
+          const ang = Math.PI / 2 + i * 0.35;
+          const eb = new Bullet(boss.x, boss.y + 15, Math.cos(ang) * 160, Math.sin(ang) * 160, false, 1, 'normal');
+          eb.color = '#f59e0b'; eb.r = 6;
+          this.ebullets.push(eb);
+        }
+      }
+      return;
+    }
+
     boss.miniCycle = (boss.miniCycle || 0) + 1;
     const step = (boss.miniCycle - 1) % 10;
     const moveNames = [
@@ -5861,7 +6221,92 @@ class Game {
     const isPhase2 = boss.phase >= 2;
 
     switch (s) {
-      case 1: // 迦樓羅・裂空王 (彈幕減少 30%)
+      case 1: // 機甲庫巴・烈焰暴君 (瑪利歐風格 // 新手入門無腦紓壓)
+        {
+          const mode = boss.patternIndex % 3;
+          if (mode === 0) {
+            // 模式 1：庫巴噴射大火球 (3 枚慢速大火球，好躲又震撼)
+            this.showToast('🔥 庫巴：烈焰大吐息！');
+            this.sound.playMarioStomp();
+            for (let i = -1; i <= 1; i++) {
+              const ang = Math.PI / 2 + i * 0.38;
+              const eb = new Bullet(boss.x, boss.y + 25, Math.cos(ang) * 160, Math.sin(ang) * 160, false, 1, 'fireball');
+              eb.color = '#ff6b35';
+              eb.r = 11;
+              this.ebullets.push(eb);
+            }
+          } else if (mode === 1) {
+            // 模式 2：機械尖刺龜殼投擲 (Spiny Shell)
+            this.showToast('🐢 庫巴：機械尖刺龜殼投擲！');
+            this.sound.playLaser(750);
+            for (let i = -1; i <= 1; i += 2) {
+              const eb = new Bullet(boss.x + i * 40, boss.y + 15, i * 60, 180, false, 1, 'boulder');
+              eb.color = '#ef4444';
+              eb.r = 9;
+              this.ebullets.push(eb);
+            }
+          } else {
+            // 模式 3：庫巴重甲泰山壓頂震波
+            this.showToast('💥 庫巴：重甲泰山壓頂！');
+            this.sound.playMarioStomp();
+            this.shake(6, 0.25);
+            for (let i = -2; i <= 2; i++) {
+              const eb = new Bullet(boss.x + i * 35, boss.y + 20, i * 30, 200, false, 1, 'magma');
+              eb.color = '#f59e0b';
+              eb.r = 7;
+              this.ebullets.push(eb);
+            }
+          }
+        }
+        break;
+
+      case 2: // 災厄加儂・終焉狂瀾 (薩爾達風格 // 荒野試煉)
+        {
+          const mode = boss.patternIndex % 3;
+          if (mode === 0) {
+            // 模式 1：災厄魔怨光線 (直線紅線預警 1.1s 後發射單道怨念射線)
+            this.showToast('👁️ 加儂：古代魔怨死光瞄準！');
+            const targetX = this.player.x;
+            this.hazardTelegraphs.push({
+              type: 'line', x1: targetX, y1: 0, x2: targetX, y2: this.H,
+              life: 1.1, width: 28, color: 'rgba(239, 68, 68, 0.65)'
+            });
+            setTimeout(() => {
+              if (!boss || boss.dead) return;
+              this.sound.playZeldaSwordSlash();
+              this.shake(8, 0.3);
+              const eb = new Bullet(targetX, 0, 0, 420, false, 1, 'laser');
+              eb.color = '#ef4444';
+              eb.r = 9;
+              this.ebullets.push(eb);
+            }, 1100);
+          } else if (mode === 1) {
+            // 模式 2：古代守護者脈衝扇射 (3 顆守護者藍光飛彈)
+            this.showToast('⚔️ 加儂：古代守護者脈衝！');
+            this.sound.playLaser(1100);
+            for (let i = -1; i <= 1; i++) {
+              const ang = Math.PI / 2 + i * 0.4;
+              const eb = new Bullet(boss.x, boss.y + 20, Math.cos(ang) * 180, Math.sin(ang) * 180, false, 1, 'thunder');
+              eb.color = '#38bdf8';
+              eb.r = 7;
+              this.ebullets.push(eb);
+            }
+          } else {
+            // 模式 3：怨念法陣環形擴散 (6 顆紫色怨念法球)
+            this.showToast('🔮 加儂：終焉怨念法陣！');
+            this.sound.playZeldaSecretChime();
+            for (let a = 0; a < 6; a++) {
+              const ang = (a / 6) * Math.PI * 2 + (boss.patternIndex * 0.2);
+              const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 160, Math.sin(ang) * 160, false, 1, 'chaos');
+              eb.color = '#a855f7';
+              eb.r = 7.5;
+              this.ebullets.push(eb);
+            }
+          }
+        }
+        break;
+
+      case 3: // 迦樓羅・裂空王 (彈幕減少 30%)
         {
           const mode = boss.patternIndex % 3;
           if (mode === 0) {
@@ -5926,7 +6371,7 @@ class Game {
         }
         break;
 
-      case 2: // 雷公・震霄 (彈幕減少 30%)
+      case 4: // 雷公・震霄 (彈幕減少 30%)
         {
           const mode = boss.patternIndex % 3;
           if (mode === 0) {
@@ -6003,7 +6448,7 @@ class Game {
         }
         break;
 
-      case 3: // 美杜莎・返照 (彈幕減少 30%)
+      case 5: // 美杜莎・返照 (彈幕減少 30%)
         if (!isPhase2) {
           // 原 8 發，減少 30% 為 5 發
           for (let i = 0; i < 5; i++) {
@@ -6041,7 +6486,7 @@ class Game {
         }
         break;
 
-      case 4: // 饕餮・噬界 (Phase 2 召喚並吞噬貪食傀儡回血)
+      case 6: // 饕餮・噬界 (Phase 2 召喚並吞噬貪食傀儡回血)
         this.player.targetY -= (isPhase2 ? 22 : 14); // 引力向 Boss 牽引
         this.particles.push(new Particle(this.W / 2, boss.y + 30, (Math.random() - 0.5) * 80, (Math.random() - 0.5) * 80, '#ff9138', 5, 0.4));
         const fireCount = isPhase2 ? 7 : 5;
@@ -6069,7 +6514,7 @@ class Game {
         }
         break;
 
-      case 5: // 阿特拉斯・墜星 (Phase 2 召喚擎天神柱)
+      case 7: // 阿特拉斯・墜星 (Phase 2 召喚擎天神柱)
         const boulder = new Bullet(boss.x, boss.y, (Math.random() - 0.5) * 60, 190, false, 1, 'boulder');
         boulder.r = 18; boulder.color = '#f5bc38';
         this.ebullets.push(boulder);
@@ -6105,7 +6550,7 @@ class Game {
         }
         break;
 
-      case 6: // 雅典娜・聖裁 (Phase 2 召喚神聖甘露仙瓶，6秒未破回血 25%)
+      case 8: // 雅典娜・聖裁 (Phase 2 召喚神聖甘露仙瓶，6秒未破回血 25%)
         const lanceCount = isPhase2 ? 9 : 6;
         for (let i = 0; i < lanceCount; i++) {
           const offset = (i - (lanceCount - 1) / 2) * 22;
@@ -6142,7 +6587,7 @@ class Game {
         }
         break;
 
-      case 7: // 許德拉・淵毒 (Phase 2 斷首分裂出雙蛇首)
+      case 9: // 許德拉・淵毒 (Phase 2 斷首分裂出雙蛇首)
         const hydraWaves = isPhase2 ? 9 : 6;
         for (let i = 0; i < hydraWaves; i++) {
           const angle = Math.PI / 2 + (i - (hydraWaves - 1) / 2) * 0.25;
@@ -6175,7 +6620,7 @@ class Game {
         }
         break;
 
-      case 8: // 獨眼巨人・天爐 (Phase 2 召喚鍛造熔爐核心)
+      case 10: // 獨眼巨人・天爐 (Phase 2 召喚鍛造熔爐核心)
         this.hazardTelegraphs.push({
           type: 'line', x1: this.player.x, y1: 0, x2: this.player.x, y2: this.H,
           life: 1.3, width: 36, color: 'rgba(255, 145, 56, 0.5)'
@@ -6206,7 +6651,7 @@ class Game {
         }
         break;
 
-      case 9: // 玉藻前・幻械 (Phase 2 召喚殺生石與魅影分身)
+      case 11: // 玉藻前・幻械 (Phase 2 召喚殺生石與魅影分身)
         const tails = isPhase2 ? 14 : 9;
         for (let i = 0; i < tails; i++) {
           const ang = this.time * 2.0 + (i / tails) * Math.PI * 2;
@@ -6230,7 +6675,7 @@ class Game {
         }
         break;
 
-      case 10: // 提亞瑪特・混沌母艦 (Phase 2 產下混沌龍卵，限時孵化)
+      case 12: // 提亞瑪特・混沌母艦 (Phase 2 產下混沌龍卵，限時孵化)
         const chaosCount = isPhase2 ? 18 : 12;
         const colors = ['#67ffff', '#ff4766', '#f5bc38', '#48e583', '#b359ff'];
         for (let i = 0; i < chaosCount; i++) {
@@ -6296,7 +6741,37 @@ class Game {
     const variant = (boss.ultVariant !== undefined) ? (boss.ultVariant % 2) : 0;
 
     switch (s) {
-      case 1: { // 迦樓羅 (大招彈幕減少 30%)
+      case 1: { // 機甲庫巴・烈焰風暴 (瑪利歐風格)
+        this.showToast('🔥【機甲庫巴・終極烈焰風暴】大招降臨！');
+        this.sound.playMarioStomp();
+        this.shake(10, 0.4);
+        for (let i = -3; i <= 3; i++) {
+          setTimeout(() => {
+            if (!boss || boss.dead) return;
+            const eb = new Bullet(boss.x + i * 25, boss.y + 20, i * 45, 190, false, 1, 'fireball');
+            eb.color = '#ff4766';
+            eb.r = 10;
+            this.ebullets.push(eb);
+          }, Math.abs(i) * 120);
+        }
+        break;
+      }
+
+      case 2: { // 災厄加儂・魔怨狂瀾 (薩爾達風格)
+        this.showToast('👁️【災厄加儂・魔怨狂瀾】全域鎖定！');
+        this.sound.playZeldaSecretChime();
+        this.shake(12, 0.45);
+        for (let a = 0; a < 8; a++) {
+          const ang = (a / 8) * Math.PI * 2;
+          const eb = new Bullet(boss.x, boss.y + 15, Math.cos(ang) * 170, Math.sin(ang) * 170, false, 1, 'chaos');
+          eb.color = '#c084fc';
+          eb.r = 8;
+          this.ebullets.push(eb);
+        }
+        break;
+      }
+
+      case 3: { // 迦樓羅 (大招彈幕減少 30%)
         if (variant === 0) {
           // 大招 1：羽化流星天罰 (漫天金羽瀑布 + 3 枚滯空金羽炸彈，原24發/4枚減少30%)
           const featherCount = 16;
@@ -6346,7 +6821,7 @@ class Game {
         }
         break;
       }
-      case 2: { // 雷公 (大招彈幕減少 30%)
+      case 4: { // 雷公 (大招彈幕減少 30%)
         if (variant === 0) {
           // 大招 1：九天雷霆萬鈞 (全屏天頂交錯雷網 + 五芒星雷爆，原4道/20發減少30%為3道/13發)
           for (let k = 0; k < 3; k++) {
@@ -6394,7 +6869,7 @@ class Game {
         }
         break;
       }
-      case 3: { // 美杜莎 (大招彈幕減少 30%)
+      case 5: { // 美杜莎 (大招彈幕減少 30%)
         if (variant === 0) {
           // 大招 1：顧影自憐・萬蛇鏡界 (原20發減少30%為14發紫色旋轉鏡面光束)
           for (let i = 0; i < 14; i++) {
@@ -6422,7 +6897,7 @@ class Game {
         }
         break;
       }
-      case 4: { // 饕餮
+      case 6: { // 饕餮
         if (variant === 0) {
           // 大招 1：萬物同喰・噬天黑洞 (中心強大引力吸引戰機並環形射出 16 顆重力黑洞彈)
           this.singularities.push({
@@ -6452,7 +6927,7 @@ class Game {
         }
         break;
       }
-      case 5: { // 阿特拉斯
+      case 7: { // 阿特拉斯
         if (variant === 0) {
           // 大招 1：泰坦重壓・地動山搖 (全屏重力壓頂 + 12 塊巨岩碎屑)
           this.shake(16, 0.6);
@@ -6486,7 +6961,7 @@ class Game {
         }
         break;
       }
-      case 6: { // 雅典娜
+      case 8: { // 雅典娜
         if (variant === 0) {
           // 大招 1：長槍貫日・絕對聖裁 (金色長槍神光 + 浮游砲齊射)
           const px = this.player.x;
@@ -6527,7 +7002,7 @@ class Game {
         }
         break;
       }
-      case 7: { // 許德拉
+      case 9: { // 許德拉
         if (variant === 0) {
           // 大招 1：九首死靈・毒沼暴湧 (8 團深淵劇毒酸泡落地擴散)
           for (let i = 0; i < 8; i++) {
@@ -6550,7 +7025,7 @@ class Game {
         }
         break;
       }
-      case 8: { // 獨眼巨人
+      case 10: { // 獨眼巨人
         if (variant === 0) {
           // 大招 1：赫菲斯托斯・滅世掃蕩 (360 度旋轉天爐光束)
           for (let i = 0; i < 22; i++) {
@@ -6580,7 +7055,7 @@ class Game {
         }
         break;
       }
-      case 9: { // 玉藻前
+      case 11: { // 玉藻前
         if (variant === 0) {
           // 大招 1：九尾妖火・媚影迷蹤 (18 發粉紫狐火迴旋)
           for (let i = 0; i < 18; i++) {
@@ -6615,7 +7090,7 @@ class Game {
         }
         break;
       }
-      case 10: { // 提亞瑪特
+      case 12: { // 提亞瑪特
         if (variant === 0) {
           // 大招 1：創世終焉・萬象歸虛 (全屏十字毀滅星光 + 24 發五彩混沌龍息)
           for (let i = 0; i < 24; i++) {
@@ -6668,7 +7143,19 @@ class Game {
     this.sound.playWarningAlert();
 
     switch (s) {
-      case 1: // 迦樓羅・裂空王：召喚風神翼蛇機兵 (若場上有翼蛇則吞食狂暴回血)
+      case 1: // 機甲庫巴・烈焰暴君：噴射金幣與烈焰
+        this.sound.playMarioCoin();
+        this.sound.speak('庫巴：哇哈哈！嚐嚐烈焰吧！');
+        this.showToast('🐢 庫巴噴出耀眼金幣！');
+        break;
+
+      case 2: // 災厄加儂・終焉狂瀾：古代魔怨怨念力場
+        this.sound.playZeldaSecretChime();
+        this.sound.speak('加儂：沉淪於魔怨吧！');
+        this.showToast('👁️ 加儂激發古代怨念護盾！全力擊破！');
+        break;
+
+      case 3: // 迦樓羅・裂空王：召喚風神翼蛇機兵 (若場上有翼蛇則吞食狂暴回血)
         if (this.bossMinions.some(m => m.type === 'garuda_viper')) {
           this.bossMinions = this.bossMinions.filter(m => m.type !== 'garuda_viper');
           boss.hp = Math.min(boss.maxHp, boss.hp + Math.round(boss.maxHp * 0.15));
@@ -6689,7 +7176,7 @@ class Game {
         }
         break;
 
-      case 2: // 雷公・震霄：召喚雙子乾坤雷鼓結界
+      case 4: // 雷公・震霄：召喚雙子乾坤雷鼓結界
         this.bossMinions = this.bossMinions.filter(m => m.type !== 'thunder_drum');
         this.sound.speak('雷公：乾坤雷鼓，震懾蒼穹！');
         this.showToast('⚡ 雷公召喚【乾坤雷鼓】結界！雷盾減傷 50%，速破雙鼓！');
@@ -6703,7 +7190,7 @@ class Game {
         });
         break;
 
-      case 3: // 美杜莎・返照：蛇鏡凝視 + 召喚石化殘影分身
+      case 5: // 美杜莎・返照：蛇鏡凝視 + 召喚石化殘影分身
         this.sound.speak('美杜莎：直視我的蛇瞳，化為永恆的石雕吧！');
         this.showToast('🐍 美杜莎啟動【蛇鏡石化凝視】並製造 2 具殘影分身！');
         this.bossMinions.push({
@@ -6717,7 +7204,7 @@ class Game {
         this.screenFlashAlpha = 0.6;
         break;
 
-      case 4: // 饕餮・萬喰：吞噬黑洞 + 召喚暴食傀儡走向巨口
+      case 6: // 饕餮・萬喰：吞噬黑洞 + 召喚暴食傀儡走向巨口
         this.sound.speak('饕餮：天地萬物，皆為我腹中之糧！');
         this.showToast('👹 饕餮張開深淵巨口！召喚 4 具暴食機甲傀儡，未擊毀將被其吞噬回血！');
         for (let i = 0; i < 4; i++) {
@@ -6729,7 +7216,7 @@ class Game {
         }
         break;
 
-      case 5: // 阿特拉斯・墜星：天穹重力扭曲 + 召喚引力星核
+      case 7: // 阿特拉斯・墜星：天穹重力扭曲 + 召喚引力星核
         this.sound.speak('阿特拉斯：承受萬鈞星穹之重吧！');
         this.showToast('🪐 阿特拉斯引爆【天穹引力星核】！引力牽引與流星雨啟動！');
         for (let m = 0; m < 5; m++) {
@@ -6744,7 +7231,7 @@ class Game {
         }
         break;
 
-      case 6: // 雅典娜・神盾：召喚聖光甘露仙瓶 (未及時打破則回血 35%)
+      case 8: // 雅典娜・神盾：召喚聖光甘露仙瓶 (未及時打破則回血 35%)
         this.bossMinions = this.bossMinions.filter(m => m.type !== 'elixir_flask');
         this.sound.speak('雅典娜：奧林匹斯之甘露，治癒神祇！');
         this.showToast('🏺 雅典娜召喚【甘露仙瓶】！6 秒內未打破將回復 Boss 35% HP！');
@@ -6765,7 +7252,7 @@ class Game {
         });
         break;
 
-      case 7: // 許德拉・再生：九頭蛇毒首分裂
+      case 9: // 許德拉・再生：九頭蛇毒首分裂
         this.sound.speak('許德拉：斬斷一首，再生二首！');
         this.showToast('🐉 許德拉分裂出 3 具劇毒蛇首要塞，展開毒液交錯掃射！');
         for (let k = 0; k < 3; k++) {
@@ -6777,7 +7264,7 @@ class Game {
         }
         break;
 
-      case 8: // 獨眼巨人・天爐：熔爐地火噴發 + 火山岩漿池
+      case 10: // 獨眼巨人・天爐：熔爐地火噴發 + 火山岩漿池
         this.sound.speak('獨眼巨人：天爐之火，焚盡世間凡物！');
         this.showToast('🔥 獨眼巨人開啟【天爐熔岩噴射】！戰場蔓延高熱熔岩池！');
         for (let i = 0; i < 4; i++) {
@@ -6788,7 +7275,7 @@ class Game {
         }
         break;
 
-      case 9: // 玉藻前・幻械：九尾天狐幻象 + 妖火封鎖
+      case 11: // 玉藻前・幻械：九尾天狐幻象 + 妖火封鎖
         this.sound.speak('玉藻前：九尾迷離，虛實莫測～');
         this.showToast('🦊 玉藻前展開【九尾狐火迷津】！召喚 2 具幻狐真影！');
         this.bossMinions.push({
@@ -6801,7 +7288,7 @@ class Game {
         });
         break;
 
-      case 10: // 提亞瑪特・混沌母艦：創世混沌黑洞 + 混沌龍卵孵化
+      case 12: // 提亞瑪特・混沌母艦：創世混沌黑洞 + 混沌龍卵孵化
         this.sound.speak('提亞瑪特：原初之混沌，重塑寰宇宇宙！');
         this.showToast('🌌 提亞瑪特釋放【創世混沌黑洞】！吸引力場與混沌龍卵啟動！');
         for (let i = 0; i < 2; i++) {
@@ -7443,9 +7930,9 @@ class Game {
 
   onGameVictory() {
     this.state = 'gameover';
-    document.getElementById('gameOverTitle').textContent = '神話登頂！全十關通關！';
+    document.getElementById('gameOverTitle').textContent = '神話登頂！全十二關通關！';
     document.getElementById('endScore').textContent = this.score;
-    document.getElementById('endStage').textContent = '第 10 關 (全破)';
+    document.getElementById('endStage').textContent = '第 12 關 (全破)';
     const total = this.sessionTotalAnswered || 0;
     const correct = this.sessionTotalCorrect || 0;
     const rate = total > 0 ? Math.round((correct / total) * 100) : 0;
@@ -7465,7 +7952,7 @@ class Game {
       this.dataStore.syncOfflineQueue();
     }
     document.getElementById('gameOverScreen').classList.remove('hidden');
-    this.sound.speak('恭喜！十位神話機神全數擊破！');
+    this.sound.speak('恭喜！十二位神話機神全數擊破！');
   }
 
   onGameOver() {
@@ -7511,8 +7998,8 @@ class Game {
     // 玩家平滑移動與絕對邊界限制 (移動嚴禁超出畫面)
     const p = this.player;
 
-    // 安全防護屏障：若場上無活躍之美杜莎 Boss (Stage 3 Phase 2+)，強制清除石化減速，絕不外溢至後續波次或關卡
-    const hasActiveMedusa = this.currentBoss && this.currentBoss.stage === 3 && this.currentBoss.phase >= 2 && !this.currentBoss.dead && !this.currentBoss.dying;
+    // 安全防護屏障：若場上無活躍之美杜莎 Boss (Stage 5 Phase 2+)，強制清除石化減速，絕不外溢至後續波次或關卡
+    const hasActiveMedusa = this.currentBoss && this.currentBoss.stage === 5 && this.currentBoss.phase >= 2 && !this.currentBoss.dead && !this.currentBoss.dying;
     if (!hasActiveMedusa && p.gorgonSlowActive) {
       p.gorgonSlowActive = false;
       p.gorgonPurgeTimer = 0;
@@ -7524,7 +8011,7 @@ class Game {
       if (p.gorgonPurgeTimer <= 0) {
         p.gorgonPurgeTimer = 0;
         // 若美杜莎還在 Phase 2，石化領域再次生效
-        const medusa = (this.currentBoss && this.currentBoss.stage === 3 && this.currentBoss.phase >= 2 && !this.currentBoss.dead && !this.currentBoss.dying) ? this.currentBoss : null;
+        const medusa = (this.currentBoss && this.currentBoss.stage === 5 && this.currentBoss.phase >= 2 && !this.currentBoss.dead && !this.currentBoss.dying) ? this.currentBoss : null;
         if (medusa) p.gorgonSlowActive = true;
       }
     }
@@ -8360,7 +8847,27 @@ class Game {
     // 2. 疊加各關卡神話環境氣氛微光與粒子
     ctx.save();
     switch (s) {
-      case 1: // 迦樓羅・裂空王：金羽風切與浮空天宮微光
+      case 1: // 機甲庫巴：蘑菇王國金幣閃爍與烈焰餘燼
+        for (let j = 0; j < 5; j++) {
+          const fx = (Math.sin(t * 2.0 + j) * 40 + (j * 85)) % W;
+          const fy = H - ((t * 90 + j * 120) % H);
+          ctx.fillStyle = 'rgba(255, 215, 0, 0.35)';
+          ctx.beginPath();
+          ctx.arc(fx, fy, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        break;
+      case 2: // 災厄加儂：海拉魯荒野古代怨念紫霧
+        for (let j = 0; j < 6; j++) {
+          const fx = (Math.cos(t * 1.5 + j) * 50 + (j * 75)) % W;
+          const fy = (t * 60 + j * 100) % H;
+          ctx.fillStyle = 'rgba(192, 132, 252, 0.3)';
+          ctx.beginPath();
+          ctx.arc(fx, fy, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        break;
+      case 3: // 迦樓羅・裂空王：金羽風切與浮空天宮微光
         ctx.strokeStyle = 'rgba(245, 188, 56, 0.22)';
         ctx.lineWidth = 1.4;
         for (let i = 0; i < 6; i++) {
@@ -8372,13 +8879,13 @@ class Game {
           ctx.stroke();
         }
         break;
-      case 2: // 雷公・震霄：雷雲夜空遠景雷暴閃爍
+      case 4: // 雷公・震霄：雷雲夜空遠景雷暴閃爍
         if (Math.sin(t * 8) > 0.88) {
           ctx.fillStyle = 'rgba(56, 189, 248, 0.12)';
           ctx.fillRect(0, 0, W, H);
         }
         break;
-      case 3: // 美杜莎・石化之眼：神廟幽綠石化浮塵
+      case 5: // 美杜莎・石化之眼：神廟幽綠石化浮塵
         for (let j = 0; j < 6; j++) {
           const fx = (Math.sin(t * 1.5 + j) * 45 + (j * 75)) % W;
           const fy = (t * 60 + j * 130) % H;
@@ -8388,7 +8895,7 @@ class Game {
           ctx.fill();
         }
         break;
-      case 4: // 饕餮・貪暴之口：赤紅熔岩天門升騰餘燼
+      case 6: // 饕餮・貪暴之口：赤紅熔岩天門升騰餘燼
         for (let j = 0; j < 8; j++) {
           const fx = (Math.cos(t * 2.0 + j) * 50 + (j * 55)) % W;
           const fy = H - ((t * 80 + j * 90) % H);
@@ -8398,7 +8905,7 @@ class Game {
           ctx.fill();
         }
         break;
-      case 5: // 阿特拉斯・擎天泰坦：星穹巨柱重力流光
+      case 7: // 阿特拉斯・擎天泰坦：星穹巨柱重力流光
         ctx.strokeStyle = 'rgba(103, 232, 249, 0.18)';
         ctx.lineWidth = 1.5;
         for (let i = 0; i < 3; i++) {
@@ -8408,21 +8915,21 @@ class Game {
           ctx.stroke();
         }
         break;
-      case 6: // 雅典娜・正義之矛：金色聖殿神聖光柱
+      case 8: // 雅典娜・正義之矛：金色聖殿神聖光柱
         ctx.fillStyle = 'rgba(250, 204, 21, 0.08)';
         ctx.fillRect(W * 0.22, 0, W * 0.56, H);
         break;
-      case 7: // 許德拉・蝕骨九頭蛇：酸液沼澤毒霧幽綠
+      case 9: // 許德拉・蝕骨九頭蛇：酸液沼澤毒霧幽綠
         ctx.fillStyle = 'rgba(34, 197, 94, 0.08)';
         ctx.fillRect(0, 0, W, H);
         break;
-      case 8: // 獨眼巨人・熔火之瞳：天爐熔岩高熱波紋
+      case 10: // 獨眼巨人・熔火之瞳：天爐熔岩高熱波紋
         if (Math.sin(t * 6) > 0.72) {
           ctx.fillStyle = 'rgba(239, 68, 68, 0.08)';
           ctx.fillRect(0, 0, W, H);
         }
         break;
-      case 9: // 玉藻前・妖狐幻魅：櫻華血月夜櫻瓣與狐火
+      case 11: // 玉藻前・妖狐幻魅：櫻華血月夜櫻瓣與狐火
         for (let j = 0; j < 7; j++) {
           const fx = (Math.sin(t * 1.8 + j) * 60 + (j * 60)) % W;
           const fy = (t * 70 + j * 110) % H;
@@ -8432,7 +8939,7 @@ class Game {
           ctx.fill();
         }
         break;
-      case 10: // 提亞瑪特・混沌創世龍：宇宙原初暗黑脈衝
+      case 12: // 提亞瑪特・混沌創世龍：宇宙原初暗黑脈衝
         const pulse = Math.sin(t * 3) * 0.06 + 0.06;
         ctx.fillStyle = `rgba(168, 85, 247, ${pulse})`;
         ctx.fillRect(0, 0, W, H);
@@ -9941,7 +10448,7 @@ class Game {
     }
 
     // 3. 迦樓羅專屬：金羽神盾環繞羽刃屏障 (承受 10,000 傷害破盾)
-    if (b.stage === 1 && b.featherBarrierHp > 0) {
+    if (b.stage === 3 && b.featherBarrierHp > 0) {
       const featherOrbCount = 8;
       const shieldR = b.hitboxRadius + 32;
       ctx.save();

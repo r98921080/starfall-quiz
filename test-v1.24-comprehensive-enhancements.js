@@ -222,7 +222,7 @@ assert(gameJsContent.includes("this.sessionTotalAnswered = (this.sessionTotalAns
 assert(gameJsContent.includes("this.sessionTotalCorrect = (this.sessionTotalCorrect || 0) + 1;"), 'sessionTotalCorrect incremented on correct answer');
 
 // Check victory and game over calculations
-const accRegex = /const rate = total > 0 \? Math\.round\(\(correct \/ total\) \* 100\) : 0;\s*const accEl = document\.getElementById\('endAcc'\);\s*if \(accEl\) accEl\.textContent = `\$\{rate\}% \(\$\{correct\}\/\$\{total\} 題\)`/;
+const accRegex = /const rate = total > 0 \? Math\.round\(\(correct \/ total\) \* 100\) : 0;[\s\S]*?const accEl = document\.getElementById\('endAcc'\);[\s\S]*?accEl\.textContent = `\$\{rate\}% \(\$\{correct\}\/\$\{total\} 題\)`/;
 assert(accRegex.test(gameJsContent), 'Accuracy formatted and populated to #endAcc in both settlement handlers');
 
 // Check index.html badge for peer mistakes

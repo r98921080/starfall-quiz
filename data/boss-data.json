@@ -11,7 +11,9 @@
     "shieldType": "none",
     "introVoice": "前方偵測到高能前哨機神！",
     "defeatVoiceLine": "先鋒巡察艦...動力核心過載停機！",
-    "phaseThresholds": [0.5],
+    "phaseThresholds": [
+      0.5
+    ],
     "skills": [
       {
         "id": "pulse_barrage",
@@ -24,16 +26,92 @@
       {
         "id": "charge_slash",
         "name": "破空突進",
-        "cooldown": 8.0,
+        "cooldown": 8,
         "type": "charge",
-        "warningTime": 2.0,
+        "warningTime": 2,
         "voiceLine": "前哨突襲！"
+      }
+    ]
+  },
+  "mini_boss_zelda": {
+    "id": "moblin_berserker",
+    "name": "莫力布林巨將・荒野先鋒",
+    "title": "海拉魯重裝魔物",
+    "asset": "assets/bosses/boss_mini_zelda.png",
+    "baseHp": 10000,
+    "width": 140,
+    "height": 140,
+    "hitboxRadius": 42,
+    "shieldType": "none",
+    "introVoice": "吼咕！荒野巨獸重踏而來！",
+    "defeatVoiceLine": "莫力布林：吼咕...力量竟被削弱了...！",
+    "phaseThresholds": [
+      0.5
+    ],
+    "skills": [
+      {
+        "id": "club_smash",
+        "name": "巨棒猛擊",
+        "cooldown": 4,
+        "type": "smash",
+        "warningTime": 1.5,
+        "voiceLine": "沉重猛擊！"
       }
     ]
   },
   "bosses": [
     {
       "stage": 1,
+      "id": "bowser",
+      "name": "機甲庫巴・烈焰暴君",
+      "title": "蘑菇王國終極霸王",
+      "asset": "assets/bosses/boss_1_bowser.png",
+      "baseHp": 16000,
+      "width": 190,
+      "height": 190,
+      "hitboxRadius": 48,
+      "shieldType": "none",
+      "introVoice": "哇哈哈！就憑你也想突破庫巴城堡？！",
+      "defeatVoiceLine": "不可能...！本大爺竟然又掉進岩漿了？！",
+      "phases": 1,
+      "ultimates": [
+        {
+          "id": "flame_tempest",
+          "name": "機甲庫巴・烈焰風暴",
+          "warningTime": 2,
+          "voiceLine": "庫巴：嚐嚐烈焰風暴的厲害！",
+          "description": "漫天噴射巨型烈焰火球",
+          "damage": 1
+        }
+      ]
+    },
+    {
+      "stage": 2,
+      "id": "calamity_ganon",
+      "name": "災厄加儂・終焉狂瀾",
+      "title": "古代怨念狂亂化身",
+      "asset": "assets/bosses/boss_2_ganon.png",
+      "baseHp": 28000,
+      "width": 190,
+      "height": 190,
+      "hitboxRadius": 48,
+      "shieldType": "none",
+      "introVoice": "怨念沉淪...萬物終歸破滅！",
+      "defeatVoiceLine": "加儂：這光芒...勇者的封印竟然甦醒了...？！",
+      "phases": 1,
+      "ultimates": [
+        {
+          "id": "malice_burst",
+          "name": "災厄加儂・魔怨狂瀾",
+          "warningTime": 2.2,
+          "voiceLine": "加儂：魔怨狂瀾，吞噬星光！",
+          "description": "古代怨念雷射矩陣與爆裂暗核",
+          "damage": 1
+        }
+      ]
+    },
+    {
+      "stage": 3,
       "id": "garuda",
       "name": "迦樓羅・裂空王",
       "title": "金黑機械神鳥",
@@ -75,7 +153,7 @@
       ]
     },
     {
-      "stage": 2,
+      "stage": 4,
       "id": "leigong",
       "name": "雷公・震霄",
       "title": "雷鼓機神",
@@ -117,7 +195,7 @@
       ]
     },
     {
-      "stage": 3,
+      "stage": 5,
       "id": "medusa",
       "name": "美杜莎・返照",
       "title": "蛇鏡反射機神",
@@ -159,7 +237,7 @@
       ]
     },
     {
-      "stage": 4,
+      "stage": 6,
       "id": "taotie",
       "name": "饕餮・萬喰",
       "title": "巨口吞噬母艦",
@@ -184,7 +262,7 @@
         {
           "id": "devour_heal",
           "name": "噬天吞地・萬獸狂食",
-          "warningTime": 3.0,
+          "warningTime": 3,
           "voiceLine": "饕餮：噬天吞地・萬獸狂食！",
           "description": "狂暴召喚暴食傀儡吞噬回復裝甲並釋放熔火腐蝕彈",
           "damage": 2
@@ -200,7 +278,7 @@
       ]
     },
     {
-      "stage": 5,
+      "stage": 7,
       "id": "atlas",
       "name": "阿特拉斯・墜星",
       "title": "重力巨神",
@@ -241,7 +319,7 @@
       ]
     },
     {
-      "stage": 6,
+      "stage": 8,
       "id": "athena",
       "name": "雅典娜・神盾",
       "title": "極性神盾機神",
@@ -282,7 +360,7 @@
       ]
     },
     {
-      "stage": 7,
+      "stage": 9,
       "id": "hydra",
       "name": "許德拉・再生",
       "title": "多首再生要塞",
@@ -323,7 +401,7 @@
       ]
     },
     {
-      "stage": 8,
+      "stage": 10,
       "id": "cyclops",
       "name": "獨眼巨人・天爐",
       "title": "熔爐獨眼機神",
@@ -348,7 +426,7 @@
         {
           "id": "cyclops_sweep",
           "name": "赫菲斯托斯・滅世掃蕩",
-          "warningTime": 3.0,
+          "warningTime": 3,
           "voiceLine": "獨眼巨人：赫菲斯托斯・滅世掃蕩！",
           "description": "獨眼核聚變 360 度旋轉天爐光束掃射全場",
           "damage": 3
@@ -364,7 +442,7 @@
       ]
     },
     {
-      "stage": 9,
+      "stage": 11,
       "id": "tamamo",
       "name": "玉藻前・幻械",
       "title": "九尾天狐機神",
@@ -405,7 +483,7 @@
       ]
     },
     {
-      "stage": 10,
+      "stage": 12,
       "id": "tiamat",
       "name": "提亞瑪特・混沌母艦",
       "title": "創世混沌巨龍",
@@ -422,7 +500,7 @@
         {
           "id": "nine_dragons",
           "name": "原初之海・混沌黑潮",
-          "warningTime": 3.0,
+          "warningTime": 3,
           "voiceLine": "提亞瑪特：原初之海・混沌黑潮！",
           "description": "九核心齊射九色混沌彈幕狂瀾",
           "damage": 2
@@ -446,7 +524,7 @@
         {
           "id": "twin_black_holes",
           "name": "虛數深淵・維度坍縮黑星",
-          "warningTime": 3.0,
+          "warningTime": 3,
           "voiceLine": "提亞瑪特：虛數深淵・維度坍縮黑星！",
           "description": "召喚雙子引力坍縮黑洞，撕裂空間拋射反物質泯滅碎星",
           "damage": 3
