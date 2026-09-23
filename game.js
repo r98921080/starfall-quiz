@@ -53,6 +53,12 @@ class BgmEngine {
           oldAudio.pause();
         }
       }, 40);
+      this.currentAudio = null;
+    }
+
+    // 第 1 關（瑪利歐主題）與第 2 關（薩爾達主題）純粹由專屬 Web Audio 程序化合成演奏，絕不播放 MP3，杜絕音軌重疊！
+    if (stage === 1 || stage === 2) {
+      return;
     }
 
     try {
@@ -1512,6 +1518,55 @@ class SoundManager {
     gain.connect(this.masterGain);
     osc.start(t);
     osc.stop(t + 0.06);
+  }
+
+  // 子彈擊中無敵護盾/神盾金屬打鐵反彈聲 (鏗鏘反彈 Ping)
+  playIronDeflection() {
+    if (!this.ctx || !this.enabled) return;
+    this.ensureContext();
+    const t = this.ctx.currentTime;
+
+    // 限制極高頻率重複觸發導致音量堆疊 (20ms 節流)
+    if (this._lastDeflectTime && (t - this._lastDeflectTime) < 0.02) return;
+    this._lastDeflectTime = t;
+
+    // 雙頻高亢諧振金屬碰撞 (2200Hz + 3520Hz)
+    const freqs = [2200, 3520];
+    freqs.forEach((freq, idx) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const filter = this.ctx.createBiquadFilter();
+
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(freq, t);
+      filter.Q.setValueAtTime(14, t);
+
+      osc.type = idx === 0 ? 'triangle' : 'square';
+      osc.frequency.setValueAtTime(freq, t);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.75, t + 0.08);
+
+      gain.gain.setValueAtTime(0.35, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain);
+
+      osc.start(t);
+      osc.stop(t + 0.08);
+    });
+
+    // 餘韻微弱金屬共鳴泛音 (1100Hz)
+    const echoOsc = this.ctx.createOscillator();
+    const echoGain = this.ctx.createGain();
+    echoOsc.type = 'sine';
+    echoOsc.frequency.setValueAtTime(1100, t);
+    echoGain.gain.setValueAtTime(0.12, t);
+    echoGain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+    echoOsc.connect(echoGain);
+    echoGain.connect(this.masterGain);
+    echoOsc.start(t);
+    echoOsc.stop(t + 0.14);
   }
 
   // 神話 Boss 專屬敗北神格破滅遺言音效
@@ -4783,6 +4838,21 @@ class Game {
         this.bossMinions = this.bossMinions.filter(m => m.type !== 'garuda_feather_anchor' && m.type !== 'thunder_drum_anchor' && m.type !== 'gorgon_hex_mirror');
         this.showToast('⚡【100% 擦彈過載 EMP】強行擊穿魔王絕境神盾！魔王陷入 3.0 秒癱瘓！');
       } else {
+        if (this.sound && this.sound.playIronDeflection) {
+          this.sound.playIronDeflection();
+        }
+        boss.shieldHitPulse = 1.0;
+        for (let i = 0; i < 4; i++) {
+          this.particles.push(new Particle(
+            boss.x + (Math.random() - 0.5) * 50,
+            boss.y + boss.hitboxRadius + (Math.random() - 0.5) * 20,
+            (Math.random() - 0.5) * 140,
+            90 + Math.random() * 120,
+            '#ffd700',
+            3.2,
+            0.22
+          ));
+        }
         return;
       }
     }
@@ -4810,16 +4880,19 @@ class Game {
     // 迦樓羅專屬第二階段：金羽天罡神盾屏障 (Feather Barrier 承受傷害)
     if (boss.featherBarrierHp && boss.featherBarrierHp > 0) {
       boss.featherBarrierHp -= finalDmg;
-      this.sound.playLaser(1200);
-      for (let i = 0; i < 4; i++) {
+      if (this.sound && this.sound.playIronDeflection) {
+        this.sound.playIronDeflection();
+      }
+      boss.shieldHitPulse = 1.0;
+      for (let i = 0; i < 5; i++) {
         this.particles.push(new Particle(
           boss.x + (Math.random() - 0.5) * 60,
           boss.y + (Math.random() - 0.5) * 60,
-          (Math.random() - 0.5) * 100,
-          (Math.random() - 0.5) * 100,
+          (Math.random() - 0.5) * 160,
+          80 + Math.random() * 140,
           '#ffd700',
-          3,
-          0.2
+          3.5,
+          0.24
         ));
       }
       // 超空泡穿甲鏢具有穿透暗線剋制，對本體造成 40% 穿透傷害
@@ -5184,6 +5257,11 @@ class Game {
     this.ebullets = [];
     this.hazardTelegraphs = [];
     this.bossMinions = [];
+    this.lavaPools = [];
+    this.enemies = [];
+    if (this.player) {
+      this.player.invulnTime = 3.5;
+    }
 
     // 音效與強烈震動反饋
     this.sound.playBossDeathSupernova();
@@ -5518,6 +5596,7 @@ class Game {
   }
 
   spawnMiniBoss() {
+    this.wave = 2;
     let hp = (this.stage && this.stage <= 4) ? 21000 : 50000;
     let name = '星宿巡察艦・前哨神械';
     let assetKey = 'boss_mini';
@@ -5560,6 +5639,7 @@ class Game {
   }
 
   spawnMajorBoss(stage) {
+    this.wave = 4;
     if (stage && stage >= 1 && stage <= 12) {
       this.stage = stage;
       if (this.sound && this.sound.bgm) {
@@ -6016,10 +6096,14 @@ class Game {
     // 更新置頂戰術指示警報條 (Boss Tactical Alert，清晰告訴玩家現在機制與應對方案)
     const tacAlert = document.getElementById('bossTacticalAlert');
     if (tacAlert) {
-      if (b.invulnerable && b.invulnTimer > 0) {
+      const hasSpiritMinions = this.bossMinions && this.bossMinions.some(m => m.requiresSpirit && !m.dead);
+      if (hasSpiritMinions) {
+        tacAlert.style.display = 'block';
+        tacAlert.innerHTML = `⚠️ <b>【靈能破盾指示】魔王神盾阻絕常規武器！長按蓄力發射【靈丸】擊破外圍弱點以解除神盾！</b>`;
+      } else if (b.invulnerable && b.invulnTimer > 0) {
         tacAlert.style.display = 'block';
         if (b.stage === 3) {
-          tacAlert.innerHTML = `🛡️ <b>【金羽神盾】Boss 無敵中 (${b.invulnTimer.toFixed(1)}s)</b> ➔ 🎯 <b>戰術指示：先擊破周圍 4 枚金色神羽錨點！</b>`;
+          tacAlert.innerHTML = `🛡️ <b>【金羽神盾】Boss 無敵中 (${b.invulnTimer.toFixed(1)}s)</b> ➔ 🎯 <b>戰術指示：先擊破周圍金色神羽錨點！</b>`;
         } else if (b.stage === 4) {
           tacAlert.innerHTML = `⚡ <b>【超導電牢】Boss 無敵中 (${b.invulnTimer.toFixed(1)}s)</b> ➔ 🎯 <b>戰術指示：先摧毀兩側天雷法鼓！</b>`;
         } else if (b.stage === 5) {
@@ -6034,7 +6118,7 @@ class Game {
           : `✨ <b>【石化暫時驅散】戰機移速正常</b> ➔ 🎯 <b>戰術指示：趁現在全力輸出！</b>`;
       } else if (b.stage === 3 && b.featherBarrierHp > 0) {
         tacAlert.style.display = 'block';
-        tacAlert.innerHTML = `🛡️ <b>【金羽天罡神盾】吸收傷害中</b> ➔ 🎯 <b>戰術指示：集中火力全力打破護盾！</b>`;
+        tacAlert.innerHTML = `🛡️ <b>【金羽天罡神盾】常規攻擊無效並彈開！</b> ➔ 🎯 <b>戰術指示：蓄力發射【靈丸】或高貫穿武器強行破盾！</b>`;
       } else if (b.stage === 4 && b.phase >= 2) {
         tacAlert.style.display = 'block';
         const shockIn = Math.max(0, 3.0 - (b.shockCycleTimer || 0)).toFixed(1);
@@ -6052,7 +6136,6 @@ class Game {
       const mStep = boss.miniCycle % 2;
       if (mStep === 0) {
         // 莫力布林巨棒重擊：地面震盪波 (紅線預警 0.8s，震出 2 顆飛石，速度慢極易閃避)
-        this.showToast('🐗 莫力布林巨將：荒野巨棒重擊！');
         this.sound.playMarioStomp();
         const tx = this.player.x;
         this.hazardTelegraphs.push({
@@ -6071,7 +6154,6 @@ class Game {
         }, 800);
       } else {
         // 莫力布林野蠻突刺：發射 3 顆慢速骨刺飛刃
-        this.showToast('🐗 莫力布林巨將：骨矛投擲！');
         this.sound.playLaser(600);
         for (let i = -1; i <= 1; i++) {
           const ang = Math.PI / 2 + i * 0.35;
@@ -6097,7 +6179,6 @@ class Game {
       '【玉藻前・九尾妖火】',
       '【提亞瑪特・混沌創世】'
     ];
-    this.showToast(`⚡ 前哨神械投影 ${moveNames[step]}`);
 
     switch (step) {
       case 0: // 迦樓羅：5 向 -> 3 向金羽風刃 (feather) (減少 30%)
@@ -6226,7 +6307,6 @@ class Game {
           const mode = boss.patternIndex % 3;
           if (mode === 0) {
             // 模式 1：庫巴噴射大火球 (3 枚慢速大火球，好躲又震撼)
-            this.showToast('🔥 庫巴：烈焰大吐息！');
             this.sound.playMarioStomp();
             for (let i = -1; i <= 1; i++) {
               const ang = Math.PI / 2 + i * 0.38;
@@ -6237,7 +6317,6 @@ class Game {
             }
           } else if (mode === 1) {
             // 模式 2：機械尖刺龜殼投擲 (Spiny Shell)
-            this.showToast('🐢 庫巴：機械尖刺龜殼投擲！');
             this.sound.playLaser(750);
             for (let i = -1; i <= 1; i += 2) {
               const eb = new Bullet(boss.x + i * 40, boss.y + 15, i * 60, 180, false, 1, 'boulder');
@@ -6247,7 +6326,6 @@ class Game {
             }
           } else {
             // 模式 3：庫巴重甲泰山壓頂震波
-            this.showToast('💥 庫巴：重甲泰山壓頂！');
             this.sound.playMarioStomp();
             this.shake(6, 0.25);
             for (let i = -2; i <= 2; i++) {
@@ -6265,7 +6343,6 @@ class Game {
           const mode = boss.patternIndex % 3;
           if (mode === 0) {
             // 模式 1：災厄魔怨光線 (直線紅線預警 1.1s 後發射單道怨念射線)
-            this.showToast('👁️ 加儂：古代魔怨死光瞄準！');
             const targetX = this.player.x;
             this.hazardTelegraphs.push({
               type: 'line', x1: targetX, y1: 0, x2: targetX, y2: this.H,
@@ -6282,7 +6359,6 @@ class Game {
             }, 1100);
           } else if (mode === 1) {
             // 模式 2：古代守護者脈衝扇射 (3 顆守護者藍光飛彈)
-            this.showToast('⚔️ 加儂：古代守護者脈衝！');
             this.sound.playLaser(1100);
             for (let i = -1; i <= 1; i++) {
               const ang = Math.PI / 2 + i * 0.4;
@@ -6293,7 +6369,6 @@ class Game {
             }
           } else {
             // 模式 3：怨念法陣環形擴散 (6 顆紫色怨念法球)
-            this.showToast('🔮 加儂：終焉怨念法陣！');
             this.sound.playZeldaSecretChime();
             for (let a = 0; a < 6; a++) {
               const ang = (a / 6) * Math.PI * 2 + (boss.patternIndex * 0.2);
@@ -7910,21 +7985,51 @@ class Game {
     this.resetPlayerStatusEffects();
 
     if (this.wave === 2) {
+      // 小 Boss 擊破整備後過渡波次
+      this.ebullets = [];
+      this.hazardTelegraphs = [];
+      if (this.player) {
+        this.player.hp = Math.min(this.player.maxHp || 3, (this.player.hp || 1) + 1);
+        this.player.invulnTime = 1.5;
+      }
       this.wave = 3;
       this.waveTimer = 0;
       this.showToast('喘息波次：測試新裝備火力！');
-    } else if (this.wave === 4) {
+    } else if (this.wave === 4 || this.wave >= 3) {
+      // 大 Boss 擊破，進入下一關卡 (第 1、2 關無縫接軌第 3 關，所有裝備武器火力完全繼承)
       if (this.stage < this.maxStage) {
+        // 1. 徹底清除場上所有敵方殘留危害，杜絕切換關卡瞬間被殘彈擊中扣血跳出
+        this.ebullets = [];
+        this.enemies = [];
+        this.hazardTelegraphs = [];
+        this.bossMinions = [];
+        this.lavaPools = [];
+        this.currentBoss = null;
+        this.bossDeathSequence = null;
+
+        // 2. 戰機生命修復滿血、給予 2.5 秒出場護盾無敵、安全中央歸位
+        if (this.player) {
+          this.player.hp = Math.max(this.player.hp, this.player.maxHp || 3);
+          this.player.invulnTime = 2.5;
+          this.player.x = this.W / 2;
+          this.player.y = this.H - 100;
+          this.player.targetX = this.player.x;
+          this.player.targetY = this.player.y;
+        }
+
+        // 3. 乾淨推進至下一關卡第一波（所有裝備武器 arsenal 完全繼承，絕不重置）
         this.stage++;
         this.wave = 1;
         this.waveTimer = 0;
         if (this.sound && this.sound.bgm) {
           this.sound.bgm.setStage(this.stage);
         }
-        this.showToast(`突破！進入第 ${this.stage} 關！`);
+        this.showToast(`🚀 突破！帶著全新火力直奔第 ${this.stage} 關！`);
       } else {
         this.onGameVictory();
       }
+    } else {
+      this.waveTimer = 0;
     }
   }
 
@@ -8570,11 +8675,18 @@ class Game {
             // 靈丸專屬破盾機制：若該實體設定 requiresSpirit，則非靈丸武器無法造成傷害！
             if (m.requiresSpirit && b.type !== 'spirit') {
               b.dead = true;
-              this.sound.playLaser(1200);
-              this.particles.push(new Particle(b.x, b.y, (Math.random() - 0.5) * 70, (Math.random() - 0.5) * 70, '#38bdf8', 3, 0.25));
-              if (!this._lastSpiritPromptTime || (this.time - this._lastSpiritPromptTime > 2.5)) {
-                this._lastSpiritPromptTime = this.time;
-                this.showToast('🛡️【靈能結界】常規武器無效！請按住蓄力發射【靈丸】造成傷害！');
+              if (this.sound && this.sound.playIronDeflection) {
+                this.sound.playIronDeflection();
+              }
+              for (let k = 0; k < 4; k++) {
+                this.particles.push(new Particle(
+                  b.x, b.y,
+                  (Math.random() - 0.5) * 120,
+                  60 + Math.random() * 100,
+                  '#38bdf8',
+                  3,
+                  0.25
+                ));
               }
               return;
             }
@@ -8587,7 +8699,11 @@ class Game {
                 const eb = new Bullet(m.x, m.y, Math.cos(angToPlayer) * 260, Math.sin(angToPlayer) * 260, false, 1, 'reflected');
                 eb.color = '#c054ff'; eb.r = 6;
                 this.ebullets.push(eb);
-                this.sound.playLaser(950);
+                if (this.sound && this.sound.playIronDeflection) {
+                  this.sound.playIronDeflection();
+                } else {
+                  this.sound.playLaser(950);
+                }
                 this.particles.push(new Particle(m.x, m.y, (Math.random() - 0.5) * 60, (Math.random() - 0.5) * 60, '#c054ff', 4, 0.3));
                 return;
               }
@@ -8635,11 +8751,19 @@ class Game {
           const hasSpiritMinions = this.bossMinions && this.bossMinions.some(m => m.requiresSpirit && !m.dead);
           if (hasSpiritMinions && !b.isGrazeEmp) {
             boss.invulnerable = true;
-            this.sound.playLaser(1300);
-            this.particles.push(new Particle(b.x, b.y, (Math.random() - 0.5) * 80, (Math.random() - 0.5) * 80, '#38bdf8', 3.5, 0.3));
-            if (!this._lastBossShieldPromptTime || (this.time - this._lastBossShieldPromptTime > 2.5)) {
-              this._lastBossShieldPromptTime = this.time;
-              this.showToast('🛡️【魔王結界無敵】請先以蓄力【靈丸】摧毀所有結界核心實體！');
+            if (this.sound && this.sound.playIronDeflection) {
+              this.sound.playIronDeflection();
+            }
+            boss.shieldHitPulse = 1.0;
+            for (let k = 0; k < 4; k++) {
+              this.particles.push(new Particle(
+                b.x, b.y,
+                (Math.random() - 0.5) * 120,
+                80 + Math.random() * 120,
+                '#ffd700',
+                3,
+                0.22
+              ));
             }
             if (b.pierce <= 1) b.dead = true;
             return;
@@ -10055,26 +10179,8 @@ class Game {
           ctx.arc(0, 0, retR, retRot + Math.PI, retRot + Math.PI * 1.45);
           ctx.stroke();
 
-          // 懸浮弱點標籤
-          ctx.fillStyle = m.requiresSpirit ? '#38bdf8' : '#ff4766';
-          ctx.font = 'bold 10px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.shadowBlur = 4;
-          const retLabelY = -Math.max(spriteW, spriteH) / 2 - 20;
-          ctx.fillText(m.requiresSpirit ? '⚡ 需靈丸破壞' : '🎯 優先擊破弱點', 0, retLabelY);
           ctx.restore();
         }
-
-        // 3. 戰術頂部懸浮名牌
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 11px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
-        ctx.lineWidth = 3;
-        const tagY = -Math.max(spriteW, spriteH) / 2 - 8;
-        ctx.strokeText(label, 0, tagY);
-        ctx.fillText(label, 0, tagY);
 
         // 4. 精密健康度血條
         if (m.maxHp && m.hp !== undefined) {
@@ -10126,18 +10232,19 @@ class Game {
       // 8.2 渲染神話機神光環、電弧與神格氣場
       this.renderBossAuras(ctx, b, this.time);
 
-      // 8.25 無敵神盾：高科技六角能量蜂巢力場與戰術 IMMUNE 浮空文字
+      // 8.25 無敵神盾：高科技六角能量蜂巢力場（純淨無視覺文字雜訊）
       if (b.invulnerable) {
         ctx.save();
-        const shieldR = b.hitboxRadius + 18;
+        const shieldR = b.hitboxRadius + 22;
         const shieldPulse = 1.0 + Math.sin(this.time * 8) * 0.04;
+        const hitPulse = b.shieldHitPulse || 0;
         ctx.scale(shieldPulse, shieldPulse);
 
-        // 外層旋轉六角能量力場
-        ctx.strokeStyle = '#ffd700';
-        ctx.lineWidth = 3.5;
+        // 外層旋轉六角能量力場 (受擊時劇烈金光閃爍)
+        ctx.strokeStyle = hitPulse > 0.1 ? '#ffffff' : '#ffd700';
+        ctx.lineWidth = 3.5 + hitPulse * 3;
         ctx.shadowColor = '#ff9138';
-        ctx.shadowBlur = 18;
+        ctx.shadowBlur = 18 + hitPulse * 15;
         ctx.beginPath();
         const hexAngle = this.time * 1.5;
         for (let s = 0; s < 6; s++) {
@@ -10150,18 +10257,17 @@ class Game {
         ctx.stroke();
 
         // 內層半透明防護力場
-        ctx.fillStyle = 'rgba(245, 188, 56, 0.16)';
+        ctx.fillStyle = `rgba(245, 188, 56, ${0.18 + hitPulse * 0.3})`;
         ctx.fill();
 
-        // 懸浮 IMMUNE 無敵警示標記
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '900 13px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
-        ctx.lineWidth = 4;
-        ctx.strokeText('🛡️ IMMUNE 無敵', 0, -shieldR - 10);
-        ctx.fillText('🛡️ IMMUNE 無敵', 0, -shieldR - 10);
+        // 受擊外擴震波圈
+        if (hitPulse > 0.05) {
+          ctx.strokeStyle = `rgba(255, 255, 255, ${hitPulse * 0.8})`;
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.arc(0, 0, shieldR + (1.0 - hitPulse) * 20, 0, Math.PI * 2);
+          ctx.stroke();
+        }
         ctx.restore();
       }
 
@@ -10447,39 +10553,103 @@ class Game {
       ctx.stroke();
     }
 
-    // 3. 迦樓羅專屬：金羽神盾環繞羽刃屏障 (承受 10,000 傷害破盾)
+    // 3. 迦樓羅專屬：金羽天罡神聖天穹護盾 (極致華麗神格屏障，清晰指示常規子彈被彈開無效)
     if (b.stage === 3 && b.featherBarrierHp > 0) {
-      const featherOrbCount = 8;
-      const shieldR = b.hitboxRadius + 32;
+      const shieldR = b.hitboxRadius + 38;
+      const hitPulse = b.shieldHitPulse || 0;
+      if (b.shieldHitPulse > 0) {
+        b.shieldHitPulse = Math.max(0, b.shieldHitPulse - 0.04);
+      }
+
       ctx.save();
-      ctx.strokeStyle = 'rgba(255, 215, 0, 0.85)';
-      ctx.lineWidth = 3;
-      ctx.shadowColor = '#ffd700';
-      ctx.shadowBlur = 16;
+      // 3.1 內部半透明金羽能量球體 (受擊時金光輝映)
+      const domeGrad = ctx.createRadialGradient(0, 0, shieldR * 0.25, 0, 0, shieldR);
+      domeGrad.addColorStop(0, `rgba(255, 230, 120, ${0.08 + hitPulse * 0.25})`);
+      domeGrad.addColorStop(0.7, `rgba(255, 195, 0, ${0.18 + hitPulse * 0.35})`);
+      domeGrad.addColorStop(1, `rgba(255, 245, 150, ${0.45 + hitPulse * 0.45})`);
+      ctx.fillStyle = domeGrad;
       ctx.beginPath();
       ctx.arc(0, 0, shieldR, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.fill();
 
-      // 環繞旋轉的黃金羽刃
+      // 3.2 雙層金色旋轉六芒能量幾何晶格 (Hexagonal Sacred Matrix)
+      for (let layer = 0; layer < 2; layer++) {
+        const sides = 6;
+        const hexR = shieldR * (layer === 0 ? 0.96 : 1.04);
+        const hexAngle = (layer === 0 ? 1 : -1) * time * 1.6 + layer * (Math.PI / 6);
+        ctx.save();
+        ctx.rotate(hexAngle);
+        ctx.strokeStyle = layer === 0 ? 'rgba(255, 215, 0, 0.9)' : 'rgba(255, 245, 180, 0.7)';
+        ctx.lineWidth = 2.2 + hitPulse * 2.5;
+        ctx.shadowColor = '#ffd700';
+        ctx.shadowBlur = 12 + hitPulse * 16;
+        ctx.beginPath();
+        for (let s = 0; s < sides; s++) {
+          const a = (s / sides) * Math.PI * 2;
+          const px = Math.cos(a) * hexR;
+          const py = Math.sin(a) * hexR;
+          if (s === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.stroke();
+
+        // 晶格頂點神聖法印微粒
+        for (let s = 0; s < sides; s++) {
+          const a = (s / sides) * Math.PI * 2;
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(Math.cos(a) * hexR, Math.sin(a) * hexR, 3.5 + hitPulse * 2.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      // 3.3 受擊金屬打鐵衝擊外擴環 (Concentric Ricochet Ripple)
+      if (hitPulse > 0.05) {
+        ctx.save();
+        ctx.strokeStyle = `rgba(255, 255, 255, ${hitPulse * 0.9})`;
+        ctx.lineWidth = 3.5 * hitPulse;
+        ctx.shadowColor = '#ffe066';
+        ctx.shadowBlur = 20 * hitPulse;
+        ctx.beginPath();
+        ctx.arc(0, 0, shieldR + (1.0 - hitPulse) * 32, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // 3.4 8 枚環繞旋轉之高精細黃金天羽 (Orbiting Divine Feathers with trails)
+      const featherOrbCount = 8;
       for (let f = 0; f < featherOrbCount; f++) {
-        const fa = (f / featherOrbCount) * Math.PI * 2 + time * 3.5;
+        const fa = (f / featherOrbCount) * Math.PI * 2 + time * 2.8;
         const fx = Math.cos(fa) * shieldR;
         const fy = Math.sin(fa) * shieldR;
         ctx.save();
         ctx.translate(fx, fy);
         ctx.rotate(fa + Math.PI / 2);
-        ctx.fillStyle = '#ffd700';
-        ctx.shadowColor = '#ffffff';
-        ctx.shadowBlur = 10;
+
+        // 羽毛主脊與光翼
+        ctx.shadowColor = '#ffd700';
+        ctx.shadowBlur = 14;
+        ctx.fillStyle = '#fff4a3';
         ctx.beginPath();
-        ctx.moveTo(0, -12);
-        ctx.lineTo(5, 5);
-        ctx.lineTo(0, 12);
-        ctx.lineTo(-5, 5);
+        ctx.moveTo(0, -15);
+        ctx.lineTo(6, 6);
+        ctx.lineTo(0, 15);
+        ctx.lineTo(-6, 6);
+        ctx.closePath();
+        ctx.fill();
+
+        // 羽尖微型能量刃
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.moveTo(0, -18);
+        ctx.lineTo(3, -12);
+        ctx.lineTo(-3, -12);
         ctx.closePath();
         ctx.fill();
         ctx.restore();
       }
+
       ctx.restore();
     }
     ctx.restore();
