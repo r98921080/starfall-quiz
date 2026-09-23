@@ -18,6 +18,12 @@
     <!-- 遊戲主畫布 -->
     <canvas id="gameCanvas"></canvas>
 
+    <!-- 螢幕最頂端嘲諷大字橫幅 (每 3 次接關觸發) -->
+    <div id="tauntBanner" class="taunt-banner hidden">
+      <div class="taunt-badge">📢 系統毒舌廣播</div>
+      <div class="taunt-text" id="tauntBannerText">我阿罵都比你強！</div>
+    </div>
+
     <!-- 頂部 HUD -->
     <div id="hud">
       <div class="hud-group">
@@ -324,8 +330,9 @@
           <div class="hud-val" id="endAcc" style="font-size:24px; color:var(--green);">0%</div>
         </div>
       </div>
-      <div class="btn-row" style="margin-top:20px;">
-        <button class="btn" id="playAgainBtn">再次出擊</button>
+      <div class="btn-row" style="margin-top:20px; gap:12px;">
+        <button class="btn gold" id="resupplyRetryBtn" style="flex:1;">🔄 補給再挑戰</button>
+        <button class="btn ghost" id="playAgainBtn" style="flex:1;">重新開始</button>
       </div>
     </div>
 

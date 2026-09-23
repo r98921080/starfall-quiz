@@ -1875,4 +1875,84 @@ canvas#gameCanvas {
   }
 }
 
+/* ============================================================
+   每三次接關螢幕頂端毒舌嘲諷大字橫幅 (Taunt Mocking Banner)
+   ============================================================ */
+.taunt-banner {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 24px);
+  max-width: 440px;
+  z-index: 10050;
+  background: linear-gradient(135deg, rgba(35, 8, 16, 0.95), rgba(18, 5, 25, 0.95));
+  border: 2px solid #ff4766;
+  border-radius: 12px;
+  padding: 12px 16px;
+  box-shadow: 0 0 24px rgba(255, 71, 102, 0.6), inset 0 0 16px rgba(255, 71, 102, 0.25);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: auto;
+  cursor: pointer;
+  animation: tauntSlideDown 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.taunt-banner.hidden {
+  display: none !important;
+}
+
+.taunt-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 71, 102, 0.2);
+  border: 1px solid #ff4766;
+  border-radius: 20px;
+  padding: 2px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #ff99aa;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.taunt-text {
+  font-size: 1.35rem;
+  font-weight: 900;
+  color: #ffffff;
+  text-shadow: 0 0 10px #ff4766, 0 0 20px #ff0033;
+  line-height: 1.35;
+  letter-spacing: 0.5px;
+  word-break: break-word;
+  animation: tauntTextPulse 1.8s infinite ease-in-out;
+}
+
+@keyframes tauntSlideDown {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -40px) scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+@keyframes tauntTextPulse {
+  0%, 100% {
+    transform: scale(1);
+    text-shadow: 0 0 10px #ff4766, 0 0 20px #ff0033;
+  }
+  50% {
+    transform: scale(1.03);
+    text-shadow: 0 0 16px #ff7088, 0 0 30px #ff1a4a;
+  }
+}
+
+
 

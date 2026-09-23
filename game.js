@@ -5,6 +5,30 @@
  * 擦彈同步、IndexedDB 存檔、純 Web Audio 合成 BGM 音樂與戰鬥內 LAB 面板。
  */
 
+// 每 3 次接關跳出的 20 句幽默嘲諷台詞 (第 3, 6, 9, ... 60 次；超過 60 次不再顯示)
+const TAUNT_MESSAGES = [
+  '「我阿罵都比你強！」',
+  '「你是不是用腳在玩？」',
+  '「螢幕上的紅色子彈不是補包，不要一直用臉接！」',
+  '「剛才那波慢速彈幕，連我閉著眼睛都能扭過去！」',
+  '「戰機裝甲是超合金做的，不是紙糊的，振作一點！」',
+  '「這把打完，要不要考慮把移動靈敏度調成老人模式？」',
+  '「敵機的命中率，已經硬生生被你刷到 100% 了！」',
+  '「長按蓄力的靈丸是拿來破盾的，不是當傳家寶收藏的好嗎？」',
+  '「敵方王牌駕駛員全體致敬：感謝送溫暖！」',
+  '「戰術電腦分析完畢：你的走位技巧純屬虛構。」',
+  '「聽說隔壁有外接搖桿，你要不要插個搖桿再試一次？」',
+  '「你今天被擊落的次數，比流星雨掉下來的流星還要壯觀！」',
+  '「基地地勤維修部隊抗議：今天戰機零件庫存已經被你掏空了！」',
+  '「這不是魂系遊戲，不需要死這麼多次來背板啦！」',
+  '「外圍小怪都在竊竊私語：這位機師到底是來打仗還是來應徵靶子的？」',
+  '「你是不是以為只要題庫答得夠多，Boss 就會被感化主動投降？」',
+  '「你已經在銀河系各個星域留下了成千上萬個戰機殘骸標本了。」',
+  '「深呼吸，眨眨眼，手不要抖，我們最後再相信你一次……」',
+  '「能堅持接關到這裡也是一種奇蹟……雖然是反向的奇蹟。」',
+  '「你該休息了寶貝，我沒辦法再多說什麼了」'
+];
+
 // ============================================================
 // 一、程序化 Web Audio BGM 音樂合成器 (Arcade Synthwave Engine)
 // ============================================================
@@ -3314,6 +3338,11 @@ class Game {
       });
     }
 
+    // 陣亡補給接關與毒舌嘲諷系統
+    this.continueCount = 0;
+    this.isResupplyContinue = false;
+    this._tauntBannerTimer = null;
+
     this.images = {};
     this.loadAssets();
     this.bindEvents();
@@ -3694,12 +3723,24 @@ class Game {
       this.togglePause();
       this.startNewGame(1);
     });
+    setClick('resupplyRetryBtn', (e) => {
+      if (e && e.preventDefault) e.preventDefault();
+      if (document.activeElement && typeof document.activeElement.blur === 'function') {
+        document.activeElement.blur();
+      }
+      this.triggerResupplyContinue();
+    });
     setClick('playAgainBtn', (e) => {
       if (e && e.preventDefault) e.preventDefault();
       if (document.activeElement && typeof document.activeElement.blur === 'function') {
         document.activeElement.blur();
       }
+      this.continueCount = 0;
       this.startNewGame(1);
+    });
+    setClick('tauntBanner', () => {
+      const tb = document.getElementById('tauntBanner');
+      if (tb) tb.classList.add('hidden');
     });
     setClick('labBtn', () => this.openLab());
     setClick('pauseLabBtn', () => {
@@ -5368,6 +5409,8 @@ class Game {
     this.stage = stage;
     this.wave = 1;
     this.score = 0;
+    this.continueCount = 0;
+    this.isResupplyContinue = false;
     this.resetPlayerStatusEffects();
     this.sessionTotalAnswered = 0;
     this.sessionTotalCorrect = 0;
@@ -7984,6 +8027,35 @@ class Game {
     // 進入新波次或新關卡時，徹底清除上一關留存之任何負面減速/硬直狀態
     this.resetPlayerStatusEffects();
 
+    // 情況 0：陣亡「補給再挑戰」接關復活 (保留在當前關卡與波次，滿血清彈幕復原)
+    if (this.isResupplyContinue) {
+      this.isResupplyContinue = false;
+      this.ebullets = [];
+      this.hazardTelegraphs = [];
+      this.lavaPools = [];
+
+      if (this.player) {
+        this.player.hp = this.player.maxHp || 3;
+        this.player.invulnTime = 3.0; // 3 秒絕對無敵神盾保護
+        this.player.x = this.W / 2;
+        this.player.y = this.H - 100;
+        this.player.targetX = this.player.x;
+        this.player.targetY = this.player.y;
+      }
+
+      // 若當前有活著的 Boss，重置攻擊計時器給予 1.5 秒戰術緩衝避免第一幀貼臉攻擊
+      if (this.currentBoss && !this.currentBoss.dead) {
+        this.currentBoss.attackTimer = 0;
+      }
+
+      if (this.sound && this.sound.bgm) {
+        this.sound.bgm.setStage(this.stage);
+      }
+
+      this.showToast('🛡️ 補給整備完成！戰機滿血復原，重返戰場！');
+      return;
+    }
+
     if (this.wave === 2) {
       // 小 Boss 擊破整備後過渡波次
       this.ebullets = [];
@@ -8056,6 +8128,8 @@ class Game {
     if (this.dataStore) {
       this.dataStore.syncOfflineQueue();
     }
+    const resupplyBtn = document.getElementById('resupplyRetryBtn');
+    if (resupplyBtn) resupplyBtn.style.display = 'none';
     document.getElementById('gameOverScreen').classList.remove('hidden');
     this.sound.speak('恭喜！十二位神話機神全數擊破！');
   }
@@ -8083,7 +8157,51 @@ class Game {
     if (this.dataStore) {
       this.dataStore.syncOfflineQueue();
     }
+    const resupplyBtn = document.getElementById('resupplyRetryBtn');
+    if (resupplyBtn) resupplyBtn.style.display = 'inline-flex';
     document.getElementById('gameOverScreen').classList.remove('hidden');
+  }
+
+  // 螢幕最頂端嘲諷大字橫幅展示 (每 3 次接關跳出)
+  showTauntBanner(text) {
+    const banner = document.getElementById('tauntBanner');
+    const bannerText = document.getElementById('tauntBannerText');
+    if (!banner || !bannerText) return;
+    bannerText.textContent = text;
+    banner.classList.remove('hidden');
+
+    if (this._tauntBannerTimer) {
+      clearTimeout(this._tauntBannerTimer);
+    }
+
+    if (this.sound && typeof this.sound.speak === 'function') {
+      const cleanText = text.replace(/^[「『]/, '').replace(/[」』]$/, '');
+      this.sound.speak(cleanText);
+    }
+
+    this._tauntBannerTimer = setTimeout(() => {
+      banner.classList.add('hidden');
+      this._tauntBannerTimer = null;
+    }, 6000);
+  }
+
+  // 陣亡「補給再挑戰」處理流程 (重新答題5次、三選一升級武器、滿血清彈幕復原)
+  triggerResupplyContinue() {
+    const gameOverEl = document.getElementById('gameOverScreen');
+    if (gameOverEl) gameOverEl.classList.add('hidden');
+
+    this.continueCount = (this.continueCount || 0) + 1;
+
+    // 每三次接關跳出一個嘲諷的句子 (3, 6, 9, ... 60 次，共 20 句；超過 60 次不再顯示)
+    if (this.continueCount % 3 === 0 && this.continueCount <= 60) {
+      const tauntIdx = (this.continueCount / 3) - 1;
+      if (tauntIdx >= 0 && tauntIdx < TAUNT_MESSAGES.length) {
+        this.showTauntBanner(TAUNT_MESSAGES[tauntIdx]);
+      }
+    }
+
+    this.isResupplyContinue = true;
+    this.startQuizPhase();
   }
 
   // ============================================================
