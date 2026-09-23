@@ -166,16 +166,16 @@ canvas#gameCanvas {
   box-shadow: 0 0 8px var(--cyan);
 }
 
-/* Boss 頂部大型血條浮層 */
+/* Boss 頂部大型血條浮層 - BUILD-032 精緻極光 HUD 重構 (頂部吸附，不遮擋 Boss 本體與彈幕空域) */
 #bossHud {
   position: absolute;
-  top: 65px;
-  left: 20px;
-  right: 20px;
+  top: 48px;
+  left: 16px;
+  right: 16px;
   z-index: 10;
   display: none;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   pointer-events: none;
 }
 .boss-title-row {
@@ -183,37 +183,40 @@ canvas#gameCanvas {
   justify-content: space-between;
   align-items: center;
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+  margin-bottom: 1px;
 }
 .boss-name {
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 14px;
+  font-size: 13px;
   color: #fff;
   letter-spacing: 0.04em;
 }
 .boss-phase-badge {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
-  padding: 2px 6px;
+  padding: 1px 6px;
   border-radius: 4px;
   background: rgba(224, 64, 154, 0.25);
   border: 1px solid var(--magenta);
   color: var(--magenta);
 }
 .boss-bar-frame {
-  height: 8px;
-  background: rgba(0, 0, 0, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 4px;
+  height: 6px;
+  background: rgba(0, 0, 0, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
   overflow: hidden;
   position: relative;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
 }
 .boss-bar-ghost {
   position: absolute;
   inset: 0;
   width: 100%;
-  background: rgba(255, 255, 255, 0.75);
-  transition: width 0.5s ease-out;
+  background: rgba(255, 255, 255, 0.85);
+  transition: width 0.4s ease-out;
+  border-radius: 999px;
 }
 .boss-bar-fill {
   position: absolute;
@@ -221,6 +224,13 @@ canvas#gameCanvas {
   width: 100%;
   background: linear-gradient(90deg, #ff8533, #ff3366 70%, #e0409a);
   transition: width 0.08s linear;
+  border-radius: 999px;
+  box-shadow: 0 0 8px rgba(255, 51, 102, 0.7);
+}
+.boss-bar-fill.boss-defeated,
+.boss-bar-ghost.boss-defeated {
+  width: 0% !important;
+  transition: none !important;
 }
 .boss-shield-fill {
   position: absolute;
@@ -228,23 +238,39 @@ canvas#gameCanvas {
   width: 0%;
   background: rgba(51, 224, 224, 0.85);
   box-shadow: 0 0 8px var(--cyan);
+  border-radius: 999px;
 }
 .boss-tactical-alert {
-  margin-top: 5px;
-  padding: 5px 12px;
-  background: rgba(10, 15, 30, 0.94);
+  margin-top: 3px;
+  padding: 3px 12px;
+  background: rgba(10, 15, 30, 0.88);
   border: 1px solid var(--magenta);
-  border-left: 4px solid var(--magenta);
-  border-radius: 4px;
+  border-radius: 999px;
   color: #ffffff;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
-  line-height: 1.4;
-  letter-spacing: 0.03em;
-  box-shadow: 0 0 12px rgba(224, 64, 154, 0.45);
+  line-height: 1.3;
+  text-align: center;
+  align-self: center;
+  max-width: 95%;
+  letter-spacing: 0.02em;
+  box-shadow: 0 0 10px rgba(224, 64, 154, 0.45);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
   pointer-events: none;
   animation: tacticalPulse 2.2s infinite ease-in-out;
+}
+.bank-exhausted-notice {
+  background: rgba(245, 188, 56, 0.15);
+  border: 1px solid var(--gold);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-top: 14px;
+  text-align: center;
+  color: var(--gold-bright);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+  box-shadow: 0 0 16px rgba(245, 188, 56, 0.25);
 }
 @keyframes tacticalPulse {
   0%, 100% {

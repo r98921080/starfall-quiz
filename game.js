@@ -1868,14 +1868,27 @@ class DataStore {
     return this.allStudentProgress[sid];
   }
 
-  // 計算指定學員尚未雪恥復仇的錯題總數
+  // 計算指定學員尚未雪恥復仇的錯題總數 (依規則：正確率 > 50% 視為掌握排除)
   getMistakeCount(studentId) {
     const map = this.getStudentProgressMap(studentId);
     let count = 0;
     Object.values(map).forEach(p => {
-      if (p.wrong > 0 && !p.avenged) count++;
+      const attempts = p.attempts || 0;
+      const wrong = p.wrong || 0;
+      const acc = attempts > 0 ? (attempts - wrong) / attempts : 0;
+      if (wrong > 0 && acc <= 0.5) count++;
     });
     return count;
+  }
+
+  // 重置指定學員之作答進度 (供教學重測或學員大圓滿後重新挑戰)
+  resetStudentProgress(studentId) {
+    const sid = studentId || this.currentStudentId || 'S0001';
+    delete this.allStudentProgress[sid];
+    try {
+      localStorage.removeItem(`starfall_progress_${sid}`);
+    } catch (e) {}
+    this.resetSessionQuestions();
   }
 
   // 切換當前學員，並即時切換專屬錯題歷程與 UI
@@ -2227,19 +2240,22 @@ class DataStore {
     }
 
     // 跨局題幹指紋更新 (Mastered vs Mistake，杜絕不同 ID 但同題幹之重複題)
+    // 依據規則：新題答對 (wrong === 0) 或錯題累積正確率超過 50% 視為掌握 (Mastered)，避免出現在後續輪次中！
     const qText = attempt.question || (this.questionBank && (this.questionBank.find(q => q.question_id === qid) || {}).question) || '';
     const fp = this.getQuestionFingerprint(qText);
+    const accuracy = p.attempts > 0 ? ((p.attempts - (p.wrong || 0)) / p.attempts) : 0;
+    const isMastered = (p.wrong === 0) || (accuracy > 0.5);
+
     if (fp) {
-      if (attempt.correct) {
+      if (isMastered) {
         this.masteredFingerprints.add(fp);
         delete this.mistakeMap[fp];
         this.saveFingerprintsToStorage();
       } else {
-        if (!this.masteredFingerprints.has(fp)) {
-          const qObj = this.questionBank && this.questionBank.find(q => q.question_id === qid);
-          this.mistakeMap[fp] = qObj ? { ...qObj } : { question_id: qid, question: qText, grade: attempt.student_grade };
-          this.saveFingerprintsToStorage();
-        }
+        this.masteredFingerprints.delete(fp);
+        const qObj = this.questionBank && this.questionBank.find(q => q.question_id === qid);
+        this.mistakeMap[fp] = qObj ? { ...qObj } : { question_id: qid, question: qText, grade: attempt.student_grade };
+        this.saveFingerprintsToStorage();
       }
     }
 
@@ -2818,185 +2834,214 @@ class DataStore {
     return drawn;
   }
 
+  // 檢測當前題目池是否已全數耗盡 (完全用完)
+  isQuestionBankExhausted(studentId) {
+    if (!this.questionBank || this.questionBank.length === 0) return false;
+    const sid = studentId || this.currentStudentId || 'S0001';
+    let pool = [...this.questionBank];
+    if (this.studentGrade) {
+      const gradeMatched = this.questionBank.filter(q => this.isGradeMatch(q.grade, this.studentGrade));
+      if (gradeMatched.length > 0) pool = gradeMatched;
+    }
+    if (!this.sessionUsedQuestionIds) return false;
+
+    // 檢查是否有任何可用題目尚未在本局使用過
+    for (const q of pool) {
+      if (this.sessionUsedQuestionIds.has(q.question_id)) continue;
+      const fp = this.getQuestionFingerprint(q.question);
+      if (fp && this.sessionUsedFingerprints && this.sessionUsedFingerprints.has(fp)) continue;
+      return false; // 還有考題可用，尚未完全耗盡
+    }
+    return true; // 所有可用考題均已在本輪中抽過作答，全數耗盡
+  }
+
+  // 計算指定題目對於該學員的層級分類 (Tier 1 / Tier 2 / Tier 3)
+  // Tier 1: 全新題目 (attempts === 0) 或 歷史錯題且累積答對率 <= 50%
+  // Tier 2: 之前輪次答對之題目 (attempts > 0 && wrong === 0)
+  // Tier 3: 錯題且累積答對率 > 50% (視為新題答對之掌握題)
+  getQuestionTier(q, sidProgress) {
+    const p = sidProgress[q.question_id];
+    if (!p || !p.attempts || p.attempts === 0) {
+      return 1; // 新題
+    }
+    const attempts = p.attempts;
+    const wrong = p.wrong || 0;
+    const correct = attempts - wrong;
+    const accuracy = correct / attempts;
+
+    if (wrong === 0) {
+      return 2; // 之前輪次答對的題目
+    }
+
+    if (accuracy > 0.5) {
+      return 3; // 錯題正確率超過 50% (視為新題答對)
+    } else {
+      return 1; // 錯題正確率 <= 50% (與新題一同優先作答)
+    }
+  }
+
   pickAdaptiveQuestions(count = 5, stage = 1) {
     if (!this.questionBank || this.questionBank.length === 0) return [];
     const sid = this.currentStudentId || 'S0001';
     const sidProgress = this.getStudentProgressMap(sid);
 
-    // 若設定了特定學員年級，優先篩選符合該年級之題目池（若符合年級之題數充足時）
+    // 若設定了特定學員年級，優先篩選符合該年級之題目池
     let pool = [...this.questionBank];
     if (this.studentGrade) {
       const gradeMatched = this.questionBank.filter(q => this.isGradeMatch(q.grade, this.studentGrade));
-      if (gradeMatched.length >= count) {
+      if (gradeMatched.length > 0) {
         pool = gradeMatched;
       }
     }
 
-    if (!this.sessionUsedQuestionIds) {
-      this.sessionUsedQuestionIds = new Set();
-    }
-    if (!this.sessionUsedFingerprints) {
-      this.sessionUsedFingerprints = new Set();
-    }
+    if (!this.sessionUsedQuestionIds) this.sessionUsedQuestionIds = new Set();
+    if (!this.sessionUsedFingerprints) this.sessionUsedFingerprints = new Set();
 
-    // 1. 本局未作答題目池（嚴格排除本局同一 run 已抽過的題目 ID 與題幹指紋，徹底零重複）
-    let availablePool = pool.filter(q => {
+    // 本輪尚未作答之可用題目池（嚴格排除本局同一 run 已抽過的題目 ID 與題幹指紋，徹底零重複）
+    const isUnused = (q) => {
       if (this.sessionUsedQuestionIds.has(q.question_id)) return false;
       const fp = this.getQuestionFingerprint(q.question);
-      if (this.sessionUsedFingerprints.has(fp)) return false;
+      if (fp && this.sessionUsedFingerprints.has(fp)) return false;
       return true;
-    });
+    };
 
-    // 若本局題庫全部被刷完（極端情況），清空 session 快取重啟新循環（但仍排除跨局已掌握熟練題）
-    if (availablePool.length < count) {
-      this.sessionUsedQuestionIds.clear();
-      this.sessionUsedFingerprints.clear();
-      availablePool = pool.filter(q => {
-        const fp = this.getQuestionFingerprint(q.question);
-        return !this.masteredFingerprints.has(fp);
-      });
-      if (availablePool.length < count) {
-        availablePool = [...pool];
-      }
-    }
+    const availablePool = pool.filter(isUnused);
+
+    // 依據三層出題優先級分流可用題目：
+    // Tier 1: 【同一輪新題 + 錯題 (正確率 <= 50%)】
+    // Tier 2: 【之前輪次答對的題目】
+    // Tier 3: 【錯題正確率超過 50% 題目】
+    const tier1Candidates = availablePool.filter(q => this.getQuestionTier(q, sidProgress) === 1);
+    const tier2Candidates = availablePool.filter(q => this.getQuestionTier(q, sidProgress) === 2);
+    const tier3Candidates = availablePool.filter(q => this.getQuestionTier(q, sidProgress) === 3);
 
     const selected = [];
     const selectedFps = new Set();
 
-    // 2.【同儕易錯攻堅題】：若其他人有錯題且未在該玩家答題紀錄出現過，優先出題 1~2 題
-    const peerMistakes = this.getPeerMistakes(sid, availablePool);
-    if (peerMistakes.length > 0) {
-      peerMistakes.sort(() => Math.random() - 0.5);
-      const peerTargetCount = Math.min(2, Math.min(count - 1, peerMistakes.length));
-      for (let i = 0; i < peerTargetCount; i++) {
-        const pq = peerMistakes[i];
-        const fp = this.getQuestionFingerprint(pq.question);
-        if (!selectedFps.has(fp)) {
-          selected.push({
-            ...pq,
-            isPeerMistake: true,
-            isReview: false,
-            isRevenge: false
-          });
-          selectedFps.add(fp);
-          this.sessionUsedQuestionIds.add(pq.question_id);
-          this.sessionUsedFingerprints.add(fp);
+    const addQuestion = (q, extraProps = {}) => {
+      const fp = this.getQuestionFingerprint(q.question);
+      const tier = this.getQuestionTier(q, sidProgress);
+      selected.push({
+        ...q,
+        tier: tier,
+        ...extraProps
+      });
+      if (fp) selectedFps.add(fp);
+      this.sessionUsedQuestionIds.add(q.question_id);
+      if (fp) this.sessionUsedFingerprints.add(fp);
+    };
+
+    // ----------------------------------------------------
+    // 第一階抽題：從 Tier 1 【同一輪新題 + 錯題 (<= 50%)】優先抽取
+    // ----------------------------------------------------
+    if (tier1Candidates.length > 0) {
+      // 1A.【同儕易錯攻堅題】：若其他人有錯題且未在該玩家答題紀錄出現過，優先出題 1~2 題
+      const peerMistakes = this.getPeerMistakes(sid, tier1Candidates);
+      if (peerMistakes.length > 0) {
+        peerMistakes.sort(() => Math.random() - 0.5);
+        const peerTargetCount = Math.min(2, Math.min(count - selected.length, peerMistakes.length));
+        for (let i = 0; i < peerTargetCount; i++) {
+          const pq = peerMistakes[i];
+          const fp = this.getQuestionFingerprint(pq.question);
+          if (!selectedFps.has(fp)) {
+            addQuestion(pq, { isPeerMistake: true, isReview: false, isRevenge: false });
+          }
+        }
+      }
+
+      // 1B.【自身未掌握錯題攻堅復仇】：優先從 Tier 1 中抽取 1~2 題未雪恥錯題
+      const neededForMistakes = count - selected.length;
+      if (neededForMistakes > 0) {
+        const unavengedMistakes = tier1Candidates.filter(q => {
+          const fp = this.getQuestionFingerprint(q.question);
+          if (selectedFps.has(fp)) return false;
+          const p = sidProgress[q.question_id];
+          return p && p.wrong > 0 && !p.avenged;
+        });
+
+        if (unavengedMistakes.length > 0) {
+          unavengedMistakes.sort(() => Math.random() - 0.5);
+          const mistakeTargetCount = Math.min(2, Math.min(neededForMistakes, unavengedMistakes.length));
+          for (let i = 0; i < mistakeTargetCount; i++) {
+            const mq = unavengedMistakes[i];
+            const fp = this.getQuestionFingerprint(mq.question);
+            if (!selectedFps.has(fp)) {
+              addQuestion(mq, { isPeerMistake: false, isReview: true, isRevenge: true });
+            }
+          }
+        }
+      }
+
+      // 1C.【Tier 1 其餘新題與題目，依關卡難度加權抽取】
+      const stillNeededInTier1 = count - selected.length;
+      if (stillNeededInTier1 > 0) {
+        const remainingTier1 = tier1Candidates.filter(q => {
+          const fp = this.getQuestionFingerprint(q.question);
+          return !selectedFps.has(fp);
+        });
+
+        if (remainingTier1.length > 0) {
+          const drawn = this.drawWeightedQuestions(remainingTier1, stillNeededInTier1, stage);
+          for (const dq of drawn) {
+            const fp = this.getQuestionFingerprint(dq.question);
+            if (!selectedFps.has(fp)) {
+              const p = sidProgress[dq.question_id];
+              addQuestion(dq, {
+                isPeerMistake: false,
+                isReview: !!(p && p.attempts > 0),
+                isRevenge: !!(p && p.wrong > 0 && !p.avenged)
+              });
+            }
+          }
         }
       }
     }
 
-    // 3.【自身錯題復仇機制】：優先摻入 1~2 題當前玩家尚未雪恥復仇的錯題 (p.wrong > 0 && !p.avenged)
-    const neededForMistakes = count - selected.length;
-    if (neededForMistakes > 0) {
-      const unavengedMistakes = [];
-      // (A) 從 mistakeMap 優先提取 (包含跨局儲存之錯題)
-      if (this.mistakeMap) {
-        Object.entries(this.mistakeMap).forEach(([fp, mq]) => {
-          if (!this.masteredFingerprints.has(fp) && !this.sessionUsedFingerprints.has(fp) && !selectedFps.has(fp)) {
-            unavengedMistakes.push(mq);
-          }
-        });
-      }
-      // (B) 比對 sidProgress 中尚未雪恥的題目
-      availablePool.forEach(q => {
+    // ----------------------------------------------------
+    // 第二階抽題：Tier 1 用完時，從 Tier 2 【之前輪次答對的題目】補充
+    // ----------------------------------------------------
+    const neededFromTier2 = count - selected.length;
+    if (neededFromTier2 > 0 && tier2Candidates.length > 0) {
+      const remainingTier2 = tier2Candidates.filter(q => {
         const fp = this.getQuestionFingerprint(q.question);
-        const p = sidProgress[q.question_id];
-        if (p && p.wrong > 0 && !p.avenged && !this.masteredFingerprints.has(fp)) {
-          if (!unavengedMistakes.some(m => this.getQuestionFingerprint(m.question) === fp)) {
-            unavengedMistakes.push(q);
-          }
-        }
+        return !selectedFps.has(fp);
       });
 
-      if (unavengedMistakes.length > 0) {
-        unavengedMistakes.sort(() => Math.random() - 0.5);
-        const mistakeTargetCount = Math.min(2, Math.min(neededForMistakes, unavengedMistakes.length));
-        for (let i = 0; i < mistakeTargetCount; i++) {
-          const mq = unavengedMistakes[i];
-          const fp = this.getQuestionFingerprint(mq.question);
+      if (remainingTier2.length > 0) {
+        const drawn = this.drawWeightedQuestions(remainingTier2, neededFromTier2, stage);
+        for (const dq of drawn) {
+          const fp = this.getQuestionFingerprint(dq.question);
           if (!selectedFps.has(fp)) {
-            selected.push({
-              ...mq,
+            addQuestion(dq, {
               isPeerMistake: false,
               isReview: true,
-              isRevenge: true
+              isRevenge: false
             });
-            selectedFps.add(fp);
-            this.sessionUsedQuestionIds.add(mq.question_id);
-            this.sessionUsedFingerprints.add(fp);
           }
         }
       }
     }
 
-    // 4.【全新未作答題目 + 依照難度配題權重抽取】：權重先全部歸零，依照難度配題
-    const remainingNeeded = count - selected.length;
-    if (remainingNeeded > 0) {
-      const freshQuestions = [];
-      const seenFreshFp = new Set();
-
-      for (const q of availablePool) {
-        if (this.sessionUsedQuestionIds.has(q.question_id)) continue;
+    // ----------------------------------------------------
+    // 第三階抽題：Tier 2 也用完時，從 Tier 3 【錯題正確率超過 50% 題目】補充
+    // ----------------------------------------------------
+    const neededFromTier3 = count - selected.length;
+    if (neededFromTier3 > 0 && tier3Candidates.length > 0) {
+      const remainingTier3 = tier3Candidates.filter(q => {
         const fp = this.getQuestionFingerprint(q.question);
-        if (!fp || this.sessionUsedFingerprints.has(fp) || selectedFps.has(fp)) continue;
-        if (this.masteredFingerprints.has(fp)) continue; // 100% 排除已掌握指紋
-        if (seenFreshFp.has(fp)) continue;
-        const p = sidProgress[q.question_id];
-        if (p && p.attempts > 0 && p.wrong === 0) continue; // 排除已答對題
+        return !selectedFps.has(fp);
+      });
 
-        freshQuestions.push(q);
-        seenFreshFp.add(fp);
-      }
-
-      if (freshQuestions.length >= remainingNeeded) {
-        // 依照關卡難度加權抽取
-        const drawn = this.drawWeightedQuestions(freshQuestions, remainingNeeded, stage);
-        for (const fq of drawn) {
-          const fp = this.getQuestionFingerprint(fq.question);
-          selected.push({
-            ...fq,
-            isPeerMistake: false,
-            isReview: false,
-            isRevenge: false
-          });
-          selectedFps.add(fp);
-          this.sessionUsedQuestionIds.add(fq.question_id);
-          this.sessionUsedFingerprints.add(fp);
-        }
-      } else {
-        // 全新題目不足時取完所有新題，其餘自未熟練可用池補足
-        freshQuestions.forEach(fq => {
-          const fp = this.getQuestionFingerprint(fq.question);
-          selected.push({ ...fq, isPeerMistake: false, isReview: false, isRevenge: false });
-          selectedFps.add(fp);
-          this.sessionUsedQuestionIds.add(fq.question_id);
-          this.sessionUsedFingerprints.add(fp);
-        });
-
-        const stillNeeded = count - selected.length;
-        if (stillNeeded > 0) {
-          const remainingOthers = [];
-          const seenOtherFp = new Set();
-          for (const oq of availablePool) {
-            if (this.sessionUsedQuestionIds.has(oq.question_id)) continue;
-            const fp = this.getQuestionFingerprint(oq.question);
-            if (!fp || this.sessionUsedFingerprints.has(fp) || selectedFps.has(fp) || seenOtherFp.has(fp)) continue;
-            remainingOthers.push(oq);
-            seenOtherFp.add(fp);
-          }
-          const drawnOthers = this.drawWeightedQuestions(remainingOthers, stillNeeded, stage);
-          for (const oq of drawnOthers) {
-            const fp = this.getQuestionFingerprint(oq.question);
-            const p = sidProgress[oq.question_id];
-            selected.push({
-              ...oq,
+      if (remainingTier3.length > 0) {
+        const drawn = this.drawWeightedQuestions(remainingTier3, neededFromTier3, stage);
+        for (const dq of drawn) {
+          const fp = this.getQuestionFingerprint(dq.question);
+          if (!selectedFps.has(fp)) {
+            addQuestion(dq, {
               isPeerMistake: false,
-              isReview: !!(p && p.attempts > 0),
-              isRevenge: !!(p && p.wrong > 0 && !p.avenged)
+              isReview: true,
+              isRevenge: false
             });
-            selectedFps.add(fp);
-            this.sessionUsedQuestionIds.add(oq.question_id);
-            this.sessionUsedFingerprints.add(fp);
           }
         }
       }
@@ -5023,6 +5068,9 @@ class Game {
     // 神話隱藏剋制彩蛋機制檢查
     this.checkBossMythicWeakness(boss, type, source);
 
+    // BUILD-032: 即時同步 Boss HP 血條
+    this.syncBossHpBar(boss);
+
     // 階段轉換判定 (第 10 關具備 3 個階段，其餘 Boss 具備 2 個階段)
     if (boss.phases >= 3) {
       if (boss.hp <= boss.maxHp * 0.66 && boss.phase === 1) {
@@ -5030,12 +5078,14 @@ class Game {
       } else if (boss.hp <= boss.maxHp * 0.33 && boss.phase === 2) {
         this.triggerBossPhase3(boss);
       } else if (boss.hp <= 0 && !boss.dying) {
+        this.syncBossHpBar(boss, true);
         this.startBossDefeatCinematic(boss);
       }
     } else {
       if (boss.hp <= boss.maxHp * 0.5 && boss.phase === 1 && boss.phases > 1) {
         this.triggerBossPhase2(boss);
       } else if (boss.hp <= 0 && !boss.dying) {
+        this.syncBossHpBar(boss, true);
         this.startBossDefeatCinematic(boss);
       }
     }
@@ -5092,10 +5142,15 @@ class Game {
         boss.weaknessCounters.chakram = 0;
         boss.weaknessCooldown = 10.0;
         boss.stunTimer = 3.0;
-        boss.hp -= boss.maxHp * 0.08;
+        boss.hp = Math.max(0, boss.hp - boss.maxHp * 0.08);
+        this.syncBossHpBar(boss);
         this.sound.playSecretCounterTrigger();
         this.shake(10, 0.4);
         this.showToast('✨【神話暗線剋制】青玉金屬刃切斷雷鼓連鎖導電線！電容短路重創 8% 生命並癱瘓 3 秒！');
+        if (boss.hp <= 0 && !boss.dying) {
+          this.syncBossHpBar(boss, true);
+          this.startBossDefeatCinematic(boss);
+        }
       }
     }
 
@@ -5129,12 +5184,17 @@ class Game {
         boss.weaknessCounters.grenade = 0;
         boss.weaknessCooldown = 14.0;
         boss.stunTimer = 2.5;
-        boss.hp -= boss.maxHp * 0.10;
+        boss.hp = Math.max(0, boss.hp - boss.maxHp * 0.10);
+        this.syncBossHpBar(boss);
         this.bossMinions = [];
         this.ebullets = [];
         this.sound.playSecretCounterTrigger();
         this.shake(14, 0.5);
         this.showToast('✨【神話暗線剋制】饕餮吞食高爆熔岩核引發腹腔內爆！重創 10% 生命且傀儡全滅！');
+        if (boss.hp <= 0 && !boss.dying) {
+          this.syncBossHpBar(boss, true);
+          this.startBossDefeatCinematic(boss);
+        }
       }
     }
 
@@ -5145,10 +5205,15 @@ class Game {
         boss.weaknessCounters.taiji = 0;
         boss.weaknessCooldown = 15.0;
         boss.shieldType = 'none';
-        boss.hp -= boss.maxHp * 0.06;
+        boss.hp = Math.max(0, boss.hp - boss.maxHp * 0.06);
+        this.syncBossHpBar(boss);
         this.sound.playSecretCounterTrigger();
         this.shake(9, 0.35);
         this.showToast('✨【神話暗線剋制】五行太極陰陽生剋破陣！雅典娜埃癸斯神盾崩解碎裂！');
+        if (boss.hp <= 0 && !boss.dying) {
+          this.syncBossHpBar(boss, true);
+          this.startBossDefeatCinematic(boss);
+        }
       }
     }
 
@@ -5301,6 +5366,7 @@ class Game {
     boss.dying = true;
     boss.invulnerable = true;
     boss.hp = 0;
+    this.syncBossHpBar(boss, true); // 💥 BUILD-032: 死亡瞬間第一時間強制瞬時歸零，移除過渡動畫延遲，標記 DEFEATED
 
     // 顯示神話 Boss 專屬敗北遺言卡片
     const overlay = document.getElementById('bossDefeatOverlay');
@@ -5686,7 +5752,7 @@ class Game {
       name: name,
       x: this.W / 2,
       y: -60,
-      targetY: 135,
+      targetY: 155,
       hp: hp,
       maxHp: hp,
       hitboxRadius: 42,
@@ -5761,7 +5827,7 @@ class Game {
       defeatVoiceLine: bData.defeatVoiceLine || '',
       x: this.W / 2,
       y: -100,
-      targetY: 155,
+      targetY: 168,
       hp: hp,
       maxHp: hp,
       hitboxRadius: bData.hitboxRadius || 50,
@@ -5815,11 +5881,54 @@ class Game {
     }, 900);
   }
 
+  // BUILD-032: Boss 血條精準同步與瞬時歸零驅動器 (徹底杜絕殘血陣亡視覺假象)
+  syncBossHpBar(boss, immediateZero = false) {
+    if (!boss) return;
+    const fillEl = document.getElementById('bossHpFill');
+    const ghostEl = document.getElementById('bossHpGhost');
+    const nameEl = document.getElementById('bossName');
+    const phaseEl = document.getElementById('bossPhase');
+    if (!fillEl || !ghostEl) return;
+
+    if (nameEl && boss.name && nameEl.textContent !== boss.name) {
+      nameEl.textContent = boss.name;
+    }
+
+    if (immediateZero || boss.hp <= 0 || boss.dying || boss.dead) {
+      fillEl.style.transition = 'none';
+      ghostEl.style.transition = 'none';
+      fillEl.style.width = '0%';
+      ghostEl.style.width = '0%';
+      fillEl.classList.add('boss-defeated');
+      ghostEl.classList.add('boss-defeated');
+      if (phaseEl) {
+        phaseEl.textContent = 'DEFEATED';
+        phaseEl.style.borderColor = '#ff4766';
+        phaseEl.style.color = '#ff4766';
+      }
+      return;
+    }
+
+    fillEl.classList.remove('boss-defeated');
+    ghostEl.classList.remove('boss-defeated');
+    fillEl.style.transition = 'width 0.08s linear';
+    ghostEl.style.transition = 'width 0.4s ease-out';
+    const maxHp = boss.maxHp || 1;
+    const pct = Math.max(0, Math.min(100, (boss.hp / maxHp) * 100));
+    fillEl.style.width = pct + '%';
+    ghostEl.style.width = pct + '%';
+
+    if (phaseEl && !boss.dying && !boss.dead) {
+      phaseEl.textContent = `PHASE ${boss.phase || 1}`;
+      phaseEl.style.borderColor = '';
+      phaseEl.style.color = '';
+    }
+  }
+
   showBossHUD(boss) {
     const hud = document.getElementById('bossHud');
-    document.getElementById('bossName').textContent = boss.name;
-    document.getElementById('bossPhase').textContent = `PHASE ${boss.phase}`;
     hud.style.display = 'flex';
+    this.syncBossHpBar(boss);
   }
 
   // ============================================================
@@ -6139,10 +6248,8 @@ class Game {
       }
     }
 
-    // 更新血條與副標題動態指示
-    const pct = Math.max(0, b.hp / b.maxHp) * 100;
-    document.getElementById('bossHpFill').style.width = pct + '%';
-    document.getElementById('bossHpGhost').style.width = pct + '%';
+    // BUILD-032: 更新血條與副標題動態指示 (統一經由 syncBossHpBar 精確驅動)
+    this.syncBossHpBar(b);
     const subTitleEl = document.getElementById('bossSubTitle');
     if (subTitleEl) {
       if (b.stage === 3 && b.featherBarrierHp > 0) {
@@ -6721,7 +6828,12 @@ class Game {
               game.player.hp = Math.min(game.player.maxHp, game.player.hp + 1);
               game.player.grazeSync = 100;
               game.showToast('神聖甘露仙瓶被擊碎！甘露灑落，玩家裝甲修復 +1，同步率滿載！');
-              b.hp -= 400; // 雅典娜受到破瓶反噬
+              b.hp = Math.max(0, b.hp - 400); // 雅典娜受到破瓶反噬
+              game.syncBossHpBar(b);
+              if (b.hp <= 0 && !b.dying) {
+                game.syncBossHpBar(b, true);
+                game.startBossDefeatCinematic(b);
+              }
             }
           });
         }
@@ -6745,16 +6857,26 @@ class Game {
             type: 'hydra_head', name: '淵毒蛇首(左)',
             x: 55, y: 155, r: 22, hp: 650, maxHp: 650, color: '#48e583',
             onDestroy: (game, b) => {
-              b.hp -= 350;
+              b.hp = Math.max(0, b.hp - 350);
+              game.syncBossHpBar(b);
               game.showToast('左側毒蛇首被斬斷！九頭蛇受到巨額重創！');
+              if (b.hp <= 0 && !b.dying) {
+                game.syncBossHpBar(b, true);
+                game.startBossDefeatCinematic(b);
+              }
             }
           });
           this.bossMinions.push({
             type: 'hydra_head', name: '淵毒蛇首(右)',
             x: this.W - 55, y: 155, r: 22, hp: 650, maxHp: 650, color: '#48e583',
             onDestroy: (game, b) => {
-              b.hp -= 350;
+              b.hp = Math.max(0, b.hp - 350);
+              game.syncBossHpBar(b);
               game.showToast('右側毒蛇首被斬斷！九頭蛇受到巨額重創！');
+              if (b.hp <= 0 && !b.dying) {
+                game.syncBossHpBar(b, true);
+                game.startBossDefeatCinematic(b);
+              }
             }
           });
         }
@@ -6784,8 +6906,13 @@ class Game {
               game.sound.playExplosion(true);
               b.invulnerable = false;
               b.invulnTimer = 0;
-              b.hp -= 500;
+              b.hp = Math.max(0, b.hp - 500);
+              game.syncBossHpBar(b);
               game.showToast('鍛造熔爐引爆過載！獨眼巨人陷入癱瘓！');
+              if (b.hp <= 0 && !b.dying) {
+                game.syncBossHpBar(b, true);
+                game.startBossDefeatCinematic(b);
+              }
             }
           });
         }
@@ -6808,8 +6935,13 @@ class Game {
             x: this.W / 2, y: 180, r: 24, hp: 700, maxHp: 700, color: '#e0409a',
             onDestroy: (game, b) => {
               game.sound.playCrit();
-              b.hp -= 400;
+              b.hp = Math.max(0, b.hp - 400);
+              game.syncBossHpBar(b);
               game.showToast('殺生石碎裂！妖狐幻影消散，玉藻前真身現形！');
+              if (b.hp <= 0 && !b.dying) {
+                game.syncBossHpBar(b, true);
+                game.startBossDefeatCinematic(b);
+              }
             }
           });
         }
@@ -8201,8 +8333,23 @@ class Game {
     if (this.dataStore) {
       this.dataStore.syncOfflineQueue();
     }
+
+    // BUILD-032: 題庫完全用完判定與接關終止控制
+    const isExhausted = this.dataStore && typeof this.dataStore.isQuestionBankExhausted === 'function' && this.dataStore.isQuestionBankExhausted(this.currentStudentId);
     const resupplyBtn = document.getElementById('resupplyRetryBtn');
-    if (resupplyBtn) resupplyBtn.style.display = 'inline-flex';
+    const exhaustedNotice = document.getElementById('bankExhaustedNotice');
+
+    if (isExhausted) {
+      if (resupplyBtn) resupplyBtn.style.display = 'none';
+      if (exhaustedNotice) {
+        exhaustedNotice.style.display = 'block';
+        exhaustedNotice.innerHTML = `🏆 <b>題庫已全數融會貫通！</b><br><span style="font-size:12px; color:rgba(255,255,255,0.85);">所有可用考題（新題、錯題攻堅、複習檢定）已全數作答完畢，無法再進行補給接關。恭喜達成學識大圓滿！</span>`;
+      }
+    } else {
+      if (resupplyBtn) resupplyBtn.style.display = 'inline-flex';
+      if (exhaustedNotice) exhaustedNotice.style.display = 'none';
+    }
+
     document.getElementById('gameOverScreen').classList.remove('hidden');
   }
 
@@ -8231,6 +8378,12 @@ class Game {
 
   // 陣亡「補給再挑戰」處理流程 (重新答題5次、三選一升級武器、滿血清彈幕復原)
   triggerResupplyContinue() {
+    // 若題庫已全數耗盡，嚴格禁止接關
+    if (this.dataStore && typeof this.dataStore.isQuestionBankExhausted === 'function' && this.dataStore.isQuestionBankExhausted(this.currentStudentId)) {
+      this.showToast('🏆 題庫已全數耗盡，無法再進行補給接關！');
+      return;
+    }
+
     const gameOverEl = document.getElementById('gameOverScreen');
     if (gameOverEl) gameOverEl.classList.add('hidden');
 

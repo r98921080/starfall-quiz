@@ -192,17 +192,18 @@ if (listeners['DOMContentLoaded']) {
 const game = mockWindow.__starfallGame;
 assert(game !== null, 'Game initialized in VM');
 
-// Populate mock question bank
-game.dataStore.questionBank = [
-  { question_id: 'Q1', question: '測試題目1', opts: ['A', 'B', 'C', 'D'], ans: 0, stage: 2, difficulty: 1 },
-  { question_id: 'Q2', question: '測試題目2', opts: ['A', 'B', 'C', 'D'], ans: 1, stage: 2, difficulty: 1 },
-  { question_id: 'Q3', question: '測試題目3', opts: ['A', 'B', 'C', 'D'], ans: 2, stage: 2, difficulty: 1 },
-  { question_id: 'Q4', question: '測試題目4', opts: ['A', 'B', 'C', 'D'], ans: 3, stage: 2, difficulty: 1 },
-  { question_id: 'Q5', question: '測試題目5', opts: ['A', 'B', 'C', 'D'], ans: 0, stage: 2, difficulty: 1 },
-  { question_id: 'Q6', question: '測試題目6', opts: ['A', 'B', 'C', 'D'], ans: 1, stage: 2, difficulty: 1 },
-  { question_id: 'Q7', question: '測試題目7', opts: ['A', 'B', 'C', 'D'], ans: 2, stage: 2, difficulty: 1 },
-  { question_id: 'Q8', question: '測試題目8', opts: ['A', 'B', 'C', 'D'], ans: 3, stage: 2, difficulty: 1 }
-];
+// Populate mock question bank (400 questions to support 65 continue cycles)
+game.dataStore.questionBank = [];
+for (let i = 1; i <= 400; i++) {
+  game.dataStore.questionBank.push({
+    question_id: `Q${i}`,
+    question: `測試題目${i}`,
+    opts: ['A', 'B', 'C', 'D'],
+    ans: i % 4,
+    stage: 2,
+    difficulty: 1
+  });
+}
 
 // Start Game at Stage 2 Wave 2 (Mini-Boss)
 game.startNewGame(2);
