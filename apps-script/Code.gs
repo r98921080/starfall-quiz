@@ -194,9 +194,21 @@ function ensureStudentExists_(ss, studentId, name, grade) {
   }
 }
 
+function getQuestionsSheet_(ss) {
+  if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
+  return ss.getSheetByName(SHEETS.QUESTIONS) ||
+         ss.getSheetByName('Questions') ||
+         ss.getSheetByName('Question') ||
+         ss.getSheetByName('Quetions') ||
+         ss.getSheetByName('題庫') ||
+         ss.getSheetByName('questions') ||
+         null;
+}
+
 function getQuestions_(params) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const rows = sheetObjects_(ss.getSheetByName(SHEETS.QUESTIONS));
+  const sheet = getQuestionsSheet_(ss);
+  const rows = sheetObjects_(sheet);
   const grade = params && params.grade ? String(params.grade).trim() : '';
   const enabledOnly = !params || String(params.enabled || 'true').toLowerCase() !== 'false';
   const questions = rows.filter(function(row) {
@@ -363,7 +375,7 @@ function refreshReports() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   ensureReportSheets_(ss);
   const attempts = sheetObjects_(ss.getSheetByName(SHEETS.ATTEMPTS));
-  const questions = sheetObjects_(ss.getSheetByName(SHEETS.QUESTIONS));
+  const questions = sheetObjects_(getQuestionsSheet_(ss));
   const students = sheetObjects_(ss.getSheetByName(SHEETS.STUDENTS));
   const settings = settingsObject_(ss);
   writeQuestionStats_(ss, attempts, questions, settings);
@@ -509,7 +521,7 @@ function getReportData_(params) {
 function createDemoAttempts() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const students = sheetObjects_(ss.getSheetByName(SHEETS.STUDENTS));
-  const questions = sheetObjects_(ss.getSheetByName(SHEETS.QUESTIONS)).filter(function(q) { return String(q.enabled).toUpperCase() !== 'FALSE'; });
+  const questions = sheetObjects_(getQuestionsSheet_(ss)).filter(function(q) { return String(q.enabled).toUpperCase() !== 'FALSE'; });
   if (!students.length) throw new Error('Students 至少需要一位啟用中的學生。');
   if (!questions.length) throw new Error('Questions 沒有啟用題目。');
   const student = students[0];
@@ -564,7 +576,7 @@ function ensureReportSheets_(ss) {
 }
 
 function findQuestion_(ss, questionId) {
-  const rows = sheetObjects_(ss.getSheetByName(SHEETS.QUESTIONS));
+  const rows = sheetObjects_(getQuestionsSheet_(ss));
   return rows.find(function(row) { return String(row.question_id) === String(questionId); }) || null;
 }
 
@@ -724,18 +736,15 @@ function cleanDuplicateQuestions() {
  */
 function cleanDuplicateQuestions_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(SHEETS.QUESTIONS);
-  if (!sheet) throw new Error('找不到 Questions 工作表');
+  const sheet = getQuestionsSheet_(ss);
+  if (!sheet) throw new Error('找不到 Questions/題庫 工作表');
 
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return { originalCount: 0, deletedCount: 0, cleanCount: 0 };
 
   const headers = data[0].map(function(h) { return String(h || '').trim().toLowerCase(); });
+  const qidIdx = headers.indexOf('question_id');
   const qIdx = headers.indexOf('question');
-  const aIdx = headers.indexOf('option_a');
-  const bIdx = headers.indexOf('option_b');
-  const cIdx = headers.indexOf('option_c');
-  const dIdx = headers.indexOf('option_d');
   const ansIdx = headers.indexOf('answer');
 
   if (qIdx === -1 || ansIdx === -1) {
@@ -749,71 +758,27 @@ function cleanDuplicateQuestions_() {
       .toLowerCase();
   };
 
-  const getCorrectText = function(row) {
-    const ansLetter = String(row[ansIdx] || 'A').toUpperCase().trim();
-    const map = { A: aIdx, B: bIdx, C: cIdx, D: dIdx };
-    return row[map[ansLetter] || aIdx] || '';
-  };
-
   const originalRows = data.slice(1);
-  const dupMap = {};
+  const seenIds = {};
+  const seenFps = {};
+  const retained = [];
+
   originalRows.forEach(function(row) {
     if (!row || !row[qIdx]) return;
+    const qid = qidIdx !== -1 ? String(row[qidIdx] || '').trim() : '';
     const qFp = getFp(row[qIdx]);
-    const ansFp = getFp(getCorrectText(row));
-    const key = qFp + ':::' + ansFp;
-    if (!dupMap[key]) dupMap[key] = [];
-    dupMap[key].push(row);
-  });
+    const ansVal = String(row[ansIdx] || '').trim().toUpperCase();
+    const contentKey = qFp + ':::' + ansVal;
 
-  const retained = [];
-  const pureAGroups = [];
-
-  Object.keys(dupMap).forEach(function(key) {
-    const list = dupMap[key];
-    const nonA = list.filter(function(r) { return String(r[ansIdx] || '').toUpperCase().trim() !== 'A'; });
-    const onlyA = list.filter(function(r) { return String(r[ansIdx] || '').toUpperCase().trim() === 'A'; });
-
-    if (nonA.length > 0) {
-      retained.push(nonA[0].slice());
-    } else {
-      pureAGroups.push(onlyA[0].slice());
+    // 若 ID 重複或題幹與答案完全相同，只保留第一筆
+    if ((qid && seenIds[qid]) || (contentKey && seenFps[contentKey])) {
+      return;
     }
-  });
+    if (qid) seenIds[qid] = true;
+    if (contentKey) seenFps[contentKey] = true;
 
-  const ansCounts = { A: 0, B: 0, C: 0, D: 0 };
-  retained.forEach(function(r) {
-    const a = String(r[ansIdx] || 'A').toUpperCase().trim();
-    if (ansCounts[a] !== undefined) ansCounts[a]++;
-  });
-
-  const letters = ['A', 'B', 'C', 'D'];
-  pureAGroups.forEach(function(r) {
-    let minLetter = 'A';
-    let minVal = ansCounts['A'];
-    letters.forEach(function(l) {
-      if (ansCounts[l] < minVal) {
-        minVal = ansCounts[l];
-        minLetter = l;
-      }
-    });
-
-    if (minLetter !== 'A' && aIdx !== -1 && bIdx !== -1 && cIdx !== -1 && dIdx !== -1) {
-      const origOpts = [r[aIdx], r[bIdx], r[cIdx], r[dIdx]];
-      const targetIdx = letters.indexOf(minLetter);
-      const shift = targetIdx;
-      const newOpts = new Array(4);
-      for (let i = 0; i < 4; i++) {
-        newOpts[(i + shift) % 4] = origOpts[i];
-      }
-      r[aIdx] = newOpts[0];
-      r[bIdx] = newOpts[1];
-      r[cIdx] = newOpts[2];
-      r[dIdx] = newOpts[3];
-      r[ansIdx] = minLetter;
-    }
-    ansCounts[r[ansIdx]]++;
-    retained.push(r);
+    // 100% 保持原始選項與答案，絕不進行任何隨機或人工旋轉位移
+    retained.push(row.slice());
   });
 
   // 清除舊資料並寫回清洗後的去重資料

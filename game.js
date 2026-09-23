@@ -2412,8 +2412,11 @@ class DataStore {
       .replace(/[「」『』""''，。、？！：；,.?!:;（）()]/g, '')
       .toLowerCase();
 
-    // 1. 根據「題目文本指紋 + 正確答案文字指紋」分組
-    const dupMap = new Map();
+    // 1. 去重保護：過濾重複的 question_id 或完全相同題幹與正確答案的副本
+    const seenIds = new Set();
+    const seenFps = new Set();
+    const retained = [];
+
     questions.forEach((q, idx) => {
       let opts = [];
       if (Array.isArray(q.options)) {
@@ -2434,16 +2437,24 @@ class DataStore {
         if (ansIdx < 0 || ansIdx >= opts.length) ansIdx = 0;
       }
 
-      const correctText = opts[ansIdx] || '';
+      const qid = String(q.question_id || `Q-GS-${idx + 1}`).trim();
       const qFp = getFp(q.question);
+      const correctText = opts[ansIdx] || '';
       const ansFp = getFp(correctText);
-      const key = `${qFp}:::${ansFp}`;
+      const contentKey = `${qFp}:::${ansFp}`;
 
-      const item = {
-        question_id: q.question_id || `Q-GS-${idx + 1}`,
+      if (seenIds.has(qid) || seenFps.has(contentKey)) {
+        return;
+      }
+      seenIds.add(qid);
+      if (qFp) seenFps.add(contentKey);
+
+      // 100% 忠實保留使用者設定之選項與答案，絕不進行動態位移或竄改
+      retained.push({
+        question_id: qid,
         grade: q.grade || '',
         question: q.question,
-        opts: opts,
+        opts: [...opts],
         ans: ansIdx,
         subject: q.subject || '國語文',
         skill: q.skill || '語文素養',
@@ -2453,55 +2464,7 @@ class DataStore {
         memory_tip: q.memory_tip || '',
         target_words: q.target_words || [],
         concept_tags: q.concept_tags || []
-      };
-
-      if (!dupMap.has(key)) dupMap.set(key, []);
-      dupMap.get(key).push(item);
-    });
-
-    // 2. 去重策略：優先保留非 A 選項的題目，淘汰純 A 副本
-    const retained = [];
-    const pureAGroups = [];
-
-    dupMap.forEach((list) => {
-      const nonA = list.filter(q => q.ans !== 0);
-      const onlyA = list.filter(q => q.ans === 0);
-
-      if (nonA.length > 0) {
-        retained.push(Object.assign({}, nonA[0]));
-      } else {
-        pureAGroups.push(Object.assign({}, onlyA[0]));
-      }
-    });
-
-    // 3. 選項動態均衡：將原先純 A 的題目動態旋轉至各選項，確保 A/B/C/D 各佔 ~25%
-    const ansCounts = [0, 0, 0, 0];
-    retained.forEach(q => {
-      if (q.ans >= 0 && q.ans < 4) ansCounts[q.ans]++;
-    });
-
-    pureAGroups.forEach(q => {
-      let minIdx = 0;
-      let minVal = ansCounts[0];
-      for (let i = 1; i < 4; i++) {
-        if (ansCounts[i] < minVal) {
-          minVal = ansCounts[i];
-          minIdx = i;
-        }
-      }
-
-      if (minIdx !== 0 && q.opts.length === 4) {
-        const origOpts = [...q.opts];
-        const shift = minIdx;
-        const newOpts = new Array(4);
-        for (let i = 0; i < 4; i++) {
-          newOpts[(i + shift) % 4] = origOpts[i];
-        }
-        q.opts = newOpts;
-        q.ans = minIdx;
-      }
-      ansCounts[q.ans]++;
-      retained.push(q);
+      });
     });
 
     return retained;
