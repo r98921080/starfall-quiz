@@ -7873,6 +7873,12 @@ class Game {
         ? `<img src="${c.icon}" class="upgrade-icon-img" alt="${c.name}" onerror="this.style.display='none'; this.parentNode.textContent='⚔️';" />`
         : '⚔️';
 
+      const descText = c.desc || '';
+      const statsText = c.statProgression || c.specialEffect || '';
+      const effectLineHtml = (c.rankEffect && !statsText.includes(c.rankEffect))
+        ? `<div class="upgrade-effect-line">✨ <b>階級強化：</b>${c.rankEffect}</div>`
+        : '';
+
       card.innerHTML = `
         <div class="upgrade-icon-box">${iconHtml}</div>
         <div class="upgrade-info">
@@ -7884,7 +7890,9 @@ class Game {
               ${rankTagHtml}
             </div>
           </div>
-          <div class="upgrade-stats-line">${c.statProgression || c.specialEffect || ''}</div>
+          <div class="upgrade-stats-line">${statsText}</div>
+          ${effectLineHtml}
+          ${descText ? `<div class="upgrade-desc">${descText}</div>` : ''}
           ${fusionHtml}
         </div>
       `;
@@ -7894,6 +7902,20 @@ class Game {
       };
       grid.appendChild(card);
     });
+  }
+
+  getWeaponRank(id) {
+    if (!id) return 0;
+    const arsRank = (this.arsenal && this.arsenal[id]) ? (Number(this.arsenal[id].rank) || 0) : 0;
+    let eqRank = 0;
+    if (this.equipped) {
+      for (const slot in this.equipped) {
+        if (this.equipped[slot] && this.equipped[slot].id === id) {
+          eqRank = Math.max(eqRank, Number(this.equipped[slot].rank) || 0);
+        }
+      }
+    }
+    return Math.max(arsRank, eqRank);
   }
 
   generateUpgradeChoices(correctCount = 3) {
@@ -7906,6 +7928,8 @@ class Game {
       return {
         ...cat,
         ...w,
+        desc: w.desc || w.description || cat.desc || '',
+        baseDmg: w.baseDmg || w.baseDamage || cat.baseDmg || 50,
         tier: w.tier || cat.tier || 'C',
         tierName: w.tierName || cat.tierName || 'C 級・基礎武裝'
       };
@@ -7920,6 +7944,7 @@ class Game {
           name: '緊急奈米修復栓',
           icon: 'assets/icons/weapons/weapon_14.png',
           specialEffect: '戰機裝甲修復 +1 HP',
+          statProgression: '🛡️ 戰機裝甲修復 +1 HP（上限 3 HP）',
           desc: '微型奈米醫療注劑，小幅修復戰機受損結構，恢復 1 點生命值（不高於最大生命值 3）。'
         },
         {
@@ -7928,6 +7953,7 @@ class Game {
           name: '輔助姿態推進器',
           icon: 'assets/icons/weapons/weapon_1.png',
           specialEffect: '戰機移動速度 +6%',
+          statProgression: '⚡ 戰機移動速度永久 +6%',
           desc: '微調引擎輔助噴嘴推力，永久微幅提升機體移動靈敏度 6%。'
         },
         {
@@ -7936,17 +7962,16 @@ class Game {
           name: '干擾抑阻力場',
           icon: 'assets/icons/weapons/weapon_10.png',
           specialEffect: '敵方彈幕速度 -5%',
+          statProgression: '🌀 敵方彈幕飛行速度 -5%',
           desc: '釋放低頻微波阻尼力場，微幅降低所有敵方子彈飛行速度 5%。'
         }
       ];
     }
 
-    // 候選武器池：排除已經升至 5 階 (MAX) 的武器
-    let candidateWeapons = wpns.filter(w => {
-      const eq = this.findEquippedWeapon(w.id);
-      const curRank = eq ? eq.rank : 0;
-      return curRank < 5;
-    });
+    // 補給原則：同樣的武器升到第 5 階 (rank >= 5) 後，只有該武器不再出現在三選一選項中；
+    // 其他未滿第 5 階 (rank < 5) 的武器一律照原本設定運作！
+    const unmaxedWeapons = wpns.filter(w => this.getWeaponRank(w.id) < 5);
+    let candidateWeapons = [...unmaxedWeapons];
 
     // S 級神兵雙門檻限制：必須該輪累積總答對超過 40 題，且三選一前連續答對達 20 題以上！
     const canUnlockSTier = (this.sessionTotalCorrect > 40) && (this.runConsecutiveCorrectStreak >= 20);
@@ -7955,14 +7980,10 @@ class Game {
     }
 
     // 強勢武器門檻與稀有度抑制 (如超聲震盪重砲 sonic_cannon 清彈範圍過大)：
-    // 1. 必須本輪 5 題全部答對 (5/5 滿分) 才有資格出現在三選一候選池中 (未滿分 0% 機率)
-    // 2. 即使 5 題全部答對，出現機率亦大幅調降 (僅 20% 機率納入池中，出現機率降低 80%)
     if (correctCount < 5) {
       candidateWeapons = candidateWeapons.filter(w => w.id !== 'sonic_cannon');
-    } else {
-      if (Math.random() > 0.20) {
-        candidateWeapons = candidateWeapons.filter(w => w.id !== 'sonic_cannon');
-      }
+    } else if (candidateWeapons.length > 3 && Math.random() > 0.20) {
+      candidateWeapons = candidateWeapons.filter(w => w.id !== 'sonic_cannon');
     }
 
     // 輔助函式：從池中隨機抽取指定數量不重複元素
@@ -7977,11 +7998,6 @@ class Game {
       return picked;
     };
 
-    // 依照答對題數限制武器評級庫 (Tier)
-    // 答對 1 或 2 題：只有 C 級武器
-    // 答對 3 題：B 級及以下（B 或 C 級），保障 1 個 B 級
-    // 答對 4 題：A 級及以下（A, B, C 級），保障 1 個 A 級
-    // 答對 5 題：若達成 S 級雙門檻則解鎖 S 級神話庫 (保障 1 個 S 級)；否則一律降級為 A 級主力裝備庫 (保障 1 個 A 級)
     const chosenWpns = [];
 
     if (correctCount === 1 || correctCount === 2) {
@@ -8013,7 +8029,6 @@ class Game {
         const remainPool = candidateWeapons.filter(w => (w.tier === 'S' || w.tier === 'A' || w.tier === 'B' || w.tier === 'C') && !chosenWpns.some(cw => cw.id === w.id));
         chosenWpns.push(...pickRandom(remainPool, 3 - chosenWpns.length));
       } else {
-        // 未達 S 級神兵解鎖門檻：取消 5 題滿分保底 S 級，改為保障 1 款 A 級武器，其餘為 A/B/C 級，S 級武器嚴格 0% 出現！
         const aPool = candidateWeapons.filter(w => w.tier === 'A');
         if (aPool.length > 0) {
           const guaranteed = aPool[Math.floor(Math.random() * aPool.length)];
@@ -8022,6 +8037,16 @@ class Game {
         const remainPool = candidateWeapons.filter(w => (w.tier === 'A' || w.tier === 'B' || w.tier === 'C') && !chosenWpns.some(cw => cw.id === w.id));
         chosenWpns.push(...pickRandom(remainPool, 3 - chosenWpns.length));
       }
+    }
+
+    // 若該答題區間的對應品階武器大多已升滿第 5 階，導致選項不足 3 個，
+    // 自動從其他尚未升滿第 5 階的可用武器池 (candidateWeapons) 中遞補，確保其他未滿 5 階的武器照常出現！
+    if (chosenWpns.length < 3 && candidateWeapons.length > chosenWpns.length) {
+      const tierOrder = { C: 1, B: 2, A: 3, S: 4 };
+      const fallbackWpns = candidateWeapons
+        .filter(w => !chosenWpns.some(cw => cw.id === w.id))
+        .sort((a, b) => (tierOrder[a.tier] || 1) - (tierOrder[b.tier] || 1));
+      chosenWpns.push(...pickRandom(fallbackWpns, 3 - chosenWpns.length));
     }
 
     const tierQualityMap = {
@@ -8044,9 +8069,8 @@ class Game {
       : STARFALL_FUSIONS;
 
     chosenWpns.forEach((w) => {
-      const eq = this.findEquippedWeapon(w.id);
-      const currentRank = eq ? eq.rank : 0;
-      const targetRank = currentRank + 1;
+      const currentRank = this.getWeaponRank(w.id);
+      const targetRank = Math.min(5, currentRank + 1);
       const tierRating = w.tier || 'C';
       const qualityClass = tierQualityMap[tierRating] || 'quality-good';
       const mult = tierQualityMultiplier[tierRating] || 1.2;
@@ -8057,8 +8081,8 @@ class Game {
         const partnerId = f.ingredients.find(id => id !== w.id);
         const partnerW = (this.dataStore && this.dataStore.weaponData && this.dataStore.weaponData.find(x => x.id === partnerId))
           || STARFALL_WEAPONS_CATALOG.find(x => x.id === partnerId);
-        const partnerEquipped = this.findEquippedWeapon(partnerId);
-        const hasPartner = !!(partnerEquipped && partnerEquipped.rank > 0);
+        const partnerRank = this.getWeaponRank(partnerId);
+        const hasPartner = partnerRank > 0;
         return {
           fusionName: f.name,
           partnerName: partnerW ? partnerW.name : partnerId,
@@ -8070,9 +8094,14 @@ class Game {
       const baseDmg = w.baseDmg || 50;
       const currentDmg = Math.round(baseDmg * (1 + currentRank * 0.28) * mult);
       const targetDmg = Math.round(baseDmg * (1 + targetRank * 0.28) * mult);
+      const rankInfo = Array.isArray(w.ranks) ? w.ranks.find(r => Number(r.rank) === targetRank) : null;
+      const rankEffectText = rankInfo && rankInfo.effect
+        ? `${rankInfo.name ? `【${rankInfo.name}】` : ''}${rankInfo.effect}`
+        : (targetRank === 5 ? '【MAX 終極特化】威力與彈幕規模達最高峰！' : (w.specialEffect || ''));
+
       let statSummary = '';
       if (w.isPassive) {
-        statSummary = `🛡️ ${w.tag || '被動常駐'} ｜ 增益強化至 Lv.${targetRank}`;
+        statSummary = `🛡️ ${w.tag || '被動常駐'} ｜ 增益強化至 Lv.${targetRank}${targetRank === 5 ? ' (MAX)' : ''}`;
       } else {
         statSummary = `⚡ 威力: ${currentRank === 0 ? targetDmg : `${currentDmg} ➔ ${targetDmg}`} ｜ ${w.tag || '主動火控'}`;
       }
@@ -8093,8 +8122,9 @@ class Game {
         specialEffect: targetRank === 5
           ? `【MAX 終極特化】威力大幅昇華，已達最高階！`
           : `${w.tag || '常規裝備'}｜提升至 Lv.${targetRank}`,
+        rankEffect: rankEffectText,
         statProgression: statSummary,
-        desc: `${w.desc}（升至 Lv.${targetRank}）`,
+        desc: w.desc || '',
         fusionHints: fusionHints
       });
     });
@@ -8105,10 +8135,8 @@ class Game {
       fusions.forEach(f => {
         if (this.isFusionActive(f.id)) return;
         const [ing1, ing2] = f.ingredients;
-        const w1 = this.findEquippedWeapon(ing1);
-        const w2 = this.findEquippedWeapon(ing2);
-        const r1 = w1 ? w1.rank : 0;
-        const r2 = w2 ? w2.rank : 0;
+        const r1 = this.getWeaponRank(ing1);
+        const r2 = this.getWeaponRank(ing2);
         if (r1 >= 3 && r2 >= 3) {
           availableFusions.push(f);
         }
@@ -8127,8 +8155,9 @@ class Game {
         icon: 'assets/icons/weapons/weapon_3.png',
         tierLabel: '★【雙素材 Lv.3 覺醒真融合】★',
         specialEffect: f.resonance ? `${f.resonance.name}：${f.resonance.effect}` : '雙武器共鳴終極特化',
+        rankEffect: f.resonance ? `${f.resonance.name} — ${f.resonance.effect}` : '雙武器共鳴終極特化',
         statProgression: f.resonance ? `🔥 ${f.resonance.name}：${f.resonance.effect}` : '雙武器共鳴終極特化',
-        desc: `${f.description}（結合兩大武裝終極威力）`
+        desc: `${f.description || ''}（結合兩大武裝終極威力）`
       };
       if (list.length >= 3) {
         list[2] = fusionCard;
@@ -8137,7 +8166,7 @@ class Game {
       }
     }
 
-    // 若候選武器不足 3 款（大多已升滿 5 階），以生存特化補足
+    // 僅當全武器庫中所有可用武器皆已升滿 5 階（不足 3 款可選）時，才以生存特化補足
     if (list.length < 3) {
       const fallbackPerks = [
         {
@@ -8215,15 +8244,19 @@ class Game {
       return;
     }
 
-    // 裝備提升 (雙向同步 arsenal 與 equipped)
-    if (this.arsenal && this.arsenal[choice.weaponId]) {
-      this.arsenal[choice.weaponId].rank = choice.targetRank;
-      this.arsenal[choice.weaponId].quality = choice.quality;
+    // 裝備提升 (嚴格鎖定最高 5 階 MAX，並雙向同步 arsenal 與 equipped)
+    const newRank = Math.min(5, choice.targetRank || (this.getWeaponRank(choice.weaponId) + 1));
+    if (!this.arsenal) this.arsenal = {};
+    if (!this.arsenal[choice.weaponId]) {
+      this.arsenal[choice.weaponId] = { id: choice.weaponId, rank: newRank, quality: choice.quality || 'common', timer: 0 };
+    } else {
+      this.arsenal[choice.weaponId].rank = newRank;
+      this.arsenal[choice.weaponId].quality = choice.quality || this.arsenal[choice.weaponId].quality;
     }
     const eq = this.findEquippedWeapon(choice.weaponId);
     if (eq) {
-      eq.rank = choice.targetRank;
-      eq.quality = choice.quality;
+      eq.rank = newRank;
+      eq.quality = choice.quality || eq.quality;
     }
 
     // 主動武器裝備管理 (若未裝備且當前主動槽未滿3個，自動裝備)
