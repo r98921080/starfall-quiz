@@ -1810,14 +1810,25 @@ class DataStore {
     this.initIndexedDB();
   }
 
-  // 取得題目內容指紋（忽略標點與空格，徹底解決同一題幹掛不同 ID 的重複問題）
-  getQuestionFingerprint(text) {
-    if (!text) return '';
-    return String(text)
+  // 取得題目內容指紋（結合題幹與選項內容，避免「下列何者沒有錯別字？」等通用題幹因選項不同卻被誤判為重複題）
+  getQuestionFingerprint(textOrObj, opts) {
+    if (!textOrObj) return '';
+    let rawText = textOrObj;
+    let rawOpts = opts;
+    if (typeof textOrObj === 'object') {
+      rawText = textOrObj.question || '';
+      rawOpts = textOrObj.opts || [textOrObj.option_a, textOrObj.option_b, textOrObj.option_c, textOrObj.option_d].filter(Boolean);
+    }
+    const clean = (s) => String(s || '')
       .trim()
       .replace(/[\s\r\n\t]/g, '')
       .replace(/[「」『』""''，。、？！：；,.?!:;]/g, '')
       .toLowerCase();
+    const stemFp = clean(rawText);
+    if (Array.isArray(rawOpts) && rawOpts.length > 0) {
+      return `${stemFp}::${rawOpts.map(clean).join('|')}`;
+    }
+    return stemFp;
   }
 
   // 載入跨局題幹指紋作答記錄
@@ -2767,10 +2778,7 @@ class DataStore {
     const candidates = [];
     pool.forEach(q => {
       if (!peerMistakeQids.has(q.question_id)) return;
-      const fp = this.getQuestionFingerprint(q.question);
-      if (this.masteredFingerprints && this.masteredFingerprints.has(fp)) return;
-      if (this.sessionUsedQuestionIds && this.sessionUsedQuestionIds.has(q.question_id)) return;
-      if (this.sessionUsedFingerprints && this.sessionUsedFingerprints.has(fp)) return;
+      if (this.sessionUsedFingerprints && this.sessionUsedFingerprints.has(this.getQuestionFingerprint(q))) return;
       const cp = currentProgress[q.question_id];
       if (cp && cp.attempts > 0) return; // 該玩家若已做過則不符合「未在該玩家答題紀錄出現過」條件
       candidates.push(q);
@@ -2800,13 +2808,16 @@ class DataStore {
     }
   }
 
-  // 加權隨機抽題輔助函式
+  // 加權隨機抽題輔助函式 (結合關卡難度權重與學員年級軟性加權，絕不鎖死單一年級題數)
   drawWeightedQuestions(candidates, count, stage = 1) {
     if (candidates.length <= count) return [...candidates];
     const weightMap = this.getDifficultyWeightMap(stage);
     const pool = candidates.map(q => {
       const diff = q.difficulty || 1;
-      const w = weightMap[diff] !== undefined ? weightMap[diff] : 10;
+      let w = weightMap[diff] !== undefined ? weightMap[diff] : 10;
+      if (this.studentGrade && this.isGradeMatch(q.grade, this.studentGrade)) {
+        w = Math.max(15, Math.round(w * 1.5));
+      }
       return { item: q, weight: w };
     });
 
@@ -2834,25 +2845,20 @@ class DataStore {
     return drawn;
   }
 
-  // 檢測當前題目池是否已全數耗盡 (完全用完)
+  // 檢測當前全題庫 (136 題) 是否已全數耗盡 (完全用完)
   isQuestionBankExhausted(studentId) {
     if (!this.questionBank || this.questionBank.length === 0) return false;
-    const sid = studentId || this.currentStudentId || 'S0001';
-    let pool = [...this.questionBank];
-    if (this.studentGrade) {
-      const gradeMatched = this.questionBank.filter(q => this.isGradeMatch(q.grade, this.studentGrade));
-      if (gradeMatched.length > 0) pool = gradeMatched;
-    }
+    const pool = [...this.questionBank];
     if (!this.sessionUsedQuestionIds) return false;
 
-    // 檢查是否有任何可用題目尚未在本局使用過
+    // 檢查全題庫 136 題中是否有任何可用題目尚未在本局使用過
     for (const q of pool) {
       if (this.sessionUsedQuestionIds.has(q.question_id)) continue;
-      const fp = this.getQuestionFingerprint(q.question);
+      const fp = this.getQuestionFingerprint(q);
       if (fp && this.sessionUsedFingerprints && this.sessionUsedFingerprints.has(fp)) continue;
       return false; // 還有考題可用，尚未完全耗盡
     }
-    return true; // 所有可用考題均已在本輪中抽過作答，全數耗盡
+    return true; // 全題庫所有考題均已在本輪中抽過作答，全數耗盡
   }
 
   // 計算指定題目對於該學員的層級分類 (Tier 1 / Tier 2 / Tier 3)
@@ -2885,22 +2891,16 @@ class DataStore {
     const sid = this.currentStudentId || 'S0001';
     const sidProgress = this.getStudentProgressMap(sid);
 
-    // 若設定了特定學員年級，優先篩選符合該年級之題目池
-    let pool = [...this.questionBank];
-    if (this.studentGrade) {
-      const gradeMatched = this.questionBank.filter(q => this.isGradeMatch(q.grade, this.studentGrade));
-      if (gradeMatched.length > 0) {
-        pool = gradeMatched;
-      }
-    }
+    // 完整開放全題庫 (136 題跨年級題庫全數納入可用池，不再因單一年級僅 15 題而在第 3~5 關提早乾涸！)
+    const pool = [...this.questionBank];
 
     if (!this.sessionUsedQuestionIds) this.sessionUsedQuestionIds = new Set();
     if (!this.sessionUsedFingerprints) this.sessionUsedFingerprints = new Set();
 
-    // 本輪尚未作答之可用題目池（嚴格排除本局同一 run 已抽過的題目 ID 與題幹指紋，徹底零重複）
+    // 本輪尚未作答之可用題目池（嚴格排除本局同一 run 已抽過的題目 ID 與題幹+選項指紋，徹底零重複）
     const isUnused = (q) => {
       if (this.sessionUsedQuestionIds.has(q.question_id)) return false;
-      const fp = this.getQuestionFingerprint(q.question);
+      const fp = this.getQuestionFingerprint(q);
       if (fp && this.sessionUsedFingerprints.has(fp)) return false;
       return true;
     };
@@ -2919,7 +2919,7 @@ class DataStore {
     const selectedFps = new Set();
 
     const addQuestion = (q, extraProps = {}) => {
-      const fp = this.getQuestionFingerprint(q.question);
+      const fp = this.getQuestionFingerprint(q);
       const tier = this.getQuestionTier(q, sidProgress);
       selected.push({
         ...q,
@@ -2942,7 +2942,7 @@ class DataStore {
         const peerTargetCount = Math.min(2, Math.min(count - selected.length, peerMistakes.length));
         for (let i = 0; i < peerTargetCount; i++) {
           const pq = peerMistakes[i];
-          const fp = this.getQuestionFingerprint(pq.question);
+          const fp = this.getQuestionFingerprint(pq);
           if (!selectedFps.has(fp)) {
             addQuestion(pq, { isPeerMistake: true, isReview: false, isRevenge: false });
           }
@@ -2953,7 +2953,7 @@ class DataStore {
       const neededForMistakes = count - selected.length;
       if (neededForMistakes > 0) {
         const unavengedMistakes = tier1Candidates.filter(q => {
-          const fp = this.getQuestionFingerprint(q.question);
+          const fp = this.getQuestionFingerprint(q);
           if (selectedFps.has(fp)) return false;
           const p = sidProgress[q.question_id];
           return p && p.wrong > 0 && !p.avenged;
@@ -2964,7 +2964,7 @@ class DataStore {
           const mistakeTargetCount = Math.min(2, Math.min(neededForMistakes, unavengedMistakes.length));
           for (let i = 0; i < mistakeTargetCount; i++) {
             const mq = unavengedMistakes[i];
-            const fp = this.getQuestionFingerprint(mq.question);
+            const fp = this.getQuestionFingerprint(mq);
             if (!selectedFps.has(fp)) {
               addQuestion(mq, { isPeerMistake: false, isReview: true, isRevenge: true });
             }
@@ -2976,14 +2976,14 @@ class DataStore {
       const stillNeededInTier1 = count - selected.length;
       if (stillNeededInTier1 > 0) {
         const remainingTier1 = tier1Candidates.filter(q => {
-          const fp = this.getQuestionFingerprint(q.question);
+          const fp = this.getQuestionFingerprint(q);
           return !selectedFps.has(fp);
         });
 
         if (remainingTier1.length > 0) {
           const drawn = this.drawWeightedQuestions(remainingTier1, stillNeededInTier1, stage);
           for (const dq of drawn) {
-            const fp = this.getQuestionFingerprint(dq.question);
+            const fp = this.getQuestionFingerprint(dq);
             if (!selectedFps.has(fp)) {
               const p = sidProgress[dq.question_id];
               addQuestion(dq, {
@@ -3003,14 +3003,14 @@ class DataStore {
     const neededFromTier2 = count - selected.length;
     if (neededFromTier2 > 0 && tier2Candidates.length > 0) {
       const remainingTier2 = tier2Candidates.filter(q => {
-        const fp = this.getQuestionFingerprint(q.question);
+        const fp = this.getQuestionFingerprint(q);
         return !selectedFps.has(fp);
       });
 
       if (remainingTier2.length > 0) {
         const drawn = this.drawWeightedQuestions(remainingTier2, neededFromTier2, stage);
         for (const dq of drawn) {
-          const fp = this.getQuestionFingerprint(dq.question);
+          const fp = this.getQuestionFingerprint(dq);
           if (!selectedFps.has(fp)) {
             addQuestion(dq, {
               isPeerMistake: false,
@@ -3028,14 +3028,14 @@ class DataStore {
     const neededFromTier3 = count - selected.length;
     if (neededFromTier3 > 0 && tier3Candidates.length > 0) {
       const remainingTier3 = tier3Candidates.filter(q => {
-        const fp = this.getQuestionFingerprint(q.question);
+        const fp = this.getQuestionFingerprint(q);
         return !selectedFps.has(fp);
       });
 
       if (remainingTier3.length > 0) {
         const drawn = this.drawWeightedQuestions(remainingTier3, neededFromTier3, stage);
         for (const dq of drawn) {
-          const fp = this.getQuestionFingerprint(dq.question);
+          const fp = this.getQuestionFingerprint(dq);
           if (!selectedFps.has(fp)) {
             addQuestion(dq, {
               isPeerMistake: false,
@@ -3043,6 +3043,23 @@ class DataStore {
               isRevenge: false
             });
           }
+        }
+      }
+    }
+
+    // 保底湊滿 5 題機制：若全題庫 136 題剛好剩下最後 1~4 題尾數 (例如 136 % 5 = 1)，
+    // 自動從題庫中補齊不足的題數至完整 5 題，確保玩家在該次測驗仍能完整作答 5 題並爭取 5 題全對獎勵，絕不會被迫卡在只剩 1~2 題可答！
+    if (selected.length > 0 && selected.length < count && pool.length >= count) {
+      const neededToFill = count - selected.length;
+      const fillerCandidates = pool.filter(q => {
+        const fp = this.getQuestionFingerprint(q);
+        return !selectedFps.has(fp) && !selected.some(s => s.question_id === q.question_id);
+      });
+      const fillers = this.drawWeightedQuestions(fillerCandidates, neededToFill, stage);
+      for (const fq of fillers) {
+        const fp = this.getQuestionFingerprint(fq);
+        if (!selectedFps.has(fp)) {
+          addQuestion(fq, { isPeerMistake: false, isReview: true, isRevenge: false });
         }
       }
     }
