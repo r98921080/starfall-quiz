@@ -3473,11 +3473,63 @@ class Game {
     for (let i = 1; i <= 25; i++) {
       list.push([`weapon_${i}`, `assets/icons/weapons/weapon_${i}.png`]);
     }
+    const isHttp = typeof window !== 'undefined' && window.location && /^https?:$/i.test(window.location.protocol);
+    const cacheBust = isHttp ? '?v=b33' : '';
+    const coreKeys = new Set([
+      'player', 'bg', 'bg_stage_1', 'bg_stage_2',
+      'enemy', 'enemy_scout', 'enemy_gunner', 'enemy_star',
+      'enemy_bastion', 'enemy_charger', 'enemy_bomber',
+      'boss_1', 'boss_2', 'boss_mini', 'boss_mini_zelda', 'icons'
+    ]);
+
+    const coreList = [];
+    const secondaryList = [];
+
     list.forEach(([k, src]) => {
       const img = new Image();
-      img.src = src;
       this.images[k] = img;
+      if (coreKeys.has(k)) {
+        coreList.push([k, src, img]);
+      } else {
+        secondaryList.push([k, src, img]);
+      }
     });
+
+    const assignSrcWithRetry = (key, rawSrc, img, highPriority) => {
+      let retries = 0;
+      if (highPriority) {
+        try { img.fetchPriority = 'high'; } catch (e) {}
+      }
+      img.onerror = () => {
+        if (retries < 3) {
+          retries++;
+          const retryUrl = retries === 1 ? rawSrc : `${rawSrc}${rawSrc.includes('?') ? '&' : '?'}r=${retries}_${Date.now()}`;
+          setTimeout(() => { img.src = retryUrl; }, 150 * retries);
+        }
+      };
+      img.src = `${rawSrc}${cacheBust}`;
+    };
+
+    let coreRemaining = coreList.length;
+    let secondaryStarted = false;
+    const startSecondary = () => {
+      if (secondaryStarted) return;
+      secondaryStarted = true;
+      secondaryList.forEach(([k, src, img]) => {
+        assignSrcWithRetry(k, src, img, false);
+      });
+    };
+
+    coreList.forEach(([k, src, img]) => {
+      img.onload = () => {
+        coreRemaining--;
+        if (coreRemaining <= 0) startSecondary();
+      };
+      assignSrcWithRetry(k, src, img, true);
+    });
+
+    // 安全保底：最多 250ms 後即刻並聯啟動次要關卡與特效貼圖載入
+    setTimeout(startSecondary, 250);
   }
 
   resize(w, h) {
