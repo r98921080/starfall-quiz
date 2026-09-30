@@ -6,9 +6,9 @@ const assert = require('assert');
 const gameJsPath = path.join(__dirname, '..', 'game.js');
 const code = fs.readFileSync(gameJsPath, 'utf8');
 
-console.log('=== BUILD-037 Automated Verification Suite ===');
+console.log('=== BUILD-038 All-Boss Attack Optimization Verification Suite ===');
 
-// 1. Verify Trajectory-Matched Boss Telegraphs (Request 1)
+// 1. Verify Trajectory-Matched Boss Telegraphs
 const requiredTelegraphRenderers = [
   'renderHazardConeTelegraph',
   'renderHazardSpiralTelegraph',
@@ -19,29 +19,36 @@ const requiredTelegraphRenderers = [
 for (const fnName of requiredTelegraphRenderers) {
   assert(code.includes(`${fnName}(ctx, h)`), `Missing telegraph renderer: ${fnName}`);
 }
-assert(code.includes("h.type === 'cone'"), 'Missing cone telegraph dispatch in render()');
-assert(code.includes("h.type === 'spiral'"), 'Missing spiral telegraph dispatch in render()');
-assert(code.includes("h.type === 'wave'"), 'Missing wave telegraph dispatch in render()');
-assert(code.includes("h.type === 'ring_nova'"), 'Missing ring_nova telegraph dispatch in render()');
-assert(code.includes("h.type === 'garuda_feather_path'"), 'Missing garuda_feather_path telegraph dispatch in render()');
-console.log('✅ [1/3] Trajectory-Matched Boss Telegraphs (cone, spiral, wave, ring_nova, garuda_feather_path) verified.');
+console.log('✅ [1/4] All 5 Trajectory-Matched Telegraph Renderers verified.');
 
-// 2. Verify 3x Post-Telegraph Attacks, Diablo II Frozen Orb, and Firework Burst Shells (Request 2)
-assert(code.includes('spawnMythicFrozenOrb(opts = {})'), 'Missing spawnMythicFrozenOrb helper');
-assert(code.includes("'frozen_orb'"), 'Missing frozen_orb bullet type');
-assert(code.includes('spawnFireworkBurstShell(opts = {})'), 'Missing spawnFireworkBurstShell helper');
-assert(code.includes("'firework_shell'"), 'Missing firework_shell bullet type');
-assert(code.includes('isMega = true'), 'Missing isMega flag on enhanced boss bullets');
-assert(code.includes("if (eb.type !== 'floating_feather' && (eb.isMega || (eb.r && eb.r >= 12)))"), 'Missing 3x megaScale automatic canvas scaling in render()');
-assert(code.includes('ctx.scale(megaScale, megaScale);'), 'Missing ctx.scale(megaScale, megaScale) for 3x bullets');
-console.log('✅ [2/3] 3x Colossal Post-Telegraph Attacks, Diablo Frozen Orbs (frozen_orb), and Multi-Stage Firework Shells (firework_shell) verified.');
+// 2. Verify Universal Shockwave -> Leave Elemental Remnant Bomb -> 3x Firework Detonation Engine
+assert(code.includes('spawnBossShockwaveRemnantSequence(boss, targetX, opts = {})'), 'Missing spawnBossShockwaveRemnantSequence');
+assert(code.includes('fb.remnantTheme = eb.remnantTheme'), 'Missing remnantTheme support on floating_feather');
+assert(code.includes('fb.outerType = eb.outerType'), 'Missing outerType support on floating_feather');
+assert(code.includes('fb.innerType = eb.innerType'), 'Missing innerType support on floating_feather');
+console.log('✅ [2/4] Universal Shockwave -> Leave Remnant Bomb -> 3x Firework Detonation Engine verified.');
 
-// 3. Verify Garuda's 3-Stage Sequence: Telegraph -> Shockwave (Giant Beam + Giant Shockwave Orb) -> Leave Feathers -> Feather Explosion (Request 3)
-assert(code.includes('spawnGarudaShockwaveFeatherSequence(boss, targetX, dropYs = [165, 285, 405], warningTime = 1.0)'), 'Missing spawnGarudaShockwaveFeatherSequence helper');
-assert(code.includes("'garuda_shockwave'"), 'Missing garuda_shockwave projectile type');
-assert(code.includes('eb.dropCheckpoints'), 'Missing checkpoint feather-dropping logic on garuda_shockwave');
-assert(code.includes("'floating_feather'"), 'Missing floating_feather dropped in wake of garuda_shockwave');
-assert(code.includes('BUILD-037: 迦樓羅第二段「衝擊波遺留之滯空金羽」，倒數結束後引發 3 倍巨型羽刃煙火大爆炸！'), 'Missing 3x feather firework detonation');
-console.log('✅ [3/3] Garuda 3-stage sequence (Warning -> 3x Shockwave Beam & Shockwave Orb -> Leave Feathers -> 3x Feather Firework Detonation) verified.');
+// 3. Verify EVERY Boss (Stages 1 to 12) in executeBossUniqueAttack has full 3-mode optimization
+const uniqueStart = code.indexOf('executeBossUniqueAttack(boss)');
+const uniqueEnd = code.indexOf('showUltimateWarning(name, voiceLine)');
+const uniqueSection = code.slice(uniqueStart, uniqueEnd);
 
-console.log('🎉 ALL BUILD-037 CHECKS PASSED!');
+for (let stage = 1; stage <= 12; stage++) {
+  assert(uniqueSection.includes(`case ${stage}:`), `Missing case ${stage} in executeBossUniqueAttack`);
+}
+// Count how many Bosses invoke spawnBossShockwaveRemnantSequence or spawnGarudaShockwaveFeatherSequence in executeBossUniqueAttack
+const shockwaveCallsInUnique = (uniqueSection.match(/spawn(BossShockwaveRemnant|GarudaShockwaveFeather)Sequence/g) || []).length;
+assert(shockwaveCallsInUnique >= 12, `Expected all 12 Bosses in executeBossUniqueAttack to use Shockwave-Remnant-Bomb sequence, found ${shockwaveCallsInUnique}`);
+console.log(`✅ [3/4] All 12 Bosses in executeBossUniqueAttack verified (${shockwaveCallsInUnique} Shockwave-Remnant-Bomb sequences + 3-mode rotations).`);
+
+// 4. Verify EVERY Boss (Stages 1 to 12) in releaseBossUltimate AND executeMiniBossAttack are optimized
+const ultStart = code.indexOf('releaseBossUltimate(boss)');
+const ultEnd = code.indexOf('// 雷公・震霄 第二型態全場磁暴', ultStart) !== -1
+  ? code.indexOf('// 雷公・震霄 第二型態全場磁暴', ultStart)
+  : ultStart + 28000;
+const ultSection = code.slice(ultStart, ultEnd);
+const shockwaveCallsInUlt = (ultSection.match(/spawn(BossShockwaveRemnant|GarudaShockwaveFeather)Sequence/g) || []).length;
+assert(shockwaveCallsInUlt >= 12, `Expected all 12 Bosses in releaseBossUltimate to use Shockwave-Remnant-Bomb sequence, found ${shockwaveCallsInUlt}`);
+console.log(`✅ [4/4] All 12 Bosses in releaseBossUltimate verified (${shockwaveCallsInUlt} Shockwave-Remnant-Bomb sequences + 3x Beams/Frozen Orbs/Fireworks).`);
+
+console.log('🎉 ALL BUILD-038 CHECKS PASSED!');

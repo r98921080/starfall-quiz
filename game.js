@@ -6177,36 +6177,50 @@ class Game {
           this.showToast('饕餮吞噬了貪食傀儡！生命回復 6% 並狂暴吐息！');
           for (let k = -3; k <= 3; k++) {
             const eb = new Bullet(b.x, b.y + 25, k * 55, 230, false, 1, 'bile');
-            eb.color = '#ff9138'; eb.r = 7;
+            eb.color = '#ff9138'; eb.r = 18; eb.isMega = true;
             this.ebullets.push(eb);
           }
         }
       }
 
-      // 蛇首分身自發射擊
+      // 蛇首分身自發射擊 (扇形預警 + 3倍巨型毒彈)
       if (m.type === 'hydra_head' && !m.dead) {
         m.shootTimer = (m.shootTimer || 0) + dt;
-        if (m.shootTimer >= 1.6) {
+        if (m.shootTimer >= 1.8) {
           m.shootTimer = 0;
-          for (let k = -1; k <= 1; k++) {
-            const eb = new Bullet(m.x, m.y + 12, k * 65, 200, false, 1, 'venom');
-            eb.color = '#48e583'; eb.r = 6;
-            this.ebullets.push(eb);
-          }
+          this.hazardTelegraphs.push({
+            type: 'cone', x: m.x, y: m.y + 12, angle: Math.PI / 2, spread: 0.75, radius: 360, rays: 3,
+            life: 0.5, accentColor: '#48e583'
+          });
+          setTimeout(() => {
+            if (!m || m.dead || !b || b.dead) return;
+            for (let k = -1; k <= 1; k++) {
+              const eb = new Bullet(m.x, m.y + 12, k * 65, 200, false, 1, 'venom');
+              eb.color = '#48e583'; eb.r = 17; eb.isMega = true;
+              this.ebullets.push(eb);
+            }
+          }, 500);
         }
       }
 
-      // 蛇髮鏡像分身射擊
+      // 蛇髮鏡像分身射擊 (星爆預警 + 3倍巨型鏡光彈)
       if (m.type === 'gorgon_clone' && !m.dead) {
         m.shootTimer = (m.shootTimer || 0) + dt;
-        if (m.shootTimer >= 2.0) {
+        if (m.shootTimer >= 2.2) {
           m.shootTimer = 0;
-          for (let a = 0; a < 6; a++) {
-            const ang = (a / 6) * Math.PI * 2;
-            const eb = new Bullet(m.x, m.y, Math.cos(ang) * 160, Math.sin(ang) * 160, false, 1, 'mirror_bullet');
-            eb.color = '#c054ff';
-            this.ebullets.push(eb);
-          }
+          this.hazardTelegraphs.push({
+            type: 'ring_nova', x: m.x, y: m.y, r: 95, spokes: 6,
+            life: 0.55, accentColor: '#c054ff'
+          });
+          setTimeout(() => {
+            if (!m || m.dead || !b || b.dead) return;
+            for (let a = 0; a < 6; a++) {
+              const ang = (a / 6) * Math.PI * 2;
+              const eb = new Bullet(m.x, m.y, Math.cos(ang) * 165, Math.sin(ang) * 165, false, 1, 'mirror_bullet');
+              eb.color = '#c054ff'; eb.r = 16; eb.isMega = true;
+              this.ebullets.push(eb);
+            }
+          }, 550);
         }
       }
 
@@ -6371,235 +6385,247 @@ class Game {
     }
   }
 
-  // 前哨神械 (Mini-Boss) 與莫力布林巨將攻擊
+  // BUILD-038: 前哨神械 (Mini-Boss) 與莫力布林巨將攻擊 —— 全體升級為「彈道預警 + 3倍巨彈 / 冰封球 / 煙火母彈 / 衝擊波留彈爆炸」
   executeMiniBossAttack(boss) {
     if (boss.id === 'mini_boss_zelda' || this.stage === 2) {
       boss.miniCycle = (boss.miniCycle || 0) + 1;
       const mStep = boss.miniCycle % 2;
       if (mStep === 0) {
-        // 莫力布林巨棒重擊：地面震盪波 (紅線預警 0.8s，震出 2 顆飛石，速度慢極易閃避)
+        // 莫力布林巨棒重擊：衝擊波走廊 + 留下2枚爆裂熔岩石 -> 二段煙火爆炸
         this.sound.playMarioStomp();
-        const tx = this.player.x;
+        const tx = this.player ? this.player.x : this.W * 0.5;
+        this.spawnBossShockwaveRemnantSequence(boss, tx, {
+          dropYs: [185, 330],
+          warningTime: 0.85,
+          width: 115,
+          color: '#ea580c',
+          secondaryColor: '#f59e0b',
+          subType: 'fire',
+          remnantTheme: 'crystal',
+          outerType: 'rock_fragment',
+          innerType: 'fireball'
+        });
+      } else {
+        // 莫力布林野蠻突刺：扇形預警 cone + 3 枚 3倍巨型骨刺飛刃
         this.hazardTelegraphs.push({
-          type: 'line', x1: tx, y1: 0, x2: tx, y2: this.H,
-          life: 0.8, width: 28, color: 'rgba(234, 88, 12, 0.6)'
+          type: 'cone', x: boss.x, y: boss.y + 15, angle: Math.PI / 2, spread: 0.85, radius: 440, rays: 3,
+          life: 0.75, accentColor: '#f59e0b'
         });
         setTimeout(() => {
           if (!boss || boss.dead) return;
-          this.sound.playExplosion(false);
-          this.shake(6, 0.2);
-          for (let i = -1; i <= 1; i += 2) {
-            const eb = new Bullet(tx, boss.y + 20, i * 70, 160, false, 1, 'rock_fragment');
-            eb.color = '#ea580c'; eb.r = 6;
+          this.sound.playLaser(600);
+          for (let i = -1; i <= 1; i++) {
+            const ang = Math.PI / 2 + i * 0.35;
+            const eb = new Bullet(boss.x, boss.y + 15, Math.cos(ang) * 175, Math.sin(ang) * 175, false, 1, 'boulder');
+            eb.color = '#f59e0b'; eb.r = 18; eb.isMega = true;
             this.ebullets.push(eb);
           }
-        }, 800);
-      } else {
-        // 莫力布林野蠻突刺：發射 3 顆慢速骨刺飛刃
-        this.sound.playLaser(600);
-        for (let i = -1; i <= 1; i++) {
-          const ang = Math.PI / 2 + i * 0.35;
-          const eb = new Bullet(boss.x, boss.y + 15, Math.cos(ang) * 160, Math.sin(ang) * 160, false, 1, 'normal');
-          eb.color = '#f59e0b'; eb.r = 6;
-          this.ebullets.push(eb);
-        }
+        }, 750);
       }
       return;
     }
 
     boss.miniCycle = (boss.miniCycle || 0) + 1;
     const step = (boss.miniCycle - 1) % 10;
-    const moveNames = [
-      '【迦樓羅・金羽狂嵐】',
-      '【雷公・九天落雷】',
-      '【美杜莎・石化蛇鏡】',
-      '【饕餮・熔岩噬火】',
-      '【阿特拉斯・重力巨岩】',
-      '【雅典娜・神聖金矛】',
-      '【許德拉・九首酸泡】',
-      '【獨眼巨人・天爐星火】',
-      '【玉藻前・九尾妖火】',
-      '【提亞瑪特・混沌創世】'
-    ];
+    const px = this.player ? this.player.x : this.W * 0.5;
 
     switch (step) {
-      case 0: // 迦樓羅：5 向 -> 3 向金羽風刃 (feather) (減少 30%)
-        for (let i = -1; i <= 1; i++) {
-          const ang = Math.PI / 2 + i * 0.45;
-          const eb = new Bullet(boss.x, boss.y + 15, Math.cos(ang) * 190, Math.sin(ang) * 190, false, 1, 'feather');
-          eb.color = '#ffd700'; eb.r = 7;
-          this.ebullets.push(eb);
-        }
+      case 0: // 迦樓羅前哨：衝擊波留羽爆破序列
+        this.spawnGarudaShockwaveFeatherSequence(boss, px, [180, 320], 0.85);
         break;
 
-      case 1: // 雷公：3 道 -> 2 道垂直落雷預警 + 閃電打擊 (thunder) (減少 30%)
-        for (let k = 0; k < 2; k++) {
-          const tx = 70 + k * (this.W - 140) + (Math.random() - 0.5) * 40;
-          this.hazardTelegraphs.push({
-            type: 'line', x1: tx, y1: 0, x2: tx, y2: this.H,
-            life: 0.55, width: 22, color: 'rgba(56, 189, 248, 0.7)'
-          });
-          setTimeout(() => {
-            if (!boss || boss.dead) return;
-            this.sound.playLaser(950);
-            const eb = new Bullet(tx, 0, 0, 440, false, 1, 'thunder');
-            eb.color = '#38bdf8'; eb.r = 8;
-            this.ebullets.push(eb);
-          }, 550);
-        }
+      case 1: // 雷公前哨：衝擊波留雷球爆破序列
+        this.spawnBossShockwaveRemnantSequence(boss, px, {
+          dropYs: [180, 320], warningTime: 0.85, width: 120,
+          color: '#38bdf8', secondaryColor: '#67ffff', subType: 'thunder',
+          remnantTheme: 'crystal', outerType: 'thunder_bolt', innerType: 'thunder'
+        });
         break;
 
-      case 2: // 美杜莎：8 向 -> 5 向蛇髮石化光線 (petrify_beam) (減少 30%)
-        for (let a = 0; a < 5; a++) {
-          const ang = (a / 5) * Math.PI * 2 + (this.time * 0.5);
-          const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 170, Math.sin(ang) * 170, false, 1, 'petrify_beam');
-          eb.color = '#c054ff'; eb.r = 7;
-          this.ebullets.push(eb);
-        }
-        break;
-
-      case 3: // 饕餮：3 向熔岩火球 (fireball)
-        for (let i = -1; i <= 1; i++) {
-          const eb = new Bullet(boss.x, boss.y + 15, i * 65, 230, false, 1, 'fireball');
-          eb.color = '#ff9138'; eb.r = 9;
-          this.ebullets.push(eb);
-        }
-        break;
-
-      case 4: // 阿特拉斯：重力巨岩下墜 + 碎裂 (boulder)
-        const boulder = new Bullet(boss.x, boss.y, (Math.random() - 0.5) * 50, 180, false, 1, 'boulder');
-        boulder.r = 16; boulder.color = '#f5bc38';
-        this.ebullets.push(boulder);
-        setTimeout(() => {
-          if (!boulder.dead) {
-            boulder.dead = true;
-            for (let k = 0; k < 6; k++) {
-              const a = (k / 6) * Math.PI * 2;
-              const frag = new Bullet(boulder.x, boulder.y, Math.cos(a) * 210, Math.sin(a) * 210, false, 1, 'rock_fragment');
-              frag.color = '#f5bc38'; frag.r = 5;
-              this.ebullets.push(frag);
-            }
-          }
-        }, 1100);
-        break;
-
-      case 5: // 雅典娜：直貫神聖金矛 (holy_spear)
-        const spearX = this.player.x;
+      case 2: // 美杜莎前哨：螺旋預警 spiral + Diablo 石化冰封球
         this.hazardTelegraphs.push({
-          type: 'line', x1: spearX, y1: 0, x2: spearX, y2: this.H,
-          life: 0.6, width: 24, color: 'rgba(255, 215, 0, 0.7)'
+          type: 'spiral', x: boss.x, y: boss.y, r: 175, arms: 6, spinDir: 1,
+          life: 0.8, accentColor: '#c054ff'
         });
         setTimeout(() => {
           if (!boss || boss.dead) return;
-          this.sound.playLaser(1100);
-          const eb = new Bullet(spearX, 0, 0, 480, false, 1, 'holy_spear');
-          eb.color = '#ffd700'; eb.r = 8;
-          this.ebullets.push(eb);
-        }, 600);
+          this.spawnMythicFrozenOrb({
+            x: boss.x, y: boss.y, targetX: px, targetY: 280,
+            r: 25, color: '#c054ff', shardColor: '#d991ff', shardType: 'petrify_beam'
+          });
+        }, 800);
         break;
 
-      case 6: // 許德拉：4 團酸性毒泡 (venom)
-        for (let i = 0; i < 4; i++) {
-          const vx = (i - 1.5) * 60;
-          const eb = new Bullet(boss.x, boss.y + 15, vx, 190, false, 1, 'venom');
-          eb.color = '#48e583'; eb.r = 7.5;
-          this.ebullets.push(eb);
-        }
+      case 3: // 饕餮前哨：扇形預警 cone + 3 枚 3倍巨型熔岩火球
+        this.hazardTelegraphs.push({
+          type: 'cone', x: boss.x, y: boss.y + 15, angle: Math.PI / 2, spread: 0.9, radius: 450, rays: 3,
+          life: 0.75, accentColor: '#ff9138'
+        });
+        setTimeout(() => {
+          if (!boss || boss.dead) return;
+          for (let i = -1; i <= 1; i++) {
+            const eb = new Bullet(boss.x, boss.y + 15, i * 65, 220, false, 1, 'fireball');
+            eb.color = '#ff9138'; eb.r = 21; eb.isMega = true;
+            this.ebullets.push(eb);
+          }
+        }, 750);
         break;
 
-      case 7: // 獨眼巨人：天爐熔火流星 (magma)
-        for (let i = 0; i < 6; i++) {
-          const ang = Math.PI / 2 + (Math.random() - 0.5) * 1.2;
-          const spd = 160 + Math.random() * 80;
-          const eb = new Bullet(boss.x, boss.y + 15, Math.cos(ang) * spd, Math.sin(ang) * spd, false, 1, 'magma');
-          eb.color = '#ff4766'; eb.r = 6;
-          this.ebullets.push(eb);
-        }
+      case 4: // 阿特拉斯前哨：煙火星爆預警 ring_nova + 3倍重力煙火隕石母彈
+        this.hazardTelegraphs.push({
+          type: 'ring_nova', x: px, y: 260, r: 135, spokes: 10,
+          life: 0.85, accentColor: '#f5bc38'
+        });
+        setTimeout(() => {
+          if (!boss || boss.dead) return;
+          this.spawnFireworkBurstShell({
+            x: boss.x, y: boss.y, targetX: px, targetY: 260,
+            r: 25, color: '#f5bc38', childType: 'rock_fragment'
+          });
+        }, 850);
         break;
 
-      case 8: // 玉藻前：九尾妖火環繞發散 (foxfire)
-        for (let i = 0; i < 9; i++) {
-          const ang = this.time * 2.0 + (i / 9) * Math.PI * 2;
-          const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 190, Math.sin(ang) * 190, false, 1, 'foxfire');
-          eb.color = '#e0409a'; eb.r = 6;
-          this.ebullets.push(eb);
-        }
+      case 5: // 雅典娜前哨：衝擊波留聖矛符文爆破序列
+        this.spawnBossShockwaveRemnantSequence(boss, px, {
+          dropYs: [185, 325], warningTime: 0.85, width: 125,
+          color: '#ffd700', secondaryColor: '#fef08a', subType: 'feather',
+          remnantTheme: 'crystal', outerType: 'holy_spear', innerType: 'feather_shard'
+        });
         break;
 
-      case 9: // 提亞瑪特：原初混沌黑洞漩渦彈 (chaos)
-        for (let i = 0; i < 10; i++) {
-          const ang = (i / 10) * Math.PI * 2 + (this.time * 0.4);
-          const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 210, Math.sin(ang) * 210, false, 1, 'chaos');
-          eb.color = '#b359ff'; eb.r = 7;
-          this.ebullets.push(eb);
-        }
+      case 6: // 許德拉前哨：正弦波預警 wave + 3倍巨型蛇行劇毒波
+        this.hazardTelegraphs.push({
+          type: 'wave', x1: boss.x, y1: boss.y + 15, x2: px, y2: this.H,
+          amp: 65, freq: 0.025, width: 42, life: 0.8, accentColor: '#48e583'
+        });
+        setTimeout(() => {
+          if (!boss || boss.dead) return;
+          for (let i = 0; i < 4; i++) {
+            const eb = new Bullet(boss.x, boss.y + 15 + i * 16, 0, 210, false, 1, 'wave_orb');
+            eb.originX = boss.x; eb.waveAmp = 65; eb.waveFreq = 5.0; eb.wavePhase = i * 0.9;
+            eb.color = '#48e583'; eb.r = 19; eb.isMega = true;
+            this.ebullets.push(eb);
+          }
+        }, 800);
+        break;
+
+      case 7: // 獨眼巨人前哨：煙火星爆預警 ring_nova + 3倍天爐熔火煙火母彈
+        this.hazardTelegraphs.push({
+          type: 'ring_nova', x: px, y: 250, r: 135, spokes: 12,
+          life: 0.85, accentColor: '#ff4766'
+        });
+        setTimeout(() => {
+          if (!boss || boss.dead) return;
+          this.spawnFireworkBurstShell({
+            x: boss.x, y: boss.y + 15, targetX: px, targetY: 250,
+            r: 25, color: '#ff4766', childType: 'magma'
+          });
+        }, 850);
+        break;
+
+      case 8: // 玉藻前前哨：螺旋預警 spiral + Diablo 九尾妖火冰封球
+        this.hazardTelegraphs.push({
+          type: 'spiral', x: boss.x, y: boss.y, r: 180, arms: 9, spinDir: 1,
+          life: 0.85, accentColor: '#e0409a'
+        });
+        setTimeout(() => {
+          if (!boss || boss.dead) return;
+          this.spawnMythicFrozenOrb({
+            x: boss.x, y: boss.y, targetX: px, targetY: 275,
+            r: 26, color: '#e0409a', shardColor: '#f472b6', shardType: 'foxfire'
+          });
+        }, 850);
+        break;
+
+      case 9: // 提亞瑪特前哨：衝擊波留創世龍晶爆破序列
+        this.spawnBossShockwaveRemnantSequence(boss, px, {
+          dropYs: [175, 315], warningTime: 0.85, width: 130,
+          color: '#b359ff', secondaryColor: '#67ffff', subType: 'thunder',
+          remnantTheme: 'crystal', outerType: 'chaos_nova', innerType: 'chaos'
+        });
         break;
     }
   }
 
-  // 十大神話機神專屬特徵與神話機制攻擊
+  // BUILD-038: 十二大傳奇機神專屬常駐攻擊 —— 全體 12 關 Boss 全面升級為「三模式輪替：彈道預警3倍巨彈 + 衝擊波遺留元素炸彈二段煙火爆炸 + Diablo冰封球/璀璨煙火母彈」
   executeBossUniqueAttack(boss) {
     const s = boss.stage || 1;
     boss.patternIndex = (boss.patternIndex || 0) + 1;
     const isPhase2 = boss.phase >= 2;
+    const px = this.player ? this.player.x : this.W * 0.5;
+    const mode = boss.patternIndex % 3;
 
     switch (s) {
-      case 1: // 機甲庫巴・烈焰暴君 (瑪利歐風格 // 新手入門無腦紓壓)
+      case 1: // 機甲庫巴・烈焰暴君 (瑪利歐風格 // 全3模式升級：扇形3倍火球 + 庫巴衝擊波留熔岩殼爆炸 + 煉獄煙火母彈)
         {
-          const mode = boss.patternIndex % 3;
           if (mode === 0) {
-            // 模式 1：庫巴噴射大火球 (3 枚慢速大火球，好躲又震撼)
-            this.sound.playMarioStomp();
-            for (let i = -1; i <= 1; i++) {
-              const ang = Math.PI / 2 + i * 0.38;
-              const eb = new Bullet(boss.x, boss.y + 25, Math.cos(ang) * 160, Math.sin(ang) * 160, false, 1, 'fireball');
-              eb.color = '#ff6b35';
-              eb.r = 11;
-              this.ebullets.push(eb);
-            }
+            // 模式 1：庫巴扇形預警 + 3倍巨型烈焰火球
+            this.hazardTelegraphs.push({
+              type: 'cone', x: boss.x, y: boss.y + 25, angle: Math.PI / 2, spread: 0.9, radius: 480, rays: 3,
+              life: 0.85, accentColor: '#ff6b35'
+            });
+            setTimeout(() => {
+              if (!boss || boss.dead) return;
+              this.sound.playMarioStomp();
+              for (let i = -1; i <= 1; i++) {
+                const ang = Math.PI / 2 + i * 0.38;
+                const eb = new Bullet(boss.x, boss.y + 25, Math.cos(ang) * 170, Math.sin(ang) * 170, false, 1, 'fireball');
+                eb.color = '#ff6b35';
+                eb.r = 22; // 3倍巨型火球！
+                eb.isMega = true;
+                this.ebullets.push(eb);
+              }
+            }, 850);
           } else if (mode === 1) {
-            // 模式 2：機械尖刺龜殼投擲 (Spiny Shell)
-            this.sound.playLaser(750);
-            for (let i = -1; i <= 1; i += 2) {
-              const eb = new Bullet(boss.x + i * 40, boss.y + 15, i * 60, 180, false, 1, 'boulder');
-              eb.color = '#ef4444';
-              eb.r = 9;
-              this.ebullets.push(eb);
-            }
-          } else {
-            // 模式 3：庫巴重甲泰山壓頂震波
+            // 模式 2：庫巴烈焰衝擊波 ➔ 沿途留下「尖刺熔岩龜殼炸彈」 ➔ 二段引爆 3 倍烈焰煙火！
             this.sound.playMarioStomp();
-            this.shake(6, 0.25);
-            for (let i = -2; i <= 2; i++) {
-              const eb = new Bullet(boss.x + i * 35, boss.y + 20, i * 30, 200, false, 1, 'magma');
-              eb.color = '#f59e0b';
-              eb.r = 7;
-              this.ebullets.push(eb);
-            }
+            this.spawnBossShockwaveRemnantSequence(boss, px, {
+              dropYs: [175, 310],
+              warningTime: 0.95,
+              width: 130,
+              color: '#ff6b35',
+              secondaryColor: '#f59e0b',
+              subType: 'fire',
+              remnantTheme: 'crystal',
+              outerType: 'fireball',
+              innerType: 'boulder'
+            });
+          } else {
+            // 模式 3：庫巴重甲星爆預警 ring_nova + 3倍煉獄煙火母彈
+            this.hazardTelegraphs.push({
+              type: 'ring_nova', x: px, y: 260, r: 135, spokes: 12,
+              life: 0.95, accentColor: '#f59e0b'
+            });
+            setTimeout(() => {
+              if (!boss || boss.dead) return;
+              this.sound.playMarioStomp();
+              this.shake(6, 0.25);
+              this.spawnFireworkBurstShell({
+                x: boss.x, y: boss.y + 20, targetX: px, targetY: 260,
+                r: 26, color: '#ff6b35', childType: 'fireball',
+                palette: ['#ff6b35', '#f59e0b', '#ef4444', '#fef08a']
+              });
+            }, 950);
           }
         }
         break;
 
-      case 2: // 災厄加儂・終焉狂瀾 (薩爾達風格 // 荒野試煉)
+      case 2: // 災厄加儂・終焉狂瀾 (薩爾達風格 // 全3模式：魔怨衝擊波留怨念核爆炸 + 扇形3倍守護者雷光 + Diablo魔怨冰封球)
         {
-          const mode = boss.patternIndex % 3;
           if (mode === 0) {
-            // 模式 1：災厄魔怨光線 + 煙火擴散怨念核 (預警：直線導軌 + 終點煙火星爆預警 ring_nova)
-            const targetX = this.player.x;
-            this.hazardTelegraphs.push({
-              type: 'line', x1: targetX, y1: 0, x2: targetX, y2: this.H,
-              life: 1.05, width: 84, color: 'rgba(239, 68, 68, 0.72)'
+            // 模式 1：古代守護者魔怨衝擊波 ➔ 沿途留下「災厄魔怨晶核」 ➔ 二段引爆 3 倍怨念煙火！
+            this.sound.playZeldaSwordSlash();
+            this.spawnBossShockwaveRemnantSequence(boss, px, {
+              dropYs: [170, 295, 410],
+              warningTime: 1.0,
+              width: 135,
+              color: '#c084fc',
+              secondaryColor: '#f43f5e',
+              subType: 'thunder',
+              remnantTheme: 'crystal',
+              outerType: 'chaos',
+              innerType: 'thunder'
             });
-            this.hazardTelegraphs.push({
-              type: 'ring_nova', x: targetX, y: 270, r: 125, spokes: 12,
-              life: 1.05, accentColor: '#c084fc'
-            });
-            setTimeout(() => {
-              if (!boss || boss.dead) return;
-              this.sound.playZeldaSwordSlash();
-              this.spawnBossGiantBeam({ x1: targetX, y1: 0, x2: targetX, y2: this.H, width: 115, color: '#ef4444', coreColor: '#ffffff', life: 0.75 });
-              this.spawnFireworkBurstShell({ x: targetX, y: 40, targetX: targetX, targetY: 270, r: 26, color: '#c084fc', childType: 'chaos' });
-            }, 1050);
           } else if (mode === 1) {
             // 模式 2：古代守護者扇形脈衝射擊 (扇形彈道預警 cone + 3倍巨型守護者雷光彈)
             this.hazardTelegraphs.push({
@@ -6628,7 +6654,7 @@ class Game {
               if (!boss || boss.dead) return;
               this.sound.playZeldaSecretChime();
               this.spawnMythicFrozenOrb({
-                x: boss.x, y: boss.y + 20, targetX: this.player.x, targetY: 320,
+                x: boss.x, y: boss.y + 20, targetX: px, targetY: 320,
                 r: 26, color: '#a855f7', shardColor: '#c084fc', shardType: 'chaos'
               });
             }, 900);
@@ -6636,9 +6662,8 @@ class Game {
         }
         break;
 
-      case 3: // 迦樓羅・裂空王 (BUILD-037: 羽毛炸彈改為「警示 ➔ 3倍巨型衝擊波光束&衝擊波巨彈 ➔ 留下羽毛 ➔ 羽毛3倍煙火大爆炸」)
+      case 3: // 迦樓羅・裂空王 (全3模式：扇形3倍金羽 + 衝擊波留金羽二段大爆炸 + 裂空金羽煙火母彈)
         {
-          const mode = boss.patternIndex % 3;
           if (mode === 0) {
             // 模式 1：神鳥羽刃扇形旋風 (扇形彈道預警 cone + 3倍巨型金羽飛刃)
             this.hazardTelegraphs.push({
@@ -6660,19 +6685,17 @@ class Game {
             }, 850);
           } else if (mode === 1) {
             // 模式 2：一飛沖天・神鳥衝擊波留羽爆破 (警示 ➔ 巨型衝擊波光束&衝擊波巨彈 ➔ 留下3枚羽毛 ➔ 羽毛爆炸！)
-            const targetX = this.player.x;
-            this.spawnGarudaShockwaveFeatherSequence(boss, targetX, [165, 285, 405], 1.0);
+            this.spawnGarudaShockwaveFeatherSequence(boss, px, [165, 285, 405], 1.0);
           } else {
             // 模式 3：裂空神爪煙火星爆 (煙火擴散預警 ring_nova + 璀璨金羽煙火母彈)
-            const tx = this.player.x;
             this.hazardTelegraphs.push({
-              type: 'ring_nova', x: tx, y: 260, r: 140, spokes: 12,
+              type: 'ring_nova', x: px, y: 260, r: 140, spokes: 12,
               life: 1.0, accentColor: '#f59e0b'
             });
             setTimeout(() => {
               if (!boss || boss.dead) return;
               this.spawnFireworkBurstShell({
-                x: boss.x, y: boss.y + 15, targetX: tx, targetY: 260,
+                x: boss.x, y: boss.y + 15, targetX: px, targetY: 260,
                 r: 26, color: '#ffd700', childType: 'feather_shard',
                 palette: ['#ffd700', '#f59e0b', '#ff9138', '#fef08a']
               });
@@ -6693,15 +6716,14 @@ class Game {
         }
         break;
 
-      case 4: // 雷公・震霄 (螺旋雷霆冰封球 + 3倍巨型落雷)
+      case 4: // 雷公・震霄 (全3模式：螺旋Diablo雷電冰封球 + 雷神衝擊波留球形閃電錨二段煙火爆炸 + 雷鼓煙火母彈)
         {
-          const mode = boss.patternIndex % 3;
           if (mode === 0) {
             // 模式 1：雷電螺旋冰封球陣 (螺旋彈道預警 spiral + Diablo 風格雷霆磁暴球)
             const cx = this.W / 2, cy = 220;
             this.hazardTelegraphs.push({
               type: 'spiral', x: cx, y: cy, r: 210, arms: 6, spinDir: 1,
-              life: 1.1, accentColor: '#38bdf8'
+              life: 1.0, accentColor: '#38bdf8'
             });
             setTimeout(() => {
               if (!boss || boss.dead) return;
@@ -6710,40 +6732,31 @@ class Game {
                 x: boss.x, y: boss.y, targetX: cx, targetY: 310,
                 r: 28, color: '#38bdf8', shardColor: '#67ffff', shardType: 'thunder'
               });
-            }, 1100);
+            }, 1000);
           } else if (mode === 1) {
-            // 模式 2：天頂 3 倍巨型驚雷劈 (原 r=8 放大 3 倍至 r=24 + 寬幅雷柱)
-            for (let strike = 0; strike < 5; strike++) {
-              setTimeout(() => {
-                if (!boss || boss.dead) return;
-                const tx = strike % 2 === 0
-                  ? this.player.x + (Math.random() - 0.5) * 40
-                  : 45 + Math.random() * (this.W - 90);
-                this.hazardTelegraphs.push({
-                  type: 'line', x1: tx, y1: 0, x2: tx, y2: this.H,
-                  life: 0.65, width: 78, subType: 'thunder', color: 'rgba(51, 224, 224, 0.78)'
-                });
-                setTimeout(() => {
-                  if (!boss || boss.dead) return;
-                  this.sound.playLaser(950);
-                  this.spawnBossGiantBeam({ x1: tx, y1: 0, x2: tx, y2: this.H, width: 92, color: '#38bdf8', coreColor: '#ffffff', subType: 'thunder', life: 0.45 });
-                  const eb = new Bullet(tx, 0, 0, 440, false, 1, 'thunder_bolt');
-                  eb.color = '#ffffff'; eb.r = 24; eb.isMega = true;
-                  this.ebullets.push(eb);
-                }, 650);
-              }, strike * 210);
-            }
+            // 模式 2：九天雷神電磁衝擊波 ➔ 沿途留下「球形閃電雷錨」 ➔ 二段引爆 3 倍超電磁煙火落雷！
+            this.spawnBossShockwaveRemnantSequence(boss, px, {
+              dropYs: [165, 285, 405],
+              warningTime: 0.95,
+              width: 140,
+              color: '#38bdf8',
+              secondaryColor: '#67ffff',
+              subType: 'thunder',
+              remnantTheme: 'crystal',
+              outerType: 'thunder_bolt',
+              innerType: 'thunder'
+            });
           } else {
             // 模式 3：雷鼓霹靂煙火擴散 (ring_nova 預警 + 雷光煙火母彈)
             this.hazardTelegraphs.push({
-              type: 'ring_nova', x: boss.x, y: 240, r: 145, spokes: 10,
+              type: 'ring_nova', x: px, y: 245, r: 145, spokes: 12,
               life: 0.9, accentColor: '#67ffff'
             });
             setTimeout(() => {
               if (!boss || boss.dead) return;
               this.spawnFireworkBurstShell({
-                x: boss.x, y: boss.y, targetX: boss.x, targetY: 240,
-                r: 25, color: '#38bdf8', childType: 'thunder',
+                x: boss.x, y: boss.y, targetX: px, targetY: 245,
+                r: 26, color: '#38bdf8', childType: 'thunder',
                 palette: ['#38bdf8', '#67ffff', '#ffffff', '#0ea5e9']
               });
             }, 900);
@@ -6765,29 +6778,52 @@ class Game {
         }
         break;
 
-      case 5: // 美杜莎・返照 (螺旋石化冰封球)
-        if (!isPhase2) {
-          for (let i = 0; i < 5; i++) {
-            const ang = (i / 5) * Math.PI * 2 + (boss.patternIndex * 0.2);
-            const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 160, Math.sin(ang) * 160, false, 1, 'mirror_bullet');
-            eb.color = '#b359ff'; eb.r = 16; eb.isMega = true;
-            this.ebullets.push(eb);
-          }
-        } else {
-          // 第二型態：螺旋預警 spiral + Diablo 風格石化魔眼冰封球
-          this.hazardTelegraphs.push({
-            type: 'spiral', x: this.player.x, y: 260, r: 195, arms: 8, spinDir: -1,
-            life: 1.15, accentColor: '#c084fc'
-          });
-          setTimeout(() => {
-            if (!boss || boss.dead) return;
-            this.spawnMythicFrozenOrb({
-              x: boss.x, y: boss.y, targetX: this.player.x, targetY: 280,
-              r: 28, color: '#c084fc', shardColor: '#d991ff', shardType: 'petrify_beam'
+      case 5: // 美杜莎・返照 (全3模式：扇形3倍石化魔鏡彈 + 萬蛇石化衝擊波留魔眼稜鏡二段爆炸 + 螺旋Diablo石化冰封球)
+        {
+          if (mode === 0) {
+            // 模式 1：蛇髮魔鏡扇形預警 cone + 5 枚 3倍巨型返照魔鏡彈
+            this.hazardTelegraphs.push({
+              type: 'cone', x: boss.x, y: boss.y + 15, angle: Math.PI / 2, spread: 1.05, radius: 500, rays: 5,
+              life: 0.85, accentColor: '#c054ff'
             });
-          }, 1150);
+            setTimeout(() => {
+              if (!boss || boss.dead) return;
+              for (let i = -2; i <= 2; i++) {
+                const ang = Math.PI / 2 + i * 0.24;
+                const eb = new Bullet(boss.x, boss.y + 15, Math.cos(ang) * 185, Math.sin(ang) * 185, false, 1, 'mirror_bullet');
+                eb.color = '#c054ff'; eb.r = 19; eb.isMega = true;
+                this.ebullets.push(eb);
+              }
+            }, 850);
+          } else if (mode === 1) {
+            // 模式 2：戈爾貢石化衝擊波 ➔ 沿途留下「石化魔眼稜鏡」 ➔ 二段引爆 3 倍紫晶石化煙火！
+            this.spawnBossShockwaveRemnantSequence(boss, px, {
+              dropYs: [165, 285, 405],
+              warningTime: 1.0,
+              width: 140,
+              color: '#c054ff',
+              secondaryColor: '#d991ff',
+              subType: 'thunder',
+              remnantTheme: 'crystal',
+              outerType: 'petrify_beam',
+              innerType: 'mirror_bullet'
+            });
+          } else {
+            // 模式 3：螺旋預警 spiral + Diablo 風格石化魔眼冰封球
+            this.hazardTelegraphs.push({
+              type: 'spiral', x: px, y: 260, r: 195, arms: 8, spinDir: -1,
+              life: 1.0, accentColor: '#c084fc'
+            });
+            setTimeout(() => {
+              if (!boss || boss.dead) return;
+              this.spawnMythicFrozenOrb({
+                x: boss.x, y: boss.y, targetX: px, targetY: 280,
+                r: 28, color: '#c084fc', shardColor: '#d991ff', shardType: 'petrify_beam'
+              });
+            }, 1000);
+          }
 
-          if (!boss.hasCloned && this.bossMinions.filter(m => m.type === 'gorgon_clone').length === 0) {
+          if (isPhase2 && !boss.hasCloned && this.bossMinions.filter(m => m.type === 'gorgon_clone').length === 0) {
             boss.hasCloned = true;
             this.showToast('美杜莎蛇髮狂舞，分裂出 2 具戈爾貢蛇髮幻影！');
             this.bossMinions.push({
@@ -6802,272 +6838,127 @@ class Game {
         }
         break;
 
-      case 6: // 饕餮・噬界 (扇形預警 cone + 3倍巨型熔火球)
-        this.player.targetY -= (isPhase2 ? 22 : 14); // 引力向 Boss 牽引
-        this.particles.push(new Particle(this.W / 2, boss.y + 30, (Math.random() - 0.5) * 80, (Math.random() - 0.5) * 80, '#ff9138', 5, 0.4));
-        const fireCount = isPhase2 ? 7 : 5;
-        this.hazardTelegraphs.push({
-          type: 'cone', x: boss.x, y: boss.y + 25, angle: Math.PI / 2, spread: 1.15, radius: 480, rays: fireCount,
-          life: 0.75, accentColor: '#ff9138'
-        });
-        setTimeout(() => {
-          if (!boss || boss.dead) return;
-          for (let i = 0; i < fireCount; i++) {
-            const offset = (i - (fireCount - 1) / 2) * 45;
-            const eb = new Bullet(boss.x, boss.y + 25, offset, 210 + Math.abs(offset) * 0.3, false, 1, 'fireball');
-            eb.r = 21; eb.isMega = true; eb.color = '#ff9138';
-            this.ebullets.push(eb);
-          }
-        }, 750);
-
-        if (isPhase2 && boss.patternIndex % 3 === 0 && this.bossMinions.filter(m => m.type === 'taotie_food').length === 0) {
-          this.showToast('⚠️ 饕餮張開噬界血口，召喚貪食傀儡！全力阻截，防止饕餮吞食回血！');
-          for (let k = 0; k < 4; k++) {
-            this.bossMinions.push({
-              type: 'taotie_food', name: '貪食傀儡',
-              x: 50 + k * 80, y: -20, r: 16, hp: 180, maxHp: 180,
-              vx: 0, vy: 55, color: '#f5bc38',
-              onDestroy: (game) => {
-                game.sound.playExplosion(false);
-                game.score += 200;
-              }
-            });
-          }
-        }
-        break;
-
-      case 7: // 阿特拉斯・墜星 (煙火星爆預警 ring_nova + 3倍巨型爆裂隕石母彈)
+      case 6: // 饕餮・噬界 (全3模式：扇形3倍熔火球 + 噬界重力衝擊波留熔岩血核二段爆炸 + 黑洞Diablo熔火冰封球)
         {
-          const tx = this.player ? this.player.x : this.W * 0.5;
-          this.hazardTelegraphs.push({
-            type: 'ring_nova', x: tx, y: 260, r: 150, spokes: 14,
-            life: 1.0, accentColor: '#f5bc38'
-          });
-          setTimeout(() => {
-            if (!boss || boss.dead) return;
-            this.spawnFireworkBurstShell({
-              x: boss.x, y: boss.y, targetX: tx, targetY: 260,
-              r: 28, color: '#f5bc38', childType: 'rock_fragment',
-              palette: ['#f5bc38', '#ff9138', '#fef08a', '#ea580c']
+          this.player.targetY -= (isPhase2 ? 22 : 14); // 引力向 Boss 牽引
+          this.particles.push(new Particle(this.W / 2, boss.y + 30, (Math.random() - 0.5) * 80, (Math.random() - 0.5) * 80, '#ff9138', 5, 0.4));
+          if (mode === 0) {
+            const fireCount = isPhase2 ? 7 : 5;
+            this.hazardTelegraphs.push({
+              type: 'cone', x: boss.x, y: boss.y + 25, angle: Math.PI / 2, spread: 1.15, radius: 480, rays: fireCount,
+              life: 0.8, accentColor: '#ff9138'
             });
-          }, 1000);
-        }
-
-        if (isPhase2 && !boss.hasSummonedPillars && this.bossMinions.filter(m => m.type === 'celestial_pillar').length === 0) {
-          boss.hasSummonedPillars = true;
-          this.showToast('阿特拉斯召喚【擎天神柱】重力鎖定戰場！8 秒內未打爆將引發隕石雨！');
-          this.bossMinions.push({
-            type: 'celestial_pillar', name: '擎天重力柱',
-            x: this.W / 2, y: 190, r: 28, hp: 800, maxHp: 800, timer: 8.0, color: '#f5bc38',
-            onExpire: (game, b) => {
-              game.shake(12, 0.6);
-              game.showToast('擎天柱坍縮！天崩地裂隕石雨爆發！');
-              for (let m = 0; m < 18; m++) {
-                const eb = new Bullet(Math.random() * game.W, 0, (Math.random() - 0.5) * 80, 280, false, 1, 'meteor');
-                eb.color = '#ff9138'; eb.r = 18; eb.isMega = true;
-                game.ebullets.push(eb);
+            setTimeout(() => {
+              if (!boss || boss.dead) return;
+              for (let i = 0; i < fireCount; i++) {
+                const offset = (i - (fireCount - 1) / 2) * 45;
+                const eb = new Bullet(boss.x, boss.y + 25, offset, 210 + Math.abs(offset) * 0.3, false, 1, 'fireball');
+                eb.r = 21; eb.isMega = true; eb.color = '#ff9138';
+                this.ebullets.push(eb);
               }
-            }
-          });
-        }
-        break;
-
-      case 8: // 雅典娜・聖裁 (扇形神矛預警 cone + 3倍巨型正義神矛)
-        const lanceCount = isPhase2 ? 7 : 5;
-        this.hazardTelegraphs.push({
-          type: 'cone', x: boss.x, y: boss.y + 30, angle: Math.PI / 2, spread: 0.95, radius: 520, rays: lanceCount,
-          life: 0.85, accentColor: '#ffd700'
-        });
-        setTimeout(() => {
-          if (!boss || boss.dead) return;
-          for (let i = 0; i < lanceCount; i++) {
-            const offset = (i - (lanceCount - 1) / 2) * 28;
-            const eb = new Bullet(boss.x + offset, boss.y + 30, offset * 0.8, 250, false, 1, 'holy_spear');
-            eb.color = '#ffd700'; eb.r = 19; eb.isMega = true;
-            this.ebullets.push(eb);
+            }, 800);
+          } else if (mode === 1) {
+            // 模式 2：饕餮噬界衝擊波 ➔ 沿途留下「暴食熔岩血核」 ➔ 二段引爆 3 倍煉獄貪食煙火！
+            this.spawnBossShockwaveRemnantSequence(boss, px, {
+              dropYs: [165, 285, 405],
+              warningTime: 0.95,
+              width: 145,
+              color: '#ff9138',
+              secondaryColor: '#ef4444',
+              subType: 'fire',
+              remnantTheme: 'crystal',
+              outerType: 'fireball',
+              innerType: 'bile'
+            });
+          } else {
+            // 模式 3：螺旋預警 spiral + Diablo 風格噬界黑洞冰封球
+            this.hazardTelegraphs.push({
+              type: 'spiral', x: px, y: 260, r: 200, arms: 6, spinDir: 1,
+              life: 0.95, accentColor: '#ff9138'
+            });
+            setTimeout(() => {
+              if (!boss || boss.dead) return;
+              this.spawnMythicFrozenOrb({
+                x: boss.x, y: boss.y + 20, targetX: px, targetY: 270,
+                r: 28, color: '#ff9138', shardColor: '#ef4444', shardType: 'fireball'
+              });
+            }, 950);
           }
-        }, 850);
 
-        // 雅典娜神聖甘露仙瓶機制 (補血瓶機制！)
-        if (isPhase2 && !boss.hasSummonedAmbrosia && this.bossMinions.filter(m => m.type === 'ambrosia_vessel').length === 0) {
-          boss.hasSummonedAmbrosia = true;
-          this.sound.playWarningAlert();
-          this.showToast('⚠️ 雅典娜召喚【奧林帕斯神聖甘露仙瓶】！6 秒內未擊破將瞬間恢復 25% 生命！');
-          this.bossMinions.push({
-            type: 'ambrosia_vessel', name: '神聖甘露仙瓶',
-            x: boss.x + 85, y: boss.y + 15, r: 24, hp: 750, maxHp: 750, timer: 6.0, color: '#48e583',
-            onExpire: (game, b) => {
-              b.hp = Math.min(b.maxHp, b.hp + b.maxHp * 0.25);
-              b.invulnerable = true;
-              b.invulnTimer = 2.5;
-              game.sound.playCrit();
-              game.showToast('雅典娜飲下神聖甘露！生命恢復 25% 並獲黃金霸體！');
-            },
-            onDestroy: (game, b) => {
-              game.sound.playCrit();
-              game.player.hp = Math.min(game.player.maxHp, game.player.hp + 1);
-              game.player.grazeSync = 100;
-              game.showToast('神聖甘露仙瓶被擊碎！甘露灑落，玩家裝甲修復 +1，同步率滿載！');
-              b.hp = Math.max(0, b.hp - 400);
-              game.syncBossHpBar(b);
-              if (b.hp <= 0 && !b.dying) {
-                game.syncBossHpBar(b, true);
-                game.startBossDefeatCinematic(b);
-              }
+          if (isPhase2 && boss.patternIndex % 3 === 0 && this.bossMinions.filter(m => m.type === 'taotie_food').length === 0) {
+            this.showToast('⚠️ 饕餮張開噬界血口，召喚貪食傀儡！全力阻截，防止饕餮吞食回血！');
+            for (let k = 0; k < 4; k++) {
+              this.bossMinions.push({
+                type: 'taotie_food', name: '貪食傀儡',
+                x: 50 + k * 80, y: -20, r: 16, hp: 180, maxHp: 180,
+                vx: 0, vy: 55, color: '#f5bc38',
+                onDestroy: (game) => {
+                  game.sound.playExplosion(false);
+                  game.score += 200;
+                }
+              });
             }
-          });
-        }
-        break;
-
-      case 9: // 許德拉・淵毒 (正弦蛇行彈道預警 wave + 3倍巨型正弦毒波彈)
-        this.hazardTelegraphs.push({
-          type: 'wave', x1: boss.x, y1: boss.y + 20, x2: this.player.x, y2: this.H,
-          amp: 75, freq: 0.025, width: 48, life: 0.9, accentColor: '#22c55e'
-        });
-        setTimeout(() => {
-          if (!boss || boss.dead) return;
-          for (let i = 0; i < 5; i++) {
-            const eb = new Bullet(boss.x, boss.y + 20 + i * 18, 0, 220, false, 1, 'wave_orb');
-            eb.originX = boss.x;
-            eb.waveAmp = 75;
-            eb.waveFreq = 5.2;
-            eb.wavePhase = i * 0.85;
-            eb.color = '#48e583'; eb.r = 20; eb.isMega = true;
-            this.ebullets.push(eb);
           }
-        }, 900);
-
-        if (isPhase2 && !boss.hasSplitHeads && this.bossMinions.filter(m => m.type === 'hydra_head').length === 0) {
-          boss.hasSplitHeads = true;
-          this.showToast('九頭蛇斷首分裂！兩側蛇首分身自主噴吐交叉毒酸！');
-          this.bossMinions.push({
-            type: 'hydra_head', name: '淵毒蛇首(左)',
-            x: 55, y: 155, r: 22, hp: 650, maxHp: 650, color: '#48e583',
-            onDestroy: (game, b) => {
-              b.hp = Math.max(0, b.hp - 350);
-              game.syncBossHpBar(b);
-              game.showToast('左側毒蛇首被斬斷！九頭蛇受到巨額重創！');
-              if (b.hp <= 0 && !b.dying) {
-                game.syncBossHpBar(b, true);
-                game.startBossDefeatCinematic(b);
-              }
-            }
-          });
-          this.bossMinions.push({
-            type: 'hydra_head', name: '淵毒蛇首(右)',
-            x: this.W - 55, y: 155, r: 22, hp: 650, maxHp: 650, color: '#48e583',
-            onDestroy: (game, b) => {
-              b.hp = Math.max(0, b.hp - 350);
-              game.syncBossHpBar(b);
-              game.showToast('右側毒蛇首被斬斷！九頭蛇受到巨額重創！');
-              if (b.hp <= 0 && !b.dying) {
-                game.syncBossHpBar(b, true);
-                game.startBossDefeatCinematic(b);
-              }
-            }
-          });
         }
         break;
 
-      case 10: // 獨眼巨人・天爐 (扇形與巨型光束預警 + 3倍巨型天爐光束 & 煙火融渣球)
+      case 7: // 阿特拉斯・墜星 (全3模式：煙火星爆隕石母彈 + 泰坦重力衝擊波留星核二段爆炸 + 扇形3倍重力巨岩)
         {
-          const tx = this.player.x;
-          this.hazardTelegraphs.push({
-            type: 'line', x1: tx, y1: 0, x2: tx, y2: this.H,
-            life: 1.1, width: 110, subType: 'fire', color: 'rgba(255, 145, 56, 0.78)'
-          });
-          this.hazardTelegraphs.push({
-            type: 'ring_nova', x: tx, y: 280, r: 145, spokes: 12,
-            life: 1.1, accentColor: '#ff4766'
-          });
-          setTimeout(() => {
-            if (!boss || boss.dead) return;
-            this.sound.playLaser(1300);
-            this.spawnBossGiantBeam({ x1: tx, y1: 0, x2: tx, y2: this.H, width: 135, color: '#ff4766', coreColor: '#fef08a', life: 0.85 });
-            this.spawnFireworkBurstShell({
-              x: tx, y: 50, targetX: tx, targetY: 280,
-              r: 26, color: '#ff9138', childType: 'slag',
-              palette: ['#ff4766', '#ff9138', '#f59e0b', '#fef08a']
+          if (mode === 0) {
+            this.hazardTelegraphs.push({
+              type: 'ring_nova', x: px, y: 260, r: 150, spokes: 14,
+              life: 0.95, accentColor: '#f5bc38'
             });
-          }, 1100);
-        }
-
-        if (isPhase2 && !boss.hasSummonedForge && this.bossMinions.filter(m => m.type === 'forge_core').length === 0) {
-          boss.hasSummonedForge = true;
-          this.showToast('獨眼巨人展開【赫菲斯托斯鍛造熔爐】！破壞熔爐使其過載癱瘓！');
-          this.bossMinions.push({
-            type: 'forge_core', name: '鍛造熔爐',
-            x: this.W / 2, y: 120, r: 26, hp: 850, maxHp: 850, color: '#ff4766',
-            onDestroy: (game, b) => {
-              game.sound.playExplosion(true);
-              b.invulnerable = false;
-              b.invulnTimer = 0;
-              b.hp = Math.max(0, b.hp - 500);
-              game.syncBossHpBar(b);
-              game.showToast('鍛造熔爐引爆過載！獨眼巨人陷入癱瘓！');
-              if (b.hp <= 0 && !b.dying) {
-                game.syncBossHpBar(b, true);
-                game.startBossDefeatCinematic(b);
+            setTimeout(() => {
+              if (!boss || boss.dead) return;
+              this.spawnFireworkBurstShell({
+                x: boss.x, y: boss.y, targetX: px, targetY: 260,
+                r: 28, color: '#f5bc38', childType: 'rock_fragment',
+                palette: ['#f5bc38', '#ff9138', '#fef08a', '#ea580c']
+              });
+            }, 950);
+          } else if (mode === 1) {
+            // 模式 2：泰坦星隕衝擊波 ➔ 沿途留下「高密度重力星核」 ➔ 二段引爆 3 倍星骸隕石煙火！
+            this.spawnBossShockwaveRemnantSequence(boss, px, {
+              dropYs: [165, 285, 405],
+              warningTime: 1.0,
+              width: 145,
+              color: '#f5bc38',
+              secondaryColor: '#ff9138',
+              subType: 'fire',
+              remnantTheme: 'crystal',
+              outerType: 'boulder',
+              innerType: 'rock_fragment'
+            });
+          } else {
+            // 模式 3：扇形預警 cone + 5 枚 3倍巨型泰坦流星巨岩
+            this.hazardTelegraphs.push({
+              type: 'cone', x: boss.x, y: boss.y + 20, angle: Math.PI / 2, spread: 1.1, radius: 500, rays: 5,
+              life: 0.85, accentColor: '#f5bc38'
+            });
+            setTimeout(() => {
+              if (!boss || boss.dead) return;
+              for (let i = -2; i <= 2; i++) {
+                const ang = Math.PI / 2 + i * 0.24;
+                const eb = new Bullet(boss.x, boss.y + 20, Math.cos(ang) * 195, Math.sin(ang) * 195, false, 1, 'boulder');
+                eb.color = '#f5bc38'; eb.r = 22; eb.isMega = true;
+                this.ebullets.push(eb);
               }
-            }
-          });
-        }
-        break;
+            }, 850);
+          }
 
-      case 11: // 玉藻前・幻械 (Phase 2 召喚殺生石與魅影分身)
-        const tails = isPhase2 ? 14 : 9;
-        for (let i = 0; i < tails; i++) {
-          const ang = this.time * 2.0 + (i / tails) * Math.PI * 2;
-          const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 200, Math.sin(ang) * 200, false, 1, 'foxfire');
-          eb.color = '#e0409a'; eb.r = 6.5;
-          this.ebullets.push(eb);
-        }
-
-        if (isPhase2 && !boss.hasSummonedSessho && this.bossMinions.filter(m => m.type === 'sessho_seki').length === 0) {
-          boss.hasSummonedSessho = true;
-          this.showToast('玉藻前祭出【殺生石】並化出九尾妖狐幻影！速破殺生石以辨真身！');
-          this.bossMinions.push({
-            type: 'sessho_seki', name: '殺生石',
-            x: this.W / 2, y: 180, r: 24, hp: 700, maxHp: 700, color: '#e0409a',
-            onDestroy: (game, b) => {
-              game.sound.playCrit();
-              b.hp = Math.max(0, b.hp - 400);
-              game.syncBossHpBar(b);
-              game.showToast('殺生石碎裂！妖狐幻影消散，玉藻前真身現形！');
-              if (b.hp <= 0 && !b.dying) {
-                game.syncBossHpBar(b, true);
-                game.startBossDefeatCinematic(b);
-              }
-            }
-          });
-        }
-        break;
-
-      case 12: // 提亞瑪特・混沌母艦 (Phase 2 產下混沌龍卵，限時孵化)
-        const chaosCount = isPhase2 ? 18 : 12;
-        const colors = ['#67ffff', '#ff4766', '#f5bc38', '#48e583', '#b359ff'];
-        for (let i = 0; i < chaosCount; i++) {
-          const ang = (i / chaosCount) * Math.PI * 2 + (boss.patternIndex * 0.15);
-          const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 220, Math.sin(ang) * 220, false, 1, 'chaos');
-          eb.color = colors[i % colors.length];
-          eb.r = 7;
-          this.ebullets.push(eb);
-        }
-        if (isPhase2) this.shake(5, 0.25);
-
-        if (isPhase2 && boss.patternIndex % 4 === 0 && this.bossMinions.filter(m => m.type === 'chaos_egg').length === 0) {
-          this.showToast('⚠️ 提亞瑪特產下【混沌龍卵】！7 秒內速破龍卵，阻止幼龍獻祭核爆！');
-          for (let k = 0; k < 3; k++) {
+          if (isPhase2 && !boss.hasSummonedPillars && this.bossMinions.filter(m => m.type === 'celestial_pillar').length === 0) {
+            boss.hasSummonedPillars = true;
+            this.showToast('阿特拉斯召喚【擎天神柱】重力鎖定戰場！8 秒內未打爆將引發隕石雨！');
             this.bossMinions.push({
-              type: 'chaos_egg', name: `混沌龍卵 ${k+1}`,
-              x: 65 + k * 110, y: 150, r: 20, hp: 420, maxHp: 420, timer: 7.0, color: '#b359ff',
+              type: 'celestial_pillar', name: '擎天重力柱',
+              x: this.W / 2, y: 190, r: 28, hp: 800, maxHp: 800, timer: 8.0, color: '#f5bc38',
               onExpire: (game, b) => {
-                game.shake(14, 0.7);
-                game.showToast('混沌幼龍破卵而出！向提亞瑪特獻祭引爆滅世核波！');
-                for (let a = 0; a < 16; a++) {
-                  const ang = (a / 16) * Math.PI * 2;
-                  const eb = new Bullet(65 + k * 110, 150, Math.cos(ang) * 240, Math.sin(ang) * 240, false, 1, 'chaos_nova');
-                  eb.color = '#ff4766'; eb.r = 8;
+                game.shake(12, 0.6);
+                game.showToast('擎天柱坍縮！天崩地裂隕石雨爆發！');
+                for (let m = 0; m < 18; m++) {
+                  const eb = new Bullet(Math.random() * game.W, 0, (Math.random() - 0.5) * 80, 280, false, 1, 'meteor');
+                  eb.color = '#ff9138'; eb.r = 18; eb.isMega = true;
                   game.ebullets.push(eb);
                 }
               }
@@ -7076,13 +6967,372 @@ class Game {
         }
         break;
 
-      default:
-        for (let i = 0; i < 12; i++) {
-          const ang = this.time * 2.5 + (i / 12) * Math.PI * 2;
-          const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 200, Math.sin(ang) * 200, false, 1, 'spiral');
-          eb.color = '#ff4766';
-          this.ebullets.push(eb);
+      case 8: // 雅典娜・聖裁 (全3模式：扇形3倍正義神矛 + 奧林帕斯衝擊波留聖矛晶核二段爆炸 + 螺旋Diablo聖光冰封球)
+        {
+          if (mode === 0) {
+            const lanceCount = isPhase2 ? 7 : 5;
+            this.hazardTelegraphs.push({
+              type: 'cone', x: boss.x, y: boss.y + 30, angle: Math.PI / 2, spread: 0.95, radius: 520, rays: lanceCount,
+              life: 0.85, accentColor: '#ffd700'
+            });
+            setTimeout(() => {
+              if (!boss || boss.dead) return;
+              for (let i = 0; i < lanceCount; i++) {
+                const offset = (i - (lanceCount - 1) / 2) * 28;
+                const eb = new Bullet(boss.x + offset, boss.y + 30, offset * 0.8, 250, false, 1, 'holy_spear');
+                eb.color = '#ffd700'; eb.r = 19; eb.isMega = true;
+                this.ebullets.push(eb);
+              }
+            }, 850);
+          } else if (mode === 1) {
+            // 模式 2：奧林帕斯聖裁衝擊波 ➔ 沿途留下「勝利聖光符文晶」 ➔ 二段引爆 3 倍神聖金矛煙火！
+            this.spawnBossShockwaveRemnantSequence(boss, px, {
+              dropYs: [165, 285, 405],
+              warningTime: 0.95,
+              width: 145,
+              color: '#ffd700',
+              secondaryColor: '#fef08a',
+              subType: 'feather',
+              remnantTheme: 'crystal',
+              outerType: 'holy_spear',
+              innerType: 'feather_shard'
+            });
+          } else {
+            // 模式 3：螺旋預警 spiral + Diablo 風格雅典娜聖光冰封球
+            this.hazardTelegraphs.push({
+              type: 'spiral', x: px, y: 260, r: 205, arms: 8, spinDir: 1,
+              life: 0.95, accentColor: '#ffd700'
+            });
+            setTimeout(() => {
+              if (!boss || boss.dead) return;
+              this.spawnMythicFrozenOrb({
+                x: boss.x, y: boss.y + 20, targetX: px, targetY: 275,
+                r: 28, color: '#ffd700', shardColor: '#ffffff', shardType: 'holy_spear'
+              });
+            }, 950);
+          }
+
+          // 雅典娜神聖甘露仙瓶機制 (補血瓶機制！)
+          if (isPhase2 && !boss.hasSummonedAmbrosia && this.bossMinions.filter(m => m.type === 'ambrosia_vessel').length === 0) {
+            boss.hasSummonedAmbrosia = true;
+            this.sound.playWarningAlert();
+            this.showToast('⚠️ 雅典娜召喚【奧林帕斯神聖甘露仙瓶】！6 秒內未擊破將瞬間恢復 25% 生命！');
+            this.bossMinions.push({
+              type: 'ambrosia_vessel', name: '神聖甘露仙瓶',
+              x: boss.x + 85, y: boss.y + 15, r: 24, hp: 750, maxHp: 750, timer: 6.0, color: '#48e583',
+              onExpire: (game, b) => {
+                b.hp = Math.min(b.maxHp, b.hp + b.maxHp * 0.25);
+                b.invulnerable = true;
+                b.invulnTimer = 2.5;
+                game.sound.playCrit();
+                game.showToast('雅典娜飲下神聖甘露！生命恢復 25% 並獲黃金霸體！');
+              },
+              onDestroy: (game, b) => {
+                game.sound.playCrit();
+                game.player.hp = Math.min(game.player.maxHp, game.player.hp + 1);
+                game.player.grazeSync = 100;
+                game.showToast('神聖甘露仙瓶被擊碎！甘露灑落，玩家裝甲修復 +1，同步率滿載！');
+                b.hp = Math.max(0, b.hp - 400);
+                game.syncBossHpBar(b);
+                if (b.hp <= 0 && !b.dying) {
+                  game.syncBossHpBar(b, true);
+                  game.startBossDefeatCinematic(b);
+                }
+              }
+            });
+          }
         }
+        break;
+
+      case 9: // 許德拉・淵毒 (全3模式：正弦蛇行預警3倍毒波彈 + 淵毒衝擊波留再生毒囊二段爆炸 + 劇毒煙火母彈)
+        {
+          if (mode === 0) {
+            this.hazardTelegraphs.push({
+              type: 'wave', x1: boss.x, y1: boss.y + 20, x2: px, y2: this.H,
+              amp: 75, freq: 0.025, width: 48, life: 0.9, accentColor: '#22c55e'
+            });
+            setTimeout(() => {
+              if (!boss || boss.dead) return;
+              for (let i = 0; i < 5; i++) {
+                const eb = new Bullet(boss.x, boss.y + 20 + i * 18, 0, 220, false, 1, 'wave_orb');
+                eb.originX = boss.x;
+                eb.waveAmp = 75;
+                eb.waveFreq = 5.2;
+                eb.wavePhase = i * 0.85;
+                eb.color = '#48e583'; eb.r = 20; eb.isMega = true;
+                this.ebullets.push(eb);
+              }
+            }, 900);
+          } else if (mode === 1) {
+            // 模式 2：九首深淵腐蝕衝擊波 ➔ 沿途留下「劇毒再生毒囊」 ➔ 二段引爆 3 倍腐蝕酸液煙火！
+            this.spawnBossShockwaveRemnantSequence(boss, px, {
+              dropYs: [165, 285, 405],
+              warningTime: 0.95,
+              width: 140,
+              color: '#48e583',
+              secondaryColor: '#10b981',
+              subType: 'thunder',
+              remnantTheme: 'crystal',
+              outerType: 'venom',
+              innerType: 'bile'
+            });
+          } else {
+            // 模式 3：煙火星爆預警 ring_nova + 3倍九首劇毒煙火母彈
+            this.hazardTelegraphs.push({
+              type: 'ring_nova', x: px, y: 265, r: 145, spokes: 12,
+              life: 0.95, accentColor: '#48e583'
+            });
+            setTimeout(() => {
+              if (!boss || boss.dead) return;
+              this.spawnFireworkBurstShell({
+                x: boss.x, y: boss.y + 20, targetX: px, targetY: 265,
+                r: 27, color: '#22c55e', childType: 'venom',
+                palette: ['#48e583', '#22c55e', '#10b981', '#a7f3d0']
+              });
+            }, 950);
+          }
+
+          if (isPhase2 && !boss.hasSplitHeads && this.bossMinions.filter(m => m.type === 'hydra_head').length === 0) {
+            boss.hasSplitHeads = true;
+            this.showToast('九頭蛇斷首分裂！兩側蛇首分身自主噴吐交叉毒酸！');
+            this.bossMinions.push({
+              type: 'hydra_head', name: '淵毒蛇首(左)',
+              x: 55, y: 155, r: 22, hp: 650, maxHp: 650, color: '#48e583',
+              onDestroy: (game, b) => {
+                b.hp = Math.max(0, b.hp - 350);
+                game.syncBossHpBar(b);
+                game.showToast('左側毒蛇首被斬斷！九頭蛇受到巨額重創！');
+                if (b.hp <= 0 && !b.dying) {
+                  game.syncBossHpBar(b, true);
+                  game.startBossDefeatCinematic(b);
+                }
+              }
+            });
+            this.bossMinions.push({
+              type: 'hydra_head', name: '淵毒蛇首(右)',
+              x: this.W - 55, y: 155, r: 22, hp: 650, maxHp: 650, color: '#48e583',
+              onDestroy: (game, b) => {
+                b.hp = Math.max(0, b.hp - 350);
+                game.syncBossHpBar(b);
+                game.showToast('右側毒蛇首被斬斷！九頭蛇受到巨額重創！');
+                if (b.hp <= 0 && !b.dying) {
+                  game.syncBossHpBar(b, true);
+                  game.startBossDefeatCinematic(b);
+                }
+              }
+            });
+          }
+        }
+        break;
+
+      case 10: // 獨眼巨人・天爐 (全3模式：天爐衝擊波留白熾熔爐核二段爆炸 + 螺旋Diablo天爐熔核冰封球 + 扇形3倍鍛造重錘彈)
+        {
+          if (mode === 0) {
+            // 模式 1：赫菲斯托斯天爐衝擊波 ➔ 沿途留下「神鍛白熾熔爐核」 ➔ 二段引爆 3 倍天爐熔渣煙火！
+            this.spawnBossShockwaveRemnantSequence(boss, px, {
+              dropYs: [165, 285, 405],
+              warningTime: 1.0,
+              width: 150,
+              color: '#ff4766',
+              secondaryColor: '#ff9138',
+              subType: 'fire',
+              remnantTheme: 'crystal',
+              outerType: 'magma',
+              innerType: 'slag'
+            });
+          } else if (mode === 1) {
+            // 模式 2：螺旋預警 spiral + Diablo 風格赫菲斯托斯熔核冰封球
+            this.hazardTelegraphs.push({
+              type: 'spiral', x: px, y: 265, r: 205, arms: 8, spinDir: 1,
+              life: 0.95, accentColor: '#ff4766'
+            });
+            setTimeout(() => {
+              if (!boss || boss.dead) return;
+              this.sound.playLaser(1300);
+              this.spawnMythicFrozenOrb({
+                x: boss.x, y: boss.y + 15, targetX: px, targetY: 280,
+                r: 28, color: '#ff4766', shardColor: '#ff9138', shardType: 'magma'
+              });
+            }, 950);
+          } else {
+            // 模式 3：扇形預警 cone + 5 枚 3倍巨型神鍛熔岩重錘彈
+            this.hazardTelegraphs.push({
+              type: 'cone', x: boss.x, y: boss.y + 20, angle: Math.PI / 2, spread: 1.15, radius: 510, rays: 5,
+              life: 0.85, accentColor: '#ff9138'
+            });
+            setTimeout(() => {
+              if (!boss || boss.dead) return;
+              for (let i = -2; i <= 2; i++) {
+                const ang = Math.PI / 2 + i * 0.24;
+                const eb = new Bullet(boss.x, boss.y + 20, Math.cos(ang) * 210, Math.sin(ang) * 210, false, 1, 'slag');
+                eb.color = '#ff4766'; eb.r = 22; eb.isMega = true;
+                this.ebullets.push(eb);
+              }
+            }, 850);
+          }
+
+          if (isPhase2 && !boss.hasSummonedForge && this.bossMinions.filter(m => m.type === 'forge_core').length === 0) {
+            boss.hasSummonedForge = true;
+            this.showToast('獨眼巨人展開【赫菲斯托斯鍛造熔爐】！破壞熔爐使其過載癱瘓！');
+            this.bossMinions.push({
+              type: 'forge_core', name: '鍛造熔爐',
+              x: this.W / 2, y: 120, r: 26, hp: 850, maxHp: 850, color: '#ff4766',
+              onDestroy: (game, b) => {
+                game.sound.playExplosion(true);
+                b.invulnerable = false;
+                b.invulnTimer = 0;
+                b.hp = Math.max(0, b.hp - 500);
+                game.syncBossHpBar(b);
+                game.showToast('鍛造熔爐引爆過載！獨眼巨人陷入癱瘓！');
+                if (b.hp <= 0 && !b.dying) {
+                  game.syncBossHpBar(b, true);
+                  game.startBossDefeatCinematic(b);
+                }
+              }
+            });
+          }
+        }
+        break;
+
+      case 11: // 玉藻前・幻械 (全3模式：螺旋Diablo九尾狐火冰封球 + 殺生衝擊波留妖狐魂燈二段爆炸 + 九尾煙火星爆母彈)
+        {
+          if (mode === 0) {
+            // 模式 1：九尾螺旋預警 spiral + Diablo 風格九尾妖月冰封球
+            this.hazardTelegraphs.push({
+              type: 'spiral', x: px, y: 260, r: 210, arms: 9, spinDir: 1,
+              life: 0.95, accentColor: '#ec4899'
+            });
+            setTimeout(() => {
+              if (!boss || boss.dead) return;
+              this.spawnMythicFrozenOrb({
+                x: boss.x, y: boss.y, targetX: px, targetY: 275,
+                r: 28, color: '#ec4899', shardColor: '#f472b6', shardType: 'foxfire'
+              });
+            }, 950);
+          } else if (mode === 1) {
+            // 模式 2：九尾殺生衝擊波 ➔ 沿途留下「妖狐殺生魂燈」 ➔ 二段引爆 3 倍九尾妖火煙火！
+            this.spawnBossShockwaveRemnantSequence(boss, px, {
+              dropYs: [165, 285, 405],
+              warningTime: 0.95,
+              width: 145,
+              color: '#ec4899',
+              secondaryColor: '#f472b6',
+              subType: 'thunder',
+              remnantTheme: 'crystal',
+              outerType: 'foxfire',
+              innerType: 'chaos'
+            });
+          } else {
+            // 模式 3：妖狐煙火星爆預警 ring_nova + 3倍九尾妖火煙火母彈
+            this.hazardTelegraphs.push({
+              type: 'ring_nova', x: px, y: 255, r: 150, spokes: 14,
+              life: 0.95, accentColor: '#f472b6'
+            });
+            setTimeout(() => {
+              if (!boss || boss.dead) return;
+              this.spawnFireworkBurstShell({
+                x: boss.x, y: boss.y, targetX: px, targetY: 255,
+                r: 27, color: '#ec4899', childType: 'foxfire',
+                palette: ['#ec4899', '#f472b6', '#c084fc', '#fdf2f8']
+              });
+            }, 950);
+          }
+
+          if (isPhase2 && !boss.hasSummonedSessho && this.bossMinions.filter(m => m.type === 'sessho_seki').length === 0) {
+            boss.hasSummonedSessho = true;
+            this.showToast('玉藻前祭出【殺生石】並化出九尾妖狐幻影！速破殺生石以辨真身！');
+            this.bossMinions.push({
+              type: 'sessho_seki', name: '殺生石',
+              x: this.W / 2, y: 180, r: 24, hp: 700, maxHp: 700, color: '#e0409a',
+              onDestroy: (game, b) => {
+                game.sound.playCrit();
+                b.hp = Math.max(0, b.hp - 400);
+                game.syncBossHpBar(b);
+                game.showToast('殺生石碎裂！妖狐幻影消散，玉藻前真身現形！');
+                if (b.hp <= 0 && !b.dying) {
+                  game.syncBossHpBar(b, true);
+                  game.startBossDefeatCinematic(b);
+                }
+              }
+            });
+          }
+        }
+        break;
+
+      case 12: // 提亞瑪特・混沌母艦 (全3模式：創世螺旋Diablo五彩冰封球 + 原初龍息衝擊波留五帝龍晶二段爆炸 + 雙重五彩煙火母彈)
+        {
+          const colors = ['#67ffff', '#ff4766', '#f5bc38', '#48e583', '#b359ff'];
+          if (mode === 0) {
+            // 模式 1：創世十臂螺旋預警 spiral + Diablo 風格創世混沌冰封球
+            this.hazardTelegraphs.push({
+              type: 'spiral', x: px, y: 260, r: 220, arms: 10, spinDir: 1,
+              life: 0.95, accentColor: '#a855f7'
+            });
+            setTimeout(() => {
+              if (!boss || boss.dead) return;
+              this.spawnMythicFrozenOrb({
+                x: boss.x, y: boss.y, targetX: px, targetY: 275,
+                r: 30, color: '#a855f7', shardColor: '#67ffff', shardType: 'chaos_nova'
+              });
+            }, 950);
+          } else if (mode === 1) {
+            // 模式 2：原初創世龍息衝擊波 ➔ 沿途留下「創世五帝龍晶」 ➔ 二段引爆 3 倍五彩混沌煙火星爆！
+            this.spawnBossShockwaveRemnantSequence(boss, px, {
+              dropYs: [160, 280, 400],
+              warningTime: 0.95,
+              width: 155,
+              color: '#a855f7',
+              secondaryColor: '#38bdf8',
+              subType: 'thunder',
+              remnantTheme: 'crystal',
+              outerType: 'chaos_nova',
+              innerType: 'chaos'
+            });
+          } else {
+            // 模式 3：創世雙重煙火星爆預警 ring_nova + 3倍五彩混沌煙火母彈
+            this.hazardTelegraphs.push({
+              type: 'ring_nova', x: px, y: 260, r: 160, spokes: 16,
+              life: 0.95, accentColor: '#ff4766'
+            });
+            setTimeout(() => {
+              if (!boss || boss.dead) return;
+              this.spawnFireworkBurstShell({
+                x: boss.x, y: boss.y, targetX: px, targetY: 260,
+                r: 29, color: '#ff4766', childType: 'chaos_nova',
+                palette: colors
+              });
+            }, 950);
+          }
+          if (isPhase2) this.shake(5, 0.25);
+
+          if (isPhase2 && boss.patternIndex % 4 === 0 && this.bossMinions.filter(m => m.type === 'chaos_egg').length === 0) {
+            this.showToast('⚠️ 提亞瑪特產下【混沌龍卵】！7 秒內速破龍卵，阻止幼龍獻祭核爆！');
+            for (let k = 0; k < 3; k++) {
+              this.bossMinions.push({
+                type: 'chaos_egg', name: `混沌龍卵 ${k+1}`,
+                x: 65 + k * 110, y: 150, r: 20, hp: 420, maxHp: 420, timer: 7.0, color: '#b359ff',
+                onExpire: (game, b) => {
+                  game.shake(14, 0.7);
+                  game.showToast('混沌幼龍破卵而出！向提亞瑪特獻祭引爆滅世核波！');
+                  for (let a = 0; a < 16; a++) {
+                    const ang = (a / 16) * Math.PI * 2;
+                    const eb = new Bullet(65 + k * 110, 150, Math.cos(ang) * 240, Math.sin(ang) * 240, false, 1, 'chaos_nova');
+                    eb.color = '#ff4766'; eb.r = 18; eb.isMega = true;
+                    game.ebullets.push(eb);
+                  }
+                }
+              });
+            }
+          }
+        }
+        break;
+
+      default:
+        this.spawnBossShockwaveRemnantSequence(boss, px, {
+          dropYs: [170, 300], warningTime: 0.9, width: 140,
+          color: '#ff4766', secondaryColor: '#f59e0b', subType: 'fire',
+          remnantTheme: 'crystal', outerType: 'chaos_nova', innerType: 'fireball'
+        });
         break;
     }
   }
@@ -7109,9 +7359,14 @@ class Game {
     const variant = (boss.ultVariant !== undefined) ? (boss.ultVariant % 2) : 0;
 
     switch (s) {
-      case 1: { // 機甲庫巴・烈焰風暴 (扇形預警 cone + 3倍巨型焦熱吐息主砲 + 煉獄煙火爆裂球)
+      case 1: { // 機甲庫巴・烈焰風暴 (扇形預警 cone + 3倍巨型焦熱吐息主砲 + 衝擊波留熔岩龜殼炸彈 + 煉獄煙火爆裂球)
         const bx = boss.x, by = boss.y + 18;
         const px = this.player ? this.player.x : this.W * 0.5;
+        this.spawnBossShockwaveRemnantSequence(boss, px, {
+          dropYs: [170, 300, 415], warningTime: 1.0, width: 145,
+          color: '#ff6b35', secondaryColor: '#f59e0b', subType: 'fire',
+          remnantTheme: 'crystal', outerType: 'fireball', innerType: 'boulder'
+        });
         if (variant === 0) {
           this.showToast('🔥【機甲庫巴・終極焦熱崩星巨砲】廣角扇形彈道鎖定！3倍巨型熔岩主砲與烈焰煙火降臨！');
           this.sound.playMarioStomp();
@@ -7120,14 +7375,9 @@ class Game {
             type: 'cone', x: bx, y: by, angle: Math.PI / 2, spread: 1.25, radius: 540, rays: 7,
             life: 1.0, accentColor: '#ea580c'
           });
-          this.hazardTelegraphs.push({
-            type: 'line', x1: bx, y1: by, x2: bx, y2: this.H,
-            life: 1.0, width: 155, subType: 'fire', color: 'rgba(234, 88, 12, 0.85)'
-          });
           setTimeout(() => {
             if (!boss || boss.dead) return;
             this.sound.playLaser(980);
-            this.spawnBossGiantBeam({ x1: bx, y1: by, x2: bx, y2: this.H, width: 165, color: '#ea580c', coreColor: '#fef08a', life: 1.1 });
             this.spawnFireworkBurstShell({ x: bx, y: by, targetX: bx, targetY: 280, r: 28, color: '#ff4766', childType: 'fireball' });
             for (let i = -3; i <= 3; i++) {
               const eb = new Bullet(bx + i * 25, by, i * 52, 205, false, 1, 'fireball');
@@ -7164,16 +7414,17 @@ class Game {
         break;
       }
 
-      case 2: { // 災厄加儂・魔怨狂瀾 (螺旋冰封球預警 spiral + 3倍守護者終焉雷射)
+      case 2: { // 災厄加儂・魔怨狂瀾 (螺旋冰封球預警 spiral + 衝擊波留怨念晶核 + 3倍守護者終焉雷射)
         const px = this.player ? this.player.x : this.W * 0.5;
         const py = this.player ? this.player.y : this.H * 0.72;
+        this.spawnBossShockwaveRemnantSequence(boss, px, {
+          dropYs: [165, 290, 405], warningTime: 1.05, width: 145,
+          color: '#c084fc', secondaryColor: '#f43f5e', subType: 'thunder',
+          remnantTheme: 'crystal', outerType: 'chaos', innerType: 'thunder'
+        });
         if (variant === 0) {
-          this.showToast('👁️【災厄加儂・古代魔怨冰封球與終焉巨砲】螺旋魔怨球與3倍守護者巨砲齊發！');
+          this.showToast('👁️【災厄加儂・古代魔怨冰封球與終焉巨砲】螺旋魔怨球與3倍守護者衝擊波留彈齊發！');
           this.sound.playZeldaSecretChime();
-          this.hazardTelegraphs.push({
-            type: 'line', x1: boss.x, y1: boss.y + 15, x2: px, y2: this.H,
-            life: 1.05, width: 150, color: 'rgba(192, 132, 252, 0.85)'
-          });
           this.hazardTelegraphs.push({
             type: 'spiral', x: px, y: 260, r: 210, arms: 8, spinDir: 1,
             life: 1.05, accentColor: '#c084fc'
@@ -7181,20 +7432,17 @@ class Game {
           setTimeout(() => {
             if (!boss || boss.dead) return;
             this.sound.playLaser(1350);
-            this.spawnBossGiantBeam({ x1: boss.x, y1: boss.y + 15, x2: px, y2: this.H, width: 160, color: '#c084fc', coreColor: '#ffffff', life: 1.05 });
             this.spawnMythicFrozenOrb({ x: boss.x, y: boss.y + 15, targetX: px, targetY: 270, r: 30, color: '#c084fc', shardColor: '#f43f5e', shardType: 'chaos' });
           }, 1050);
         } else {
           this.showToast('🌑【災厄加儂・血月十字魔怨煙火砲】3倍十字深淵巨束與雙環煙火大爆發！');
           this.sound.playZeldaSecretChime();
           const cx = boss.x, cy = boss.y + 20;
-          this.hazardTelegraphs.push({ type: 'line', x1: cx, y1: 0, x2: cx, y2: this.H, life: 1.1, width: 140, color: 'rgba(192, 132, 252, 0.82)' });
           this.hazardTelegraphs.push({ type: 'line', x1: 0, y1: py, x2: this.W, y2: py, life: 1.1, width: 130, color: 'rgba(255, 71, 102, 0.8)' });
           this.hazardTelegraphs.push({ type: 'ring_nova', x: cx, y: 260, r: 165, spokes: 14, life: 1.1, accentColor: '#f43f5e' });
           setTimeout(() => {
             if (!boss || boss.dead) return;
             this.sound.playLaser(1280);
-            this.spawnBossGiantBeam({ x1: cx, y1: 0, x2: cx, y2: this.H, width: 150, color: '#a855f7', coreColor: '#ffffff', life: 1.05 });
             this.spawnBossGiantBeam({ x1: 0, y1: py, x2: this.W, y2: py, width: 140, color: '#ff4766', coreColor: '#ffffff', life: 1.05 });
             this.spawnFireworkBurstShell({ x: cx, y: cy, targetX: cx, targetY: 260, r: 28, color: '#f43f5e', childType: 'chaos' });
           }, 1100);
@@ -7219,11 +7467,17 @@ class Game {
         break;
       }
 
-      case 4: { // 雷公 (螺旋雷霆冰封球 + 3倍橫斷天雷巨柱)
+      case 4: { // 雷公 (螺旋雷霆冰封球 + 衝擊波留球形閃電錨 + 3倍橫斷天雷巨柱)
+        const px = this.player ? this.player.x : this.W * 0.5;
+        this.spawnBossShockwaveRemnantSequence(boss, px, {
+          dropYs: [165, 285, 405], warningTime: 1.0, width: 145,
+          color: '#38bdf8', secondaryColor: '#67ffff', subType: 'thunder',
+          remnantTheme: 'crystal', outerType: 'thunder_bolt', innerType: 'thunder'
+        });
         if (variant === 0) {
           this.showToast('⚡【雷公・九天雷霆冰封球與橫斷巨柱】三道3倍天雷巨束與Diablo雷電球降臨！');
-          for (let k = 0; k < 3; k++) {
-            const ly = 160 + k * 135;
+          for (let k = 0; k < 2; k++) {
+            const ly = 180 + k * 150;
             this.hazardTelegraphs.push({
               type: 'line', x1: 0, y1: ly, x2: this.W, y2: ly,
               life: 1.0, width: 110, subType: 'thunder', color: 'rgba(56, 189, 248, 0.82)'
@@ -7247,10 +7501,6 @@ class Game {
           const cx = boss.x, cy = boss.y;
           const py = this.player ? this.player.y : this.H * 0.72;
           this.hazardTelegraphs.push({
-            type: 'line', x1: cx, y1: 0, x2: cx, y2: this.H,
-            life: 1.1, width: 150, subType: 'thunder', color: 'rgba(56, 189, 248, 0.85)'
-          });
-          this.hazardTelegraphs.push({
             type: 'line', x1: 0, y1: py, x2: this.W, y2: py,
             life: 1.1, width: 135, subType: 'thunder', color: 'rgba(56, 189, 248, 0.85)'
           });
@@ -7261,7 +7511,6 @@ class Game {
           setTimeout(() => {
             if (!boss || boss.dead) return;
             this.sound.playLaser(1400);
-            this.spawnBossGiantBeam({ x1: cx, y1: 0, x2: cx, y2: this.H, width: 160, color: '#0ea5e9', coreColor: '#ffffff', subType: 'thunder', life: 1.05 });
             this.spawnBossGiantBeam({ x1: 0, y1: py, x2: this.W, y2: py, width: 145, color: '#38bdf8', coreColor: '#ffffff', subType: 'thunder', life: 1.05 });
             this.spawnFireworkBurstShell({ x: cx, y: cy, targetX: cx, targetY: 250, r: 28, color: '#38bdf8', childType: 'thunder_bolt' });
           }, 1100);
@@ -7269,15 +7518,16 @@ class Game {
         break;
       }
 
-      case 5: { // 美杜莎 (螺旋石化冰封球 + 3倍萬蛇石化巨砲)
+      case 5: { // 美杜莎 (螺旋石化冰封球 + 衝擊波留石化魔眼稜鏡 + 3倍萬蛇石化巨砲)
         const px = this.player ? this.player.x : this.W * 0.5;
         const py = this.player ? this.player.y : this.H * 0.72;
+        this.spawnBossShockwaveRemnantSequence(boss, px, {
+          dropYs: [165, 285, 405], warningTime: 1.05, width: 145,
+          color: '#c054ff', secondaryColor: '#d991ff', subType: 'thunder',
+          remnantTheme: 'crystal', outerType: 'petrify_beam', innerType: 'mirror_bullet'
+        });
         if (variant === 0) {
-          this.showToast('🐍【美杜莎・萬蛇魔眼冰封球與石化巨砲】3倍紫色石化死光與360度螺旋石化球爆發！');
-          this.hazardTelegraphs.push({
-            type: 'line', x1: boss.x, y1: boss.y, x2: px, y2: this.H,
-            life: 1.05, width: 155, color: 'rgba(192, 84, 255, 0.85)'
-          });
+          this.showToast('🐍【美杜莎・萬蛇魔眼冰封球與石化巨砲】3倍紫色石化衝擊波留彈與360度螺旋石化球爆發！');
           this.hazardTelegraphs.push({
             type: 'spiral', x: px, y: 270, r: 215, arms: 8, spinDir: -1,
             life: 1.05, accentColor: '#d991ff'
@@ -7285,7 +7535,6 @@ class Game {
           setTimeout(() => {
             if (!boss || boss.dead) return;
             this.sound.playLaser(1180);
-            this.spawnBossGiantBeam({ x1: boss.x, y1: boss.y, x2: px, y2: this.H, width: 165, color: '#a855f7', coreColor: '#f3e8ff', life: 1.05 });
             this.spawnMythicFrozenOrb({ x: boss.x, y: boss.y, targetX: px, targetY: 270, r: 29, color: '#c084fc', shardColor: '#d991ff', shardType: 'petrify_beam' });
           }, 1050);
         } else {
@@ -7313,16 +7562,17 @@ class Game {
         break;
       }
 
-      case 6: { // 饕餮 (黑洞螺旋冰封球 + 3倍噬天湮滅吐息巨砲)
+      case 6: { // 饕餮 (黑洞螺旋冰封球 + 衝擊波留暴食血核 + 3倍噬天湮滅吐息巨砲)
         const px = this.player ? this.player.x : this.W * 0.5;
+        this.spawnBossShockwaveRemnantSequence(boss, px, {
+          dropYs: [165, 285, 405], warningTime: 1.05, width: 155,
+          color: '#ff9138', secondaryColor: '#ef4444', subType: 'fire',
+          remnantTheme: 'crystal', outerType: 'fireball', innerType: 'bile'
+        });
         if (variant === 0) {
-          this.showToast('🕳️【饕餮・萬物同喰黑洞湮滅巨砲】重力黑洞 + 3倍深淵吐息巨砲 + 混沌冰封球！');
+          this.showToast('🕳️【饕餮・萬物同喰黑洞湮滅巨砲】重力黑洞 + 3倍深淵衝擊波留彈 + 混沌冰封球！');
           this.singularities.push({
             x: this.W / 2, y: 220, r: 44, pullRadius: 260, duration: 4.5, maxDuration: 4.5, isPlayer: false
-          });
-          this.hazardTelegraphs.push({
-            type: 'line', x1: this.W / 2, y1: boss.y, x2: this.W / 2, y2: this.H,
-            life: 1.05, width: 175, subType: 'fire', color: 'rgba(255, 145, 56, 0.85)'
           });
           this.hazardTelegraphs.push({
             type: 'spiral', x: this.W / 2, y: 220, r: 210, arms: 6, spinDir: 1,
@@ -7331,12 +7581,11 @@ class Game {
           setTimeout(() => {
             if (!boss || boss.dead) return;
             this.sound.playLaser(880);
-            this.spawnBossGiantBeam({ x1: this.W / 2, y1: boss.y, x2: this.W / 2, y2: this.H, width: 185, color: '#f97316', coreColor: '#ffffff', life: 1.1 });
             this.spawnMythicFrozenOrb({ x: boss.x, y: boss.y, targetX: this.W / 2, targetY: 250, r: 30, color: '#ff9138', shardColor: '#ff4766', shardType: 'fireball' });
           }, 1050);
         } else {
           this.showToast('🌋【饕餮・暴食狂宴三連煉獄煙火巨柱】三道3倍熔岩巨柱與爆炎煙火母彈！');
-          const cols = [this.W * 0.22, px, this.W * 0.78];
+          const cols = [this.W * 0.22, this.W * 0.78];
           this.hazardTelegraphs.push({
             type: 'cone', x: boss.x, y: boss.y + 15, angle: Math.PI / 2, spread: 1.2, radius: 520, rays: 3,
             life: 1.05, accentColor: '#ef4444'
@@ -7360,15 +7609,21 @@ class Game {
         break;
       }
 
-      case 7: { // 阿特拉斯 (泰坦天柱3倍雙巨束 + 雙子超新星煙火隕石)
+      case 7: { // 阿特拉斯 (泰坦天柱3倍雙巨束 + 衝擊波留重力星核 + 雙子超新星煙火隕石)
+        const px = this.player ? this.player.x : this.W * 0.5;
+        this.spawnBossShockwaveRemnantSequence(boss, px, {
+          dropYs: [165, 285, 405], warningTime: 1.05, width: 150,
+          color: '#f5bc38', secondaryColor: '#ff9138', subType: 'fire',
+          remnantTheme: 'crystal', outerType: 'boulder', innerType: 'rock_fragment'
+        });
         if (variant === 0) {
           this.showToast('☄️【阿特拉斯・泰坦天柱崩塌巨擊】雙座3倍重力天柱與星隕煙火母彈！');
           this.shake(16, 0.6);
           const pillars = [this.W * 0.28, this.W * 0.72];
-          pillars.forEach(px => {
+          pillars.forEach(colX => {
             this.hazardTelegraphs.push({
-              type: 'line', x1: px, y1: 0, x2: px, y2: this.H,
-              life: 1.05, width: 150, subType: 'fire', color: 'rgba(245, 188, 56, 0.85)'
+              type: 'line', x1: colX, y1: 0, x2: colX, y2: this.H,
+              life: 1.05, width: 145, subType: 'fire', color: 'rgba(245, 188, 56, 0.85)'
             });
           });
           this.hazardTelegraphs.push({
@@ -7378,8 +7633,8 @@ class Game {
           setTimeout(() => {
             if (!boss || boss.dead) return;
             this.sound.playLaser(850);
-            pillars.forEach(px => {
-              this.spawnBossGiantBeam({ x1: px, y1: 0, x2: px, y2: this.H, width: 160, color: '#f59e0b', coreColor: '#ffffff', life: 1.05 });
+            pillars.forEach(colX => {
+              this.spawnBossGiantBeam({ x1: colX, y1: 0, x2: colX, y2: this.H, width: 155, color: '#f59e0b', coreColor: '#ffffff', life: 1.05 });
             });
             this.spawnFireworkBurstShell({ x: boss.x, y: boss.y, targetX: this.W * 0.5, targetY: 260, r: 30, color: '#f5bc38', childType: 'boulder' });
           }, 1050);
@@ -7388,17 +7643,12 @@ class Game {
           for (let m = 0; m < 2; m++) {
             const mx = (m === 0 ? this.W * 0.32 : this.W * 0.68);
             this.hazardTelegraphs.push({
-              type: 'line', x1: mx, y1: 0, x2: mx, y2: this.H,
-              life: 1.0, width: 135, subType: 'fire', color: 'rgba(255, 145, 56, 0.82)'
-            });
-            this.hazardTelegraphs.push({
               type: 'ring_nova', x: mx, y: 230, r: 135, spokes: 12,
               life: 1.0, accentColor: '#ff9138'
             });
             setTimeout(() => {
               if (!boss || boss.dead) return;
               this.sound.playExplosion(true);
-              this.spawnBossGiantBeam({ x1: mx, y1: 0, x2: mx, y2: this.H, width: 145, color: '#f97316', coreColor: '#ffffff', life: 1.0 });
               this.spawnFireworkBurstShell({ x: mx, y: 40, targetX: mx, targetY: 230, r: 28, color: '#ff9138', childType: 'rock_fragment' });
             }, 1000);
           }
@@ -7406,14 +7656,15 @@ class Game {
         break;
       }
 
-      case 8: { // 雅典娜 (3倍勝利之矛貫日聖裁巨砲 + 聖光螺旋冰封球)
+      case 8: { // 雅典娜 (3倍勝利之矛衝擊波留聖矛符文晶 + 聖光螺旋冰封球)
         const px = this.player ? this.player.x : this.W * 0.5;
+        this.spawnBossShockwaveRemnantSequence(boss, px, {
+          dropYs: [165, 285, 405], warningTime: 1.05, width: 155,
+          color: '#ffd700', secondaryColor: '#fef08a', subType: 'feather',
+          remnantTheme: 'crystal', outerType: 'holy_spear', innerType: 'feather_shard'
+        });
         if (variant === 0) {
-          this.showToast('🔱【雅典娜・勝利之矛貫日聖裁巨砲】3倍黃金神槍巨束與扇形聖矛齊發！');
-          this.hazardTelegraphs.push({
-            type: 'line', x1: px, y1: 0, x2: px, y2: this.H,
-            life: 1.05, width: 165, subType: 'feather', color: 'rgba(255, 215, 0, 0.88)'
-          });
+          this.showToast('🔱【雅典娜・勝利之矛貫日聖裁巨砲】3倍黃金神槍衝擊波留彈與扇形聖矛齊發！');
           this.hazardTelegraphs.push({
             type: 'cone', x: boss.x, y: boss.y + 20, angle: Math.PI / 2, spread: 1.15, radius: 520, rays: 7,
             life: 1.05, accentColor: '#ffd700'
@@ -7421,7 +7672,6 @@ class Game {
           setTimeout(() => {
             if (!boss || boss.dead) return;
             this.sound.playLaser(1300);
-            this.spawnBossGiantBeam({ x1: px, y1: 0, x2: px, y2: this.H, width: 175, color: '#ffd700', coreColor: '#ffffff', subType: 'feather', life: 1.1 });
             for (let k = -3; k <= 3; k++) {
               const ang = Math.PI / 2 + k * 0.18;
               const eb = new Bullet(boss.x, boss.y + 20, Math.cos(ang) * 240, Math.sin(ang) * 240, false, 1, 'holy_spear');
@@ -7433,10 +7683,6 @@ class Game {
           this.showToast('✨【雅典娜・智慧法陣聖光十字與神聖冰封球】3倍黃金十字光束與360度螺旋聖光球！');
           const cx = this.W / 2, cy = 250;
           this.hazardTelegraphs.push({
-            type: 'line', x1: cx, y1: 0, x2: cx, y2: this.H,
-            life: 1.1, width: 145, subType: 'feather', color: 'rgba(255, 215, 0, 0.85)'
-          });
-          this.hazardTelegraphs.push({
             type: 'line', x1: 0, y1: cy, x2: this.W, y2: cy,
             life: 1.1, width: 145, subType: 'feather', color: 'rgba(255, 215, 0, 0.85)'
           });
@@ -7447,7 +7693,6 @@ class Game {
           setTimeout(() => {
             if (!boss || boss.dead) return;
             this.sound.playCrit();
-            this.spawnBossGiantBeam({ x1: cx, y1: 0, x2: cx, y2: this.H, width: 155, color: '#eab308', coreColor: '#ffffff', life: 1.05 });
             this.spawnBossGiantBeam({ x1: 0, y1: cy, x2: this.W, y2: cy, width: 155, color: '#eab308', coreColor: '#ffffff', life: 1.05 });
             this.spawnMythicFrozenOrb({ x: cx, y: boss.y, targetX: cx, targetY: cy, r: 30, color: '#ffd700', shardColor: '#ffffff', shardType: 'holy_spear' });
           }, 1100);
@@ -7455,11 +7700,16 @@ class Game {
         break;
       }
 
-      case 9: { // 許德拉 (扇形三叉巨砲 + 正弦蛇行波 wave 預警與3倍毒龍巨砲)
+      case 9: { // 許德拉 (扇形三叉巨砲 + 衝擊波留劇毒再生囊 + 正弦蛇行波 wave 預警)
         const px = this.player ? this.player.x : this.W * 0.5;
+        this.spawnBossShockwaveRemnantSequence(boss, px, {
+          dropYs: [165, 285, 405], warningTime: 1.05, width: 145,
+          color: '#48e583', secondaryColor: '#10b981', subType: 'thunder',
+          remnantTheme: 'crystal', outerType: 'venom', innerType: 'bile'
+        });
         if (variant === 0) {
           this.showToast('🐍【許德拉・九首齊嘯劇毒三叉巨砲】扇形三叉3倍腐蝕巨束與劇毒煙火球！');
-          const targets = [Math.max(45, px - 135), px, Math.min(this.W - 45, px + 135)];
+          const targets = [Math.max(45, px - 135), Math.min(this.W - 45, px + 135)];
           this.hazardTelegraphs.push({
             type: 'cone', x: boss.x, y: boss.y + 20, angle: Math.PI / 2, spread: 1.2, radius: 520, rays: 3,
             life: 1.05, accentColor: '#22c55e'
@@ -7479,33 +7729,29 @@ class Game {
             this.spawnFireworkBurstShell({ x: boss.x, y: boss.y + 20, targetX: px, targetY: 260, r: 28, color: '#48e583', childType: 'venom' });
           }, 1050);
         } else {
-          this.showToast('☣️【許德拉・滅世腐蝕正弦毒龍巨砲】正弦蛇行彈道預警 + 3倍劇毒巨束與毒液冰封球！');
+          this.showToast('☣️【許德拉・滅世腐蝕正弦毒龍巨砲】正弦蛇行彈道預警 + 3倍劇毒衝擊波留彈與毒液冰封球！');
           this.hazardTelegraphs.push({
             type: 'wave', x1: boss.x, y1: boss.y + 20, x2: px, y2: this.H,
             amp: 85, freq: 0.026, width: 64, life: 1.05, accentColor: '#10b981'
           });
-          this.hazardTelegraphs.push({
-            type: 'line', x1: boss.x, y1: boss.y + 20, x2: px, y2: this.H,
-            life: 1.05, width: 165, color: 'rgba(34, 197, 94, 0.85)'
-          });
           setTimeout(() => {
             if (!boss || boss.dead) return;
             this.sound.playLaser(1020);
-            this.spawnBossGiantBeam({ x1: boss.x, y1: boss.y + 20, x2: px, y2: this.H, width: 175, color: '#10b981', coreColor: '#ffffff', life: 1.05 });
             this.spawnMythicFrozenOrb({ x: boss.x, y: boss.y + 20, targetX: px, targetY: 280, r: 29, color: '#22c55e', shardColor: '#48e583', shardType: 'venom' });
           }, 1050);
         }
         break;
       }
 
-      case 10: { // 獨眼巨人 (3倍赫菲斯托斯滅世獨眼巨砲 + 煙火天爐核)
+      case 10: { // 獨眼巨人 (3倍赫菲斯托斯滅世獨眼衝擊波留白熾熔爐核 + 煙火天爐核)
         const px = this.player ? this.player.x : this.W * 0.5;
+        this.spawnBossShockwaveRemnantSequence(boss, px, {
+          dropYs: [165, 285, 405], warningTime: 1.05, width: 165,
+          color: '#ff4766', secondaryColor: '#ff9138', subType: 'fire',
+          remnantTheme: 'crystal', outerType: 'magma', innerType: 'slag'
+        });
         if (variant === 0) {
-          this.showToast('👁️【獨眼巨人・赫菲斯托斯神鍛滅世死光】190px超巨型3倍獨眼高熱主砲與天爐煙火！');
-          this.hazardTelegraphs.push({
-            type: 'line', x1: boss.x, y1: boss.y + 10, x2: px, y2: this.H,
-            life: 1.1, width: 185, subType: 'fire', color: 'rgba(255, 71, 102, 0.88)'
-          });
+          this.showToast('👁️【獨眼巨人・赫菲斯托斯神鍛滅世死光】3倍獨眼高熱衝擊波留熔核與天爐煙火！');
           this.hazardTelegraphs.push({
             type: 'ring_nova', x: px, y: 260, r: 170, spokes: 16,
             life: 1.1, accentColor: '#ff4766'
@@ -7513,7 +7759,6 @@ class Game {
           setTimeout(() => {
             if (!boss || boss.dead) return;
             this.sound.playLaser(940);
-            this.spawnBossGiantBeam({ x1: boss.x, y1: boss.y + 10, x2: px, y2: this.H, width: 195, color: '#ff4766', coreColor: '#fef08a', life: 1.15 });
             this.spawnFireworkBurstShell({ x: boss.x, y: boss.y + 10, targetX: px, targetY: 260, r: 30, color: '#ff4766', childType: 'magma' });
           }, 1100);
         } else {
@@ -7538,16 +7783,21 @@ class Game {
         break;
       }
 
-      case 11: { // 玉藻前 (螺旋九尾狐火冰封球 + 四方魅影煙火交叉光束)
+      case 11: { // 玉藻前 (螺旋九尾狐火冰封球 + 衝擊波留妖狐魂燈 + 四方魅影煙火交叉光束)
         const px = this.player ? this.player.x : this.W * 0.5;
         const py = this.player ? this.player.y : this.H * 0.72;
+        this.spawnBossShockwaveRemnantSequence(boss, px, {
+          dropYs: [165, 285, 405], warningTime: 1.05, width: 150,
+          color: '#ec4899', secondaryColor: '#f472b6', subType: 'thunder',
+          remnantTheme: 'crystal', outerType: 'foxfire', innerType: 'chaos'
+        });
         if (variant === 0) {
           this.showToast('🦊【玉藻前・九尾妖月冰封球與三連巨砲】3倍妖狐冥火巨束與九尾螺旋狐火球！');
           this.hazardTelegraphs.push({
             type: 'spiral', x: px, y: 250, r: 220, arms: 9, spinDir: 1,
             life: 1.05, accentColor: '#ec4899'
           });
-          [-115, 0, 115].forEach(offset => {
+          [-115, 115].forEach(offset => {
             const tx = Math.max(35, Math.min(this.W - 35, px + offset));
             this.hazardTelegraphs.push({
               type: 'line', x1: boss.x, y1: boss.y, x2: tx, y2: this.H,
@@ -7557,7 +7807,7 @@ class Game {
           setTimeout(() => {
             if (!boss || boss.dead) return;
             this.sound.playLaser(1280);
-            [-115, 0, 115].forEach(offset => {
+            [-115, 115].forEach(offset => {
               const tx = Math.max(35, Math.min(this.W - 35, px + offset));
               this.spawnBossGiantBeam({ x1: boss.x, y1: boss.y, x2: tx, y2: this.H, width: 140, color: '#ec4899', coreColor: '#fdf2f8', life: 1.0 });
             });
@@ -7591,13 +7841,17 @@ class Game {
         break;
       }
 
-      case 12: { // 提亞瑪特 (創世終焉 3倍五帝龍息巨砲 + 雙子黑洞冰封球與煙火雙爆)
+      case 12: { // 提亞瑪特 (創世終焉 3倍五帝龍息衝擊波留龍晶 + 雙子黑洞冰封球與煙火雙爆)
         const px = this.player ? this.player.x : this.W * 0.5;
+        this.spawnBossShockwaveRemnantSequence(boss, px, {
+          dropYs: [160, 280, 400], warningTime: 1.1, width: 170,
+          color: '#a855f7', secondaryColor: '#38bdf8', subType: 'thunder',
+          remnantTheme: 'crystal', outerType: 'chaos_nova', innerType: 'chaos'
+        });
         if (variant === 0) {
-          this.showToast('🌌【提亞瑪特・創世終焉萬象歸虛巨砲】原初龍神3倍毀滅巨束 + 創世冰封球 + 五彩煙火星爆！');
+          this.showToast('🌌【提亞瑪特・創世終焉萬象歸虛巨砲】原初龍神3倍衝擊波留龍晶 + 創世冰封球 + 五彩煙火星爆！');
           const beams = [
             { x2: Math.max(40, px - 140), color: '#38bdf8', w: 135 },
-            { x2: px, color: '#ff4766', w: 205 },
             { x2: Math.min(this.W - 40, px + 140), color: '#a855f7', w: 135 }
           ];
           this.hazardTelegraphs.push({
@@ -9034,48 +9288,59 @@ class Game {
     // 敵彈推進 (BUILD-037: 支援 Diablo 冰封球旋轉噴射、璀璨煙火母彈二段擴散、迦樓羅「衝擊波➔留羽➔爆炸」三段連鎖)
     this.ebullets.forEach(eb => {
       if (eb.type === 'garuda_shockwave') {
-        // BUILD-037: 迦樓羅第一段「巨型神鳥衝擊波彈」(3倍巨型風壓球)，沿途每隔固定距離在身後留下「滯空金羽炸彈」！
+        // BUILD-038: 全 Boss 通用第一段「3.5倍巨型衝擊波母彈」，沿途每隔固定距離在身後留下該 Boss 專屬「滯空元素/金羽定時炸彈」！
         eb.shockAge = (eb.shockAge || 0) + dt;
         if (!eb.droppedIndices) eb.droppedIndices = new Set();
         const dropYs = eb.dropCheckpoints || [165, 285, 405];
+        const mainColor = eb.color || '#ffd700';
+        const secColor = eb.secondaryColor || '#ff9138';
         dropYs.forEach((chkY, idx) => {
           if (!eb.droppedIndices.has(idx) && eb.y >= chkY) {
             eb.droppedIndices.add(idx);
             this.sound.playLaser(1380);
-            // 衝擊波掠過後，原地留下金羽定時炸彈 + 視覺擴散環
+            // 衝擊波掠過後，原地留下專屬元素/金羽定時炸彈 + 視覺擴散環
             const fb = new Bullet(eb.x, chkY, 0, 0, false, 1, 'floating_feather');
             fb.r = 20;
-            fb.detonateTimer = 2.0;
-            fb.maxDetonateTimer = 2.0;
+            fb.color = mainColor;
+            fb.secondaryColor = secColor;
+            fb.remnantTheme = eb.remnantTheme || 'feather';
+            fb.outerType = eb.outerType || 'feather_shard';
+            fb.innerType = eb.innerType || 'feather';
+            fb.detonateTimer = eb.fuseTime || 1.85;
+            fb.maxDetonateTimer = fb.detonateTimer;
             this.ebullets.push(fb);
             if (!this.reiganShockwaves) this.reiganShockwaves = [];
-            this.reiganShockwaves.push({ x: eb.x, y: chkY, r: 12, maxR: 85, life: 0.35, maxLife: 0.35, color: '#ffd700' });
+            this.reiganShockwaves.push({ x: eb.x, y: chkY, r: 12, maxR: 85, life: 0.35, maxLife: 0.35, color: mainColor });
           }
         });
       } else if (eb.type === 'floating_feather') {
-        // BUILD-037: 迦樓羅第二段「衝擊波遺留之滯空金羽」，倒數結束後引發 3 倍巨型羽刃煙火大爆炸！
+        // BUILD-038: 全 Boss 通用第二段「衝擊波遺留之滯空元素/金羽炸彈」，倒數結束後引發 20 發 3 倍巨型雙環煙火大爆炸！
         eb.vx *= 0.90;
         eb.vy *= 0.90;
-        eb.detonateTimer = (eb.detonateTimer !== undefined ? eb.detonateTimer : 2.2) - dt;
+        eb.detonateTimer = (eb.detonateTimer !== undefined ? eb.detonateTimer : 1.85) - dt;
         if (eb.detonateTimer <= 0 && !eb.dead) {
           eb.dead = true;
           this.sound.playExplosion(true);
           this.shake(10, 0.32);
+          const mainColor = eb.color || '#ffd700';
+          const secColor = eb.secondaryColor || '#ff9138';
+          const outerType = eb.outerType || 'feather_shard';
+          const innerType = eb.innerType || 'feather';
           if (!this.reiganShockwaves) this.reiganShockwaves = [];
-          this.reiganShockwaves.push({ x: eb.x, y: eb.y, r: 16, maxR: 150, life: 0.45, maxLife: 0.45, color: '#ffd700' });
-          // 外圈 12 道 3 倍巨型神羽飛刃 + 內圈 8 道烈陽火羽煙火式擴散
+          this.reiganShockwaves.push({ x: eb.x, y: eb.y, r: 16, maxR: 155, life: 0.45, maxLife: 0.45, color: mainColor });
+          // 外圈 12 道 3 倍巨型主元素裂片 + 內圈 8 道 3 倍巨型次元素煙火式擴散
           for (let a = 0; a < 12; a++) {
             const angle = (a / 12) * Math.PI * 2;
-            const shard = new Bullet(eb.x, eb.y, Math.cos(angle) * 235, Math.sin(angle) * 235, false, 1, 'feather_shard');
-            shard.color = '#ffd700';
+            const shard = new Bullet(eb.x, eb.y, Math.cos(angle) * 235, Math.sin(angle) * 235, false, 1, outerType);
+            shard.color = mainColor;
             shard.r = 16; // 原 r=5 放大超過 3 倍！
             shard.isMega = true;
             this.ebullets.push(shard);
           }
           for (let bIdx = 0; bIdx < 8; bIdx++) {
             const angle2 = (bIdx / 8) * Math.PI * 2 + (Math.PI / 8);
-            const innerShard = new Bullet(eb.x, eb.y, Math.cos(angle2) * 145, Math.sin(angle2) * 145, false, 1, 'feather');
-            innerShard.color = '#ff9138';
+            const innerShard = new Bullet(eb.x, eb.y, Math.cos(angle2) * 145, Math.sin(angle2) * 145, false, 1, innerType);
+            innerShard.color = secColor;
             innerShard.r = 14;
             innerShard.isMega = true;
             this.ebullets.push(innerShard);
@@ -10474,7 +10739,7 @@ class Game {
   }
 
   // ------------------------------------------------------------
-  // BUILD-037: 5. 迦樓羅專屬「衝擊波巨砲 ➔ 遺留金羽 ➔ 二段大爆炸」三段連鎖預警
+  // BUILD-038: 5. 全 Boss 通用「3倍巨型衝擊波巨砲 ➔ 沿途遺留專屬元素/金羽定時炸彈 ➔ 二段 3 倍煙火大爆炸」三段連鎖預警
   // ------------------------------------------------------------
   renderHazardGarudaFeatherPathTelegraph(ctx, h) {
     const x = h.x !== undefined ? h.x : this.W * 0.5;
@@ -10482,22 +10747,24 @@ class Game {
     const dropYs = h.dropYs || [165, 285, 405];
     const maxLife = h.maxLife || h.life || 1.0;
     const progress = Math.max(0, Math.min(1.0, 1.0 - (h.life / maxLife)));
+    const mainColor = h.accentColor || '#ffd700';
+    const secColor = h.secondaryColor || '#f59e0b';
 
     ctx.save();
-    // 1. 第一階段預告：中央 3 倍巨型神鳥衝擊波走廊
+    // 1. 第一階段預告：中央 3 倍巨型衝擊波走廊
     const grad = ctx.createLinearGradient(x - halfW, 0, x + halfW, 0);
-    grad.addColorStop(0, 'rgba(255, 215, 0, 0)');
-    grad.addColorStop(0.2, `rgba(245, 158, 11, ${(0.18 + progress * 0.22).toFixed(2)})`);
-    grad.addColorStop(0.5, `rgba(255, 215, 0, ${(0.35 + progress * 0.35).toFixed(2)})`);
-    grad.addColorStop(0.8, `rgba(245, 158, 11, ${(0.18 + progress * 0.22).toFixed(2)})`);
-    grad.addColorStop(1, 'rgba(255, 215, 0, 0)');
+    grad.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    grad.addColorStop(0.2, secColor + '44');
+    grad.addColorStop(0.5, mainColor + '88');
+    grad.addColorStop(0.8, secColor + '44');
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = grad;
     ctx.fillRect(x - halfW, 0, halfW * 2, this.H);
 
-    // 衝擊波推進V型風壓波紋
-    ctx.strokeStyle = '#fef08a';
+    // 衝擊波推進 V 型高壓波紋
+    ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2.8;
-    ctx.shadowColor = '#ffd700';
+    ctx.shadowColor = mainColor;
     ctx.shadowBlur = 14;
     for (let wy = ((this.time * 360) % 110); wy < this.H; wy += 110) {
       ctx.beginPath();
@@ -10507,12 +10774,12 @@ class Game {
       ctx.stroke();
     }
 
-    // 2. 第二/三階段預告：沿途即將留下羽毛並引爆的 3 處「金羽爆破預警法陣」
+    // 2. 第二/三階段預告：沿途即將留下元素炸彈/金羽並引爆的 3 處「二段爆破預警法陣」
     dropYs.forEach((dy, idx) => {
       const bombR = 56;
       ctx.save();
       ctx.translate(x, dy);
-      ctx.strokeStyle = '#ffd700';
+      ctx.strokeStyle = mainColor;
       ctx.lineWidth = 2.2;
       ctx.setLineDash([6, 5]);
       ctx.lineDashOffset = -this.time * 60;
@@ -10521,7 +10788,7 @@ class Game {
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // 8 向羽刃爆炸預告虛線
+      // 8 向煙火爆炸預告虛線
       for (let a = 0; a < 8; a++) {
         const ang = (a / 8) * Math.PI * 2 + this.time * 0.8;
         ctx.beginPath();
@@ -10530,7 +10797,7 @@ class Game {
         ctx.stroke();
       }
 
-      // 中心金色羽毛印記
+      // 中心高能符文印記
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
       ctx.arc(0, 0, 6 + Math.sin(this.time * 16 + idx) * 2, 0, Math.PI * 2);
@@ -10542,7 +10809,7 @@ class Game {
   }
 
   // ------------------------------------------------------------
-  // BUILD-037: 神話 Boss 強化招式生成器 (Diablo 冰封球 / 璀璨煙火母彈 / 迦樓羅衝擊波留羽連鎖)
+  // BUILD-038: 全體神話 Boss 強化招式生成器 (Diablo 冰封球 / 璀璨煙火母彈 / 全 Boss 通用「衝擊波➔留炸彈➔3倍煙火大爆炸」三段連鎖)
   // ------------------------------------------------------------
   spawnMythicFrozenOrb(opts = {}) {
     const x = opts.x !== undefined ? opts.x : this.W * 0.5;
@@ -10585,35 +10852,66 @@ class Game {
     return shell;
   }
 
-  spawnGarudaShockwaveFeatherSequence(boss, targetX, dropYs = [165, 285, 405], warningTime = 1.0) {
+  spawnBossShockwaveRemnantSequence(boss, targetX, opts = {}) {
     const tx = Math.max(48, Math.min(this.W - 48, targetX));
-    // 階段 1：複合彈道預警 (顯示 3 倍巨型衝擊波風道 + 3 處羽毛定時炸彈落點)
+    const dropYs = opts.dropYs || [165, 285, 405];
+    const warningTime = opts.warningTime || 1.0;
+    const width = opts.width || 145;
+    const mainColor = opts.color || '#ffd700';
+    const secColor = opts.secondaryColor || '#ff9138';
+    const beamSubType = opts.subType || 'feather';
+    const remnantTheme = opts.remnantTheme || 'crystal';
+    const outerType = opts.outerType || 'feather_shard';
+    const innerType = opts.innerType || 'feather';
+
+    // 階段 1：複合彈道預警 (顯示 3 倍巨型衝擊波走廊 + 3 處元素/金羽定時炸彈落點)
     this.hazardTelegraphs.push({
       type: 'garuda_feather_path',
       x: tx,
-      width: 145,
+      width: width,
       dropYs: dropYs,
+      accentColor: mainColor,
+      secondaryColor: secColor,
       life: warningTime,
       maxLife: warningTime
     });
-    // 階段 2：預警結束後，先發射「3倍巨型黃金衝擊波光束」＋「3倍巨型神鳥衝擊波彈 (garuda_shockwave)」！
+    // 階段 2：預警結束後，先發射「3倍巨型衝擊波光束」＋「3.5倍巨型衝擊波母彈 (garuda_shockwave)」！
     setTimeout(() => {
       if (!boss || boss.dead) return;
       this.sound.playLaser(1420);
       this.shake(15, 0.45);
       this.spawnBossGiantBeam({
         x1: tx, y1: 0, x2: tx, y2: this.H,
-        width: 145, color: '#eab308', coreColor: '#ffffff', subType: 'feather', life: 0.65
+        width: width, color: mainColor, coreColor: '#ffffff', subType: beamSubType, life: 0.65
       });
-      // 巨型衝擊波彈高速掠過走廊，沿途在每個 dropY 檢查點身後留下「滯空金羽炸彈 (floating_feather)」，隨後再引爆！
+      // 巨型衝擊波彈高速掠過走廊，沿途在每個 dropY 檢查點身後留下「滯空元素/金羽定時炸彈」，隨後再引爆 20 發 3 倍煙火！
       const shockOrb = new Bullet(tx, 30, 0, 620, false, 1, 'garuda_shockwave');
       shockOrb.r = 30; // 超過 3.5 倍巨型衝擊波彈！
       shockOrb.isMega = true;
-      shockOrb.color = '#ffd700';
+      shockOrb.color = mainColor;
+      shockOrb.secondaryColor = secColor;
+      shockOrb.remnantTheme = remnantTheme;
+      shockOrb.outerType = outerType;
+      shockOrb.innerType = innerType;
       shockOrb.dropCheckpoints = dropYs;
+      shockOrb.fuseTime = opts.fuseTime || 1.85;
       shockOrb.life = 1.8;
       this.ebullets.push(shockOrb);
     }, warningTime * 1000);
+  }
+
+  spawnGarudaShockwaveFeatherSequence(boss, targetX, dropYs = [165, 285, 405], warningTime = 1.0) {
+    this.spawnBossShockwaveRemnantSequence(boss, targetX, {
+      dropYs: dropYs,
+      warningTime: warningTime,
+      width: 145,
+      color: '#ffd700',
+      secondaryColor: '#ff9138',
+      subType: 'feather',
+      remnantTheme: 'feather',
+      outerType: 'feather_shard',
+      innerType: 'feather'
+    });
   }
 
   // ============================================================
@@ -11187,28 +11485,30 @@ class Game {
     this.ebullets.forEach(eb => {
       ctx.save();
       if (eb.type === 'garuda_shockwave') {
-        // BUILD-037: 迦樓羅第一段「3倍巨型神鳥衝擊波」(寬達 110px 的黃金暴風壓縮神鳥彈)
+        // BUILD-038: 全 Boss 通用第一段「3.5倍巨型衝擊波母彈」(寬達 110px 的高能壓縮衝擊波球)
         ctx.translate(eb.x, eb.y);
         ctx.globalCompositeOperation = 'lighter';
         const pulse = 1.0 + Math.sin(this.time * 35) * 0.12;
         const R = (eb.r || 30) * pulse;
-        // 1. 外層黃金颶風擴散光暈
+        const mainC = eb.color || '#ffd700';
+        const secC = eb.secondaryColor || '#f59e0b';
+        // 1. 外層高壓颶風擴散光暈
         const rad = ctx.createRadialGradient(0, 0, 4, 0, 0, R * 2.1);
         rad.addColorStop(0, '#ffffff');
-        rad.addColorStop(0.35, '#fde047');
-        rad.addColorStop(0.7, 'rgba(245, 158, 11, 0.55)');
+        rad.addColorStop(0.35, mainC);
+        rad.addColorStop(0.7, secC + '88');
         rad.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.fillStyle = rad;
         ctx.beginPath();
         ctx.arc(0, 0, R * 2.1, 0, Math.PI * 2);
         ctx.fill();
-        // 2. 三重神鳥裂空 V 型衝擊波翼刃
+        // 2. 三重裂空 V 型衝擊波翼刃
         for (let w = 0; w < 3; w++) {
           const wy = w * 16 - 10;
           const wingSpan = R * (1.85 - w * 0.32);
-          ctx.strokeStyle = w === 0 ? '#ffffff' : '#ffd700';
+          ctx.strokeStyle = w === 0 ? '#ffffff' : mainC;
           ctx.lineWidth = 5.0 - w * 1.2;
-          ctx.shadowColor = '#f59e0b';
+          ctx.shadowColor = secC;
           ctx.shadowBlur = 18;
           ctx.beginPath();
           ctx.moveTo(-wingSpan, wy - 24);
@@ -11333,25 +11633,57 @@ class Game {
           ctx.moveTo(12, 0); ctx.quadraticCurveTo(0, -6, -10, 0); ctx.quadraticCurveTo(0, 6, 12, 0); ctx.fill();
         }
       } else if (eb.type === 'floating_feather') {
-        const img = this.images.fx_golden_feather;
+        const mainC = eb.color || '#ffd700';
+        const secC = eb.secondaryColor || '#f59e0b';
         ctx.translate(eb.x, eb.y);
-        const floatRot = Math.sin(this.time * 4 + eb.x) * 0.4;
-        ctx.rotate(floatRot);
-        if (img && img.complete && img.naturalWidth > 0) {
-          ctx.globalCompositeOperation = 'lighter';
-          ctx.drawImage(img, -28, -28, 56, 56);
+        if (!eb.remnantTheme || eb.remnantTheme === 'feather') {
+          const img = this.images.fx_golden_feather;
+          const floatRot = Math.sin(this.time * 4 + eb.x) * 0.4;
+          ctx.rotate(floatRot);
+          if (img && img.complete && img.naturalWidth > 0) {
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.drawImage(img, -28, -28, 56, 56);
+          } else {
+            ctx.fillStyle = mainC; ctx.shadowColor = secC; ctx.shadowBlur = 16;
+            ctx.beginPath();
+            ctx.moveTo(22, 0); ctx.quadraticCurveTo(0, -11, -18, 0); ctx.quadraticCurveTo(0, 11, 22, 0); ctx.fill();
+          }
         } else {
-          ctx.fillStyle = '#ffd700'; ctx.shadowColor = '#f59e0b'; ctx.shadowBlur = 16;
+          // BUILD-038: 其他 11 位神話 Boss 專屬「衝擊波遺留之元素晶核/魔眼/龍晶定時炸彈」渲染
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.rotate(this.time * 5.2);
+          const coreGrad = ctx.createRadialGradient(0, 0, 2, 0, 0, 26);
+          coreGrad.addColorStop(0, '#ffffff');
+          coreGrad.addColorStop(0.45, mainC);
+          coreGrad.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = coreGrad;
           ctx.beginPath();
-          ctx.moveTo(22, 0); ctx.quadraticCurveTo(0, -11, -18, 0); ctx.quadraticCurveTo(0, 11, 22, 0); ctx.fill();
+          ctx.arc(0, 0, 26, 0, Math.PI * 2);
+          ctx.fill();
+          // 八芒神話符文晶核棱角
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2.4;
+          ctx.shadowColor = mainC;
+          ctx.shadowBlur = 14;
+          ctx.beginPath();
+          for (let p = 0; p < 8; p++) {
+            const pa = (p / 8) * Math.PI * 2;
+            const rLen = p % 2 === 0 ? 20 : 10;
+            if (p === 0) ctx.moveTo(Math.cos(pa) * rLen, Math.sin(pa) * rLen);
+            else ctx.lineTo(Math.cos(pa) * rLen, Math.sin(pa) * rLen);
+          }
+          ctx.closePath();
+          ctx.stroke();
+          ctx.restore();
         }
-        // 迦樓羅神羽定時炸彈精緻倒數盤 (倒數收縮環 + 旋轉風術刻度 + 臨爆急速紅光)
-        const maxFuse = eb.maxDetonateTimer || 2.0;
+        // 全 Boss 通用定時炸彈精緻倒數盤 (倒數收縮環 + 旋轉能量刻度 + 臨爆急速紅光)
+        const maxFuse = eb.maxDetonateTimer || 1.85;
         const fuseRatio = Math.max(0, (eb.detonateTimer || 0) / maxFuse);
         const dangerPulse = Math.sin(this.time * (12 + (1 - fuseRatio) * 34)) * 0.5 + 0.5;
 
-        // 外層旋轉風旋刻度環
-        ctx.strokeStyle = `rgba(255, 215, 0, ${0.45 + 0.35 * (1 - fuseRatio)})`;
+        // 外層旋轉刻度環
+        ctx.strokeStyle = mainC;
         ctx.lineWidth = 2.0;
         ctx.setLineDash([5, 5]);
         ctx.lineDashOffset = -this.time * 45;
@@ -11361,9 +11693,9 @@ class Game {
         ctx.setLineDash([]);
 
         // 核心倒數時鐘進度弧 (隨時間收縮)
-        ctx.strokeStyle = fuseRatio < 0.35 ? `rgba(255, 71, 102, ${0.75 + 0.25 * dangerPulse})` : '#ffd700';
+        ctx.strokeStyle = fuseRatio < 0.35 ? `rgba(255, 71, 102, ${0.75 + 0.25 * dangerPulse})` : mainC;
         ctx.lineWidth = 3.4;
-        ctx.shadowColor = fuseRatio < 0.35 ? '#ff4766' : '#ffd700';
+        ctx.shadowColor = fuseRatio < 0.35 ? '#ff4766' : mainC;
         ctx.shadowBlur = 12;
         ctx.beginPath();
         ctx.arc(0, 0, 28, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * fuseRatio);
