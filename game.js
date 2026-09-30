@@ -5453,6 +5453,7 @@ class Game {
     });
     this.ebullets = [];
     this.hazardTelegraphs = [];
+    this.bossGiantBeams = [];
     this.bossMinions = [];
     this.lavaPools = [];
     this.enemies = [];
@@ -7077,44 +7078,134 @@ class Game {
   releaseBossUltimate(boss) {
     const s = boss.stage || 1;
     this.sound.playBossUltimateCast(s);
-    this.shake(12, 0.45);
-    this.screenFlashAlpha = 0.55;
+    this.shake(15, 0.55);
+    this.screenFlashAlpha = 0.62;
     const variant = (boss.ultVariant !== undefined) ? (boss.ultVariant % 2) : 0;
 
     switch (s) {
-      case 1: { // 機甲庫巴・烈焰風暴 (瑪利歐風格)
-        this.showToast('🔥【機甲庫巴・終極烈焰風暴】大招降臨！');
-        this.sound.playMarioStomp();
-        this.shake(10, 0.4);
-        for (let i = -3; i <= 3; i++) {
+      case 1: { // 機甲庫巴・烈焰風暴 (瑪利歐風格 - 巨型焦熱吐息主砲 + 雙重煉獄火柱)
+        if (variant === 0) {
+          this.showToast('🔥【機甲庫巴・終極焦熱崩星巨砲】預警鎖定！小心中央與雙翼巨型火柱！');
+          this.sound.playMarioStomp();
+          const bx = boss.x, by = boss.y + 18;
+          // 中央巨型焦熱吐息預警 + 左右斜向烈焰封鎖線
+          this.hazardTelegraphs.push({
+            type: 'line', x1: bx, y1: by, x2: bx, y2: this.H,
+            life: 1.0, width: 72, subType: 'fire', color: 'rgba(234, 88, 12, 0.78)'
+          });
+          this.hazardTelegraphs.push({
+            type: 'line', x1: bx, y1: by, x2: Math.max(20, bx - 155), y2: this.H,
+            life: 1.0, width: 42, subType: 'fire', color: 'rgba(255, 71, 102, 0.65)'
+          });
+          this.hazardTelegraphs.push({
+            type: 'line', x1: bx, y1: by, x2: Math.min(this.W - 20, bx + 155), y2: this.H,
+            life: 1.0, width: 42, subType: 'fire', color: 'rgba(255, 71, 102, 0.65)'
+          });
           setTimeout(() => {
             if (!boss || boss.dead) return;
-            const eb = new Bullet(boss.x + i * 25, boss.y + 20, i * 45, 190, false, 1, 'fireball');
-            eb.color = '#ff4766';
-            eb.r = 10;
-            this.ebullets.push(eb);
-          }, Math.abs(i) * 120);
+            this.sound.playLaser(980);
+            this.spawnBossGiantBeam({ x1: bx, y1: by, x2: bx, y2: this.H, width: 78, color: '#ea580c', coreColor: '#fef08a', life: 1.05 });
+            this.spawnBossGiantBeam({ x1: bx, y1: by, x2: Math.max(20, bx - 155), y2: this.H, width: 46, color: '#ff4766', coreColor: '#ffffff', life: 0.9 });
+            this.spawnBossGiantBeam({ x1: bx, y1: by, x2: Math.min(this.W - 20, bx + 155), y2: this.H, width: 46, color: '#ff4766', coreColor: '#ffffff', life: 0.9 });
+          }, 1000);
+          for (let i = -3; i <= 3; i++) {
+            setTimeout(() => {
+              if (!boss || boss.dead) return;
+              const eb = new Bullet(boss.x + i * 25, boss.y + 20, i * 45, 205, false, 1, 'fireball');
+              eb.color = '#ff4766';
+              eb.r = 11;
+              this.ebullets.push(eb);
+            }, Math.abs(i) * 110);
+          }
+        } else {
+          this.showToast('🌋【機甲庫巴・魔王重踏雙子煉獄柱】全屏震動與雙重巨型熔火光柱！');
+          this.sound.playMarioStomp();
+          const px = this.player ? this.player.x : this.W * 0.5;
+          const col1 = Math.max(55, px - 75);
+          const col2 = Math.min(this.W - 55, px + 75);
+          [col1, col2].forEach(cx => {
+            this.hazardTelegraphs.push({
+              type: 'line', x1: cx, y1: 0, x2: cx, y2: this.H,
+              life: 1.05, width: 62, subType: 'fire', color: 'rgba(234, 88, 12, 0.78)'
+            });
+          });
+          setTimeout(() => {
+            if (!boss || boss.dead) return;
+            this.sound.playLaser(920);
+            [col1, col2].forEach(cx => {
+              this.spawnBossGiantBeam({ x1: cx, y1: 0, x2: cx, y2: this.H, width: 66, color: '#f97316', coreColor: '#fef08a', life: 1.0 });
+            });
+            for (let k = -4; k <= 4; k++) {
+              const eb = new Bullet(boss.x + k * 22, boss.y + 20, k * 38, 210, false, 1, 'fireball');
+              eb.color = '#f59e0b'; eb.r = 10;
+              this.ebullets.push(eb);
+            }
+          }, 1050);
         }
         break;
       }
 
-      case 2: { // 災厄加儂・魔怨狂瀾 (薩爾達風格)
-        this.showToast('👁️【災厄加儂・魔怨狂瀾】全域鎖定！');
-        this.sound.playZeldaSecretChime();
-        this.shake(12, 0.45);
-        for (let a = 0; a < 8; a++) {
-          const ang = (a / 8) * Math.PI * 2;
-          const eb = new Bullet(boss.x, boss.y + 15, Math.cos(ang) * 170, Math.sin(ang) * 170, false, 1, 'chaos');
-          eb.color = '#c084fc';
-          eb.r = 8;
-          this.ebullets.push(eb);
-        }
-        break;
-      }
-
-      case 3: { // 迦樓羅 (大招彈幕減少 30%)
+      case 2: { // 災厄加儂・魔怨狂瀾 (薩爾達風格 - 守護者巨型深淵雷射 + 血月十字滅世砲)
+        const px = this.player ? this.player.x : this.W * 0.5;
+        const py = this.player ? this.player.y : this.H * 0.75;
         if (variant === 0) {
-          // 大招 1：羽化流星天罰 (漫天金羽瀑布 + 3 枚滯空金羽炸彈，原24發/4枚減少30%)
+          this.showToast('👁️【災厄加儂・古代魔怨終焉巨砲】紅外線鎖定完成！巨型魔怨光束即將貫穿！');
+          this.sound.playZeldaSecretChime();
+          this.hazardTelegraphs.push({
+            type: 'line', x1: boss.x, y1: boss.y + 15, x2: px, y2: this.H,
+            life: 1.05, width: 68, color: 'rgba(192, 132, 252, 0.8)'
+          });
+          this.hazardTelegraphs.push({
+            type: 'circle', x: px, y: py, r: 72,
+            life: 1.05, color: 'rgba(255, 71, 102, 0.75)'
+          });
+          setTimeout(() => {
+            if (!boss || boss.dead) return;
+            this.sound.playLaser(1350);
+            this.spawnBossGiantBeam({ x1: boss.x, y1: boss.y + 15, x2: px, y2: this.H, width: 74, color: '#c084fc', coreColor: '#ffffff', life: 1.05 });
+          }, 1050);
+          for (let a = 0; a < 10; a++) {
+            const ang = (a / 10) * Math.PI * 2;
+            const eb = new Bullet(boss.x, boss.y + 15, Math.cos(ang) * 185, Math.sin(ang) * 185, false, 1, 'chaos');
+            eb.color = '#c084fc';
+            eb.r = 8.5;
+            this.ebullets.push(eb);
+          }
+        } else {
+          this.showToast('🌑【災厄加儂・血月十字魔怨滅世砲】十字與斜角深淵光束全面封鎖！');
+          this.sound.playZeldaSecretChime();
+          const cx = boss.x, cy = boss.y + 20;
+          this.hazardTelegraphs.push({ type: 'line', x1: cx, y1: 0, x2: cx, y2: this.H, life: 1.1, width: 58, color: 'rgba(192, 132, 252, 0.78)' });
+          this.hazardTelegraphs.push({ type: 'line', x1: 0, y1: py, x2: this.W, y2: py, life: 1.1, width: 52, color: 'rgba(255, 71, 102, 0.75)' });
+          setTimeout(() => {
+            if (!boss || boss.dead) return;
+            this.sound.playLaser(1280);
+            this.spawnBossGiantBeam({ x1: cx, y1: 0, x2: cx, y2: this.H, width: 64, color: '#a855f7', coreColor: '#ffffff', life: 1.0 });
+            this.spawnBossGiantBeam({ x1: 0, y1: py, x2: this.W, y2: py, width: 56, color: '#ff4766', coreColor: '#ffffff', life: 1.0 });
+            for (let a = 0; a < 12; a++) {
+              const ang = (a / 12) * Math.PI * 2;
+              const eb = new Bullet(cx, cy, Math.cos(ang) * 195, Math.sin(ang) * 195, false, 1, 'chaos');
+              eb.color = '#f43f5e'; eb.r = 8;
+              this.ebullets.push(eb);
+            }
+          }, 1100);
+        }
+        break;
+      }
+
+      case 3: { // 迦樓羅 (大招強化：日輪貫天金羽巨砲 + 三連暴風神喙巨型光束)
+        const targetX = this.player ? this.player.x : this.W * 0.5;
+        if (variant === 0) {
+          this.showToast('🦅【迦樓羅・日輪貫天金羽巨砲】漫天金羽風暴與中央太陽神光貫穿！');
+          this.hazardTelegraphs.push({
+            type: 'line', x1: targetX, y1: 0, x2: targetX, y2: this.H,
+            life: 1.05, width: 66, subType: 'feather', color: 'rgba(255, 215, 0, 0.78)'
+          });
+          setTimeout(() => {
+            if (!boss || boss.dead) return;
+            this.sound.playLaser(1420);
+            this.spawnBossGiantBeam({ x1: targetX, y1: 0, x2: targetX, y2: this.H, width: 72, color: '#eab308', coreColor: '#ffffff', subType: 'feather', life: 1.0 });
+          }, 1050);
           const featherCount = 16;
           for (let i = 0; i < featherCount; i++) {
             setTimeout(() => {
@@ -7134,44 +7225,49 @@ class Game {
             this.ebullets.push(fb);
           }
         } else {
-          // 新增大招 2：暴風神喙・萬里穿雲擊 (左右風暴封鎖 + 穿雲俯衝風刃爆發，原8發減少30%為5發)
+          this.showToast('🌪️【迦樓羅・暴風神喙三連貫天巨砲】三道黃金風暴巨束全面轟擊！');
           this.hazardTelegraphs.push({
-            type: 'line', x1: 30, y1: 0, x2: 30, y2: this.H,
-            life: 1.2, width: 36, color: 'rgba(255, 215, 0, 0.5)'
+            type: 'line', x1: 36, y1: 0, x2: 36, y2: this.H,
+            life: 1.05, width: 48, subType: 'feather', color: 'rgba(255, 215, 0, 0.7)'
           });
           this.hazardTelegraphs.push({
-            type: 'line', x1: this.W - 30, y1: 0, x2: this.W - 30, y2: this.H,
-            life: 1.2, width: 36, color: 'rgba(255, 215, 0, 0.5)'
+            type: 'line', x1: this.W - 36, y1: 0, x2: this.W - 36, y2: this.H,
+            life: 1.05, width: 48, subType: 'feather', color: 'rgba(255, 215, 0, 0.7)'
           });
-          const targetX = this.player.x;
           this.hazardTelegraphs.push({
             type: 'line', x1: targetX, y1: 0, x2: targetX, y2: this.H,
-            life: 1.0, width: 50, color: 'rgba(255, 71, 102, 0.65)'
+            life: 1.05, width: 64, subType: 'feather', color: 'rgba(255, 71, 102, 0.8)'
           });
           setTimeout(() => {
             if (!boss || boss.dead) return;
             this.sound.playLaser(1300);
-            this.shake(14, 0.5);
+            this.spawnBossGiantBeam({ x1: 36, y1: 0, x2: 36, y2: this.H, width: 52, color: '#f59e0b', coreColor: '#ffffff', life: 0.95 });
+            this.spawnBossGiantBeam({ x1: this.W - 36, y1: 0, x2: this.W - 36, y2: this.H, width: 52, color: '#f59e0b', coreColor: '#ffffff', life: 0.95 });
+            this.spawnBossGiantBeam({ x1: targetX, y1: 0, x2: targetX, y2: this.H, width: 70, color: '#ffd700', coreColor: '#ffffff', life: 1.05 });
             for (let a = 0; a < 5; a++) {
               const ang = (a / 5) * Math.PI * 2;
               const eb = new Bullet(targetX, 250, Math.cos(ang) * 240, Math.sin(ang) * 240, false, 1, 'feather');
               eb.color = '#ffd700'; eb.r = 8;
               this.ebullets.push(eb);
             }
-          }, 1000);
+          }, 1050);
         }
         break;
       }
-      case 4: { // 雷公 (大招彈幕減少 30%)
+
+      case 4: { // 雷公 (大招強化：九天橫斷雷霆巨柱 + 乾坤超電磁十字雷砲)
         if (variant === 0) {
-          // 大招 1：九天雷霆萬鈞 (全屏天頂交錯雷網 + 五芒星雷爆，原4道/20發減少30%為3道/13發)
+          this.showToast('⚡【雷公・九天雷霆萬鈞巨柱】三道橫斷天雷巨束與雷暴彈幕降臨！');
           for (let k = 0; k < 3; k++) {
-            const ly = 150 + k * 130;
+            const ly = 160 + k * 140;
             this.hazardTelegraphs.push({
               type: 'line', x1: 0, y1: ly, x2: this.W, y2: ly,
-              life: 1.0, width: 22, color: 'rgba(56, 189, 248, 0.65)'
+              life: 1.0, width: 42, subType: 'thunder', color: 'rgba(56, 189, 248, 0.78)'
             });
             setTimeout(() => {
+              if (!boss || boss.dead) return;
+              this.sound.playLaser(1500);
+              this.spawnBossGiantBeam({ x1: 0, y1: ly, x2: this.W, y2: ly, width: 46, color: '#38bdf8', coreColor: '#ffffff', subType: 'thunder', life: 0.9 });
               for (let x = 20; x < this.W; x += 55) {
                 const eb = new Bullet(x, ly, 0, 220, false, 1, 'thunder_bolt');
                 eb.color = '#67ffff'; eb.r = 6;
@@ -7186,33 +7282,47 @@ class Game {
             this.ebullets.push(eb);
           }
         } else {
-          // 新增大招 2：乾坤雷煞・雷暴核心超載 (環狀雷球電弧 + 十字落雷裂隙，原16發減少30%為11發)
+          this.showToast('⚡【雷公・乾坤雷煞十字超電磁巨砲】全屏十字高壓雷柱貫穿戰場！');
           const cx = boss.x, cy = boss.y;
+          const py = this.player ? this.player.y : this.H * 0.72;
           this.hazardTelegraphs.push({
             type: 'line', x1: cx, y1: 0, x2: cx, y2: this.H,
-            life: 1.2, width: 30, color: 'rgba(56, 189, 248, 0.7)'
+            life: 1.15, width: 60, subType: 'thunder', color: 'rgba(56, 189, 248, 0.82)'
           });
           this.hazardTelegraphs.push({
-            type: 'line', x1: 0, y1: cy, x2: this.W, y2: cy,
-            life: 1.2, width: 30, color: 'rgba(56, 189, 248, 0.7)'
+            type: 'line', x1: 0, y1: py, x2: this.W, y2: py,
+            life: 1.15, width: 54, subType: 'thunder', color: 'rgba(56, 189, 248, 0.82)'
           });
           setTimeout(() => {
             if (!boss || boss.dead) return;
             this.sound.playLaser(1400);
-            this.shake(14, 0.5);
+            this.spawnBossGiantBeam({ x1: cx, y1: 0, x2: cx, y2: this.H, width: 66, color: '#0ea5e9', coreColor: '#ffffff', subType: 'thunder', life: 1.05 });
+            this.spawnBossGiantBeam({ x1: 0, y1: py, x2: this.W, y2: py, width: 58, color: '#38bdf8', coreColor: '#ffffff', subType: 'thunder', life: 1.05 });
             for (let a = 0; a < 11; a++) {
               const ang = (a / 11) * Math.PI * 2;
               const eb = new Bullet(cx, cy, Math.cos(ang) * 230, Math.sin(ang) * 230, false, 1, 'thunder');
               eb.color = '#ffffff'; eb.r = 7;
               this.ebullets.push(eb);
             }
-          }, 1200);
+          }, 1150);
         }
         break;
       }
-      case 5: { // 美杜莎 (大招彈幕減少 30%)
+
+      case 5: { // 美杜莎 (大招強化：萬蛇石化巨型死光 + 雙重魔眼交叉射線)
+        const px = this.player ? this.player.x : this.W * 0.5;
+        const py = this.player ? this.player.y : this.H * 0.75;
         if (variant === 0) {
-          // 大招 1：顧影自憐・萬蛇鏡界 (原20發減少30%為14發紫色旋轉鏡面光束)
+          this.showToast('🐍【美杜莎・萬蛇魔眼石化巨型死光】凝視鎖定！紫色巨型石化光束爆發！');
+          this.hazardTelegraphs.push({
+            type: 'line', x1: boss.x, y1: boss.y, x2: px, y2: this.H,
+            life: 1.05, width: 68, color: 'rgba(192, 84, 255, 0.8)'
+          });
+          setTimeout(() => {
+            if (!boss || boss.dead) return;
+            this.sound.playLaser(1180);
+            this.spawnBossGiantBeam({ x1: boss.x, y1: boss.y, x2: px, y2: this.H, width: 74, color: '#a855f7', coreColor: '#f3e8ff', life: 1.0 });
+          }, 1050);
           for (let i = 0; i < 14; i++) {
             const ang = (i / 14) * Math.PI * 2;
             const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 190, Math.sin(ang) * 190, false, 1, 'petrify_beam');
@@ -7220,30 +7330,51 @@ class Game {
             this.ebullets.push(eb);
           }
         } else {
-          // 新增大招 2：邪眼凝視・深淵石化射線 (原14發減少30%為9發毒晶碎屑)
+          this.showToast('👁️【美杜莎・深淵凝視雙子交叉巨砲】雙重石化魔眼匯聚轟擊！');
           this.hazardTelegraphs.push({
-            type: 'circle', x: this.player.x, y: this.player.y, r: 80,
-            life: 1.3, color: 'rgba(179, 89, 255, 0.55)'
+            type: 'circle', x: px, y: py, r: 84,
+            life: 1.15, color: 'rgba(179, 89, 255, 0.7)'
+          });
+          this.hazardTelegraphs.push({
+            type: 'line', x1: 20, y1: boss.y, x2: px, y2: this.H,
+            life: 1.15, width: 52, color: 'rgba(192, 84, 255, 0.75)'
+          });
+          this.hazardTelegraphs.push({
+            type: 'line', x1: this.W - 20, y1: boss.y, x2: px, y2: this.H,
+            life: 1.15, width: 52, color: 'rgba(192, 84, 255, 0.75)'
           });
           setTimeout(() => {
             if (!boss || boss.dead) return;
             this.sound.playCrit();
+            this.spawnBossGiantBeam({ x1: 20, y1: boss.y, x2: px, y2: this.H, width: 56, color: '#c084fc', coreColor: '#ffffff', life: 1.0 });
+            this.spawnBossGiantBeam({ x1: this.W - 20, y1: boss.y, x2: px, y2: this.H, width: 56, color: '#c084fc', coreColor: '#ffffff', life: 1.0 });
             for (let k = 0; k < 9; k++) {
               const ang = (k / 9) * Math.PI * 2;
               const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 210, Math.sin(ang) * 210, false, 1, 'petrify_beam');
               eb.color = '#c054ff'; eb.r = 7;
               this.ebullets.push(eb);
             }
-          }, 1300);
+          }, 1150);
         }
         break;
       }
-      case 6: { // 饕餮
+
+      case 6: { // 饕餮 (大招強化：噬天黑洞湮滅吐息巨砲 + 三連暴食熔岩巨柱)
+        const px = this.player ? this.player.x : this.W * 0.5;
         if (variant === 0) {
-          // 大招 1：萬物同喰・噬天黑洞 (中心強大引力吸引戰機並環形射出 16 顆重力黑洞彈)
+          this.showToast('🕳️【饕餮・萬物同喰黑洞湮滅巨砲】重力奇點引力牽引 + 中央深淵巨型吐息！');
           this.singularities.push({
-            x: this.W / 2, y: 220, r: 40, pullRadius: 260, duration: 4.5, maxDuration: 4.5, isPlayer: false
+            x: this.W / 2, y: 220, r: 42, pullRadius: 260, duration: 4.5, maxDuration: 4.5, isPlayer: false
           });
+          this.hazardTelegraphs.push({
+            type: 'line', x1: this.W / 2, y1: boss.y, x2: this.W / 2, y2: this.H,
+            life: 1.1, width: 76, subType: 'fire', color: 'rgba(255, 145, 56, 0.8)'
+          });
+          setTimeout(() => {
+            if (!boss || boss.dead) return;
+            this.sound.playLaser(880);
+            this.spawnBossGiantBeam({ x1: this.W / 2, y1: boss.y, x2: this.W / 2, y2: this.H, width: 82, color: '#f97316', coreColor: '#ffffff', life: 1.1 });
+          }, 1100);
           for (let i = 0; i < 16; i++) {
             const ang = (i / 16) * Math.PI * 2;
             const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 190, Math.sin(ang) * 190, false, 1, 'fireball');
@@ -7251,7 +7382,21 @@ class Game {
             this.ebullets.push(eb);
           }
         } else {
-          // 新增大招 2：暴食狂宴・混沌嘔火熔流 (3 波重力熔岩彈 + 地面遺留高溫熔岩領域)
+          this.showToast('🌋【饕餮・暴食狂宴三連煉獄巨柱】三道混沌熔岩巨束轟擊地面！');
+          const cols = [this.W * 0.22, px, this.W * 0.78];
+          cols.forEach(cx => {
+            this.hazardTelegraphs.push({
+              type: 'line', x1: boss.x, y1: boss.y + 15, x2: cx, y2: this.H,
+              life: 1.05, width: 52, subType: 'fire', color: 'rgba(255, 71, 102, 0.78)'
+            });
+          });
+          setTimeout(() => {
+            if (!boss || boss.dead) return;
+            this.sound.playLaser(960);
+            cols.forEach(cx => {
+              this.spawnBossGiantBeam({ x1: boss.x, y1: boss.y + 15, x2: cx, y2: this.H, width: 56, color: '#ef4444', coreColor: '#fef08a', life: 0.95 });
+            });
+          }, 1050);
           for (let wave = 0; wave < 3; wave++) {
             setTimeout(() => {
               if (!boss || boss.dead) return;
@@ -7264,14 +7409,29 @@ class Game {
               }
             }, wave * 350);
           }
-          this.lavaPools.push({ x: this.player.x, y: this.H - 120, r: 65, duration: 4.0, maxDuration: 4.0, isPlayer: false });
+          this.lavaPools.push({ x: px, y: this.H - 120, r: 65, duration: 4.0, maxDuration: 4.0, isPlayer: false });
         }
         break;
       }
-      case 7: { // 阿特拉斯
+
+      case 7: { // 阿特拉斯 (大招強化：泰坦天柱崩塌雙巨束 + 墜星超新星軌道貫穿砲)
         if (variant === 0) {
-          // 大招 1：泰坦重壓・地動山搖 (全屏重力壓頂 + 12 塊巨岩碎屑)
+          this.showToast('☄️【阿特拉斯・泰坦天柱崩塌巨擊】雙座重力天柱轟然貫穿大地！');
           this.shake(16, 0.6);
+          const pillars = [this.W * 0.28, this.W * 0.72];
+          pillars.forEach(px => {
+            this.hazardTelegraphs.push({
+              type: 'line', x1: px, y1: 0, x2: px, y2: this.H,
+              life: 1.05, width: 64, subType: 'fire', color: 'rgba(245, 188, 56, 0.8)'
+            });
+          });
+          setTimeout(() => {
+            if (!boss || boss.dead) return;
+            this.sound.playLaser(850);
+            pillars.forEach(px => {
+              this.spawnBossGiantBeam({ x1: px, y1: 0, x2: px, y2: this.H, width: 70, color: '#f59e0b', coreColor: '#ffffff', life: 1.05 });
+            });
+          }, 1050);
           for (let i = 0; i < 12; i++) {
             const x = 30 + Math.random() * (this.W - 60);
             const eb = new Bullet(x, 40, (Math.random() - 0.5) * 50, 220 + Math.random() * 60, false, 1, 'boulder');
@@ -7279,9 +7439,17 @@ class Game {
             this.ebullets.push(eb);
           }
         } else {
-          // 新增大招 2：墜星天罰・億萬流星雨 (召喚天外巨型隕石於半空中殉爆)
+          this.showToast('🌠【阿特拉斯・墜星天罰軌道巨型光束】雙子巨型隕石引爆軌道貫穿光柱！');
           for (let m = 0; m < 2; m++) {
             const mx = (m === 0 ? this.W * 0.35 : this.W * 0.65);
+            this.hazardTelegraphs.push({
+              type: 'line', x1: mx, y1: 0, x2: mx, y2: this.H,
+              life: 1.0, width: 54, subType: 'fire', color: 'rgba(255, 145, 56, 0.78)'
+            });
+            this.hazardTelegraphs.push({
+              type: 'circle', x: mx, y: 200, r: 78,
+              life: 1.0, color: 'rgba(245, 188, 56, 0.75)'
+            });
             const meteor = new Bullet(mx, 20, 0, 160, false, 1, 'boulder');
             meteor.r = 24; meteor.color = '#ff9138';
             this.ebullets.push(meteor);
@@ -7289,7 +7457,7 @@ class Game {
               if (!meteor.dead) {
                 meteor.dead = true;
                 this.sound.playExplosion(true);
-                this.shake(14, 0.4);
+                this.spawnBossGiantBeam({ x1: mx, y1: 0, x2: mx, y2: this.H, width: 60, color: '#f97316', coreColor: '#ffffff', life: 0.95 });
                 for (let k = 0; k < 16; k++) {
                   const ang = (k / 16) * Math.PI * 2;
                   const frag = new Bullet(meteor.x, meteor.y, Math.cos(ang) * 210, Math.sin(ang) * 210, false, 1, 'rock_shard');
@@ -7302,50 +7470,70 @@ class Game {
         }
         break;
       }
-      case 8: { // 雅典娜
+
+      case 8: { // 雅典娜 (大招強化：勝利之矛貫日聖裁巨砲 + 智慧法陣十字神聖光束)
         if (variant === 0) {
-          // 大招 1：長槍貫日・絕對聖裁 (金色長槍神光 + 浮游砲齊射)
-          const px = this.player.x;
+          this.showToast('🔱【雅典娜・勝利之矛貫日聖裁巨砲】絕對聖光鎖定！巨型黃金神槍光束降臨！');
+          const px = this.player ? this.player.x : this.W * 0.5;
           this.hazardTelegraphs.push({
             type: 'line', x1: px, y1: 0, x2: px, y2: this.H,
-            life: 1.1, width: 34, color: 'rgba(255, 215, 0, 0.75)'
+            life: 1.1, width: 68, subType: 'feather', color: 'rgba(255, 215, 0, 0.85)'
           });
           setTimeout(() => {
             if (!boss || boss.dead) return;
             this.sound.playLaser(1300);
-            for (let y = 50; y < this.H; y += 40) {
+            this.spawnBossGiantBeam({ x1: px, y1: 0, x2: px, y2: this.H, width: 76, color: '#ffd700', coreColor: '#ffffff', subType: 'feather', life: 1.1 });
+            for (let y = 50; y < this.H; y += 45) {
               const eb = new Bullet(px, y, 0, 360, false, 1, 'holy_spear');
               eb.color = '#ffd700'; eb.r = 7.5;
               this.ebullets.push(eb);
             }
           }, 1100);
         } else {
-          // 新增大招 2：智慧法陣・聖光十字誅絕 (金色雙十字預警 + 神聖星環爆發)
-          const cx = this.W / 2, cy = 240;
+          this.showToast('✨【雅典娜・智慧法陣聖光十字誅絕砲】全屏黃金十字巨型光束裁決！');
+          const cx = this.W / 2, cy = 260;
           this.hazardTelegraphs.push({
             type: 'line', x1: cx, y1: 0, x2: cx, y2: this.H,
-            life: 1.2, width: 28, color: 'rgba(255, 215, 0, 0.7)'
+            life: 1.15, width: 58, subType: 'feather', color: 'rgba(255, 215, 0, 0.82)'
           });
           this.hazardTelegraphs.push({
             type: 'line', x1: 0, y1: cy, x2: this.W, y2: cy,
-            life: 1.2, width: 28, color: 'rgba(255, 215, 0, 0.7)'
+            life: 1.15, width: 58, subType: 'feather', color: 'rgba(255, 215, 0, 0.82)'
           });
           setTimeout(() => {
             if (!boss || boss.dead) return;
             this.sound.playCrit();
+            this.spawnBossGiantBeam({ x1: cx, y1: 0, x2: cx, y2: this.H, width: 64, color: '#eab308', coreColor: '#ffffff', life: 1.05 });
+            this.spawnBossGiantBeam({ x1: 0, y1: cy, x2: this.W, y2: cy, width: 64, color: '#eab308', coreColor: '#ffffff', life: 1.05 });
             for (let a = 0; a < 20; a++) {
               const ang = (a / 20) * Math.PI * 2;
               const eb = new Bullet(cx, cy, Math.cos(ang) * 220, Math.sin(ang) * 220, false, 1, 'divine_ring');
               eb.color = '#ffffff'; eb.r = 7;
               this.ebullets.push(eb);
             }
-          }, 1200);
+          }, 1150);
         }
         break;
       }
-      case 9: { // 許德拉
+
+      case 9: { // 許德拉 (大招強化：九首深淵劇毒三叉巨砲 + 滅世貫穿毒龍死光)
+        const px = this.player ? this.player.x : this.W * 0.5;
         if (variant === 0) {
-          // 大招 1：九首死靈・毒沼暴湧 (8 團深淵劇毒酸泡落地擴散)
+          this.showToast('🐍【許德拉・九首齊嘯劇毒三叉巨砲】三道深淵腐蝕巨型光束橫掃戰場！');
+          const targets = [Math.max(35, px - 130), px, Math.min(this.W - 35, px + 130)];
+          targets.forEach(tx => {
+            this.hazardTelegraphs.push({
+              type: 'line', x1: boss.x, y1: boss.y + 20, x2: tx, y2: this.H,
+              life: 1.05, width: 54, color: 'rgba(72, 229, 131, 0.8)'
+            });
+          });
+          setTimeout(() => {
+            if (!boss || boss.dead) return;
+            this.sound.playLaser(1080);
+            targets.forEach(tx => {
+              this.spawnBossGiantBeam({ x1: boss.x, y1: boss.y + 20, x2: tx, y2: this.H, width: 58, color: '#22c55e', coreColor: '#dcfce7', life: 1.0 });
+            });
+          }, 1050);
           for (let i = 0; i < 8; i++) {
             const ang = (i / 8) * Math.PI * 2;
             const eb = new Bullet(boss.x, boss.y + 20, Math.cos(ang) * 180, Math.sin(ang) * 180, false, 1, 'venom');
@@ -7353,7 +7541,16 @@ class Game {
             this.ebullets.push(eb);
           }
         } else {
-          // 新增大招 2：九首齊鳴・滅世腐蝕毒濤 (九蛇首同時噴射 18 道交叉正弦毒波)
+          this.showToast('☣️【許德拉・滅世腐蝕毒龍貫穿巨砲】超巨型劇毒吐息與正弦毒濤齊發！');
+          this.hazardTelegraphs.push({
+            type: 'line', x1: boss.x, y1: boss.y + 20, x2: px, y2: this.H,
+            life: 1.05, width: 74, color: 'rgba(34, 197, 94, 0.85)'
+          });
+          setTimeout(() => {
+            if (!boss || boss.dead) return;
+            this.sound.playLaser(1020);
+            this.spawnBossGiantBeam({ x1: boss.x, y1: boss.y + 20, x2: px, y2: this.H, width: 80, color: '#10b981', coreColor: '#ffffff', life: 1.05 });
+          }, 1050);
           for (let i = 0; i < 18; i++) {
             setTimeout(() => {
               if (!boss || boss.dead) return;
@@ -7366,9 +7563,20 @@ class Game {
         }
         break;
       }
-      case 10: { // 獨眼巨人
+
+      case 10: { // 獨眼巨人 (大招強化：赫菲斯托斯滅世獨眼巨砲 + 四連地心熔岩火柱)
+        const px = this.player ? this.player.x : this.W * 0.5;
         if (variant === 0) {
-          // 大招 1：赫菲斯托斯・滅世掃蕩 (360 度旋轉天爐光束)
+          this.showToast('👁️【獨眼巨人・赫菲斯托斯神鍛滅世死光】超巨型獨眼高熱主砲轟擊！');
+          this.hazardTelegraphs.push({
+            type: 'line', x1: boss.x, y1: boss.y + 10, x2: px, y2: this.H,
+            life: 1.1, width: 82, subType: 'fire', color: 'rgba(255, 71, 102, 0.85)'
+          });
+          setTimeout(() => {
+            if (!boss || boss.dead) return;
+            this.sound.playLaser(940);
+            this.spawnBossGiantBeam({ x1: boss.x, y1: boss.y + 10, x2: px, y2: this.H, width: 88, color: '#ff4766', coreColor: '#fef08a', life: 1.15 });
+          }, 1100);
           for (let i = 0; i < 22; i++) {
             const ang = (i / 22) * Math.PI * 2;
             const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 220, Math.sin(ang) * 220, false, 1, 'magma');
@@ -7376,17 +7584,18 @@ class Game {
             this.ebullets.push(eb);
           }
         } else {
-          // 新增大招 2：巨神重錘・震地熔岩碎裂波 (地面猛烈噴發 4 道垂直熔火柱)
+          this.showToast('🔨【獨眼巨人・巨神重錘四連地心熔岩巨柱】地面猛烈噴發四道沖天熔火巨柱！');
           for (let col = 0; col < 4; col++) {
             const fx = 45 + col * (this.W - 90) / 3;
             this.hazardTelegraphs.push({
               type: 'line', x1: fx, y1: this.H, x2: fx, y2: 0,
-              life: 1.1, width: 28, color: 'rgba(255, 71, 102, 0.7)'
+              life: 1.1, width: 48, subType: 'fire', color: 'rgba(255, 71, 102, 0.8)'
             });
             setTimeout(() => {
               if (!boss || boss.dead) return;
               this.sound.playLaser(1100);
-              for (let y = this.H; y > 150; y -= 50) {
+              this.spawnBossGiantBeam({ x1: fx, y1: this.H, x2: fx, y2: 0, width: 52, color: '#f97316', coreColor: '#ffffff', life: 1.0 });
+              for (let y = this.H; y > 150; y -= 60) {
                 const eb = new Bullet(fx, y, (Math.random() - 0.5) * 40, -280, false, 1, 'slag');
                 eb.color = '#ff9138'; eb.r = 8;
                 this.ebullets.push(eb);
@@ -7396,9 +7605,27 @@ class Game {
         }
         break;
       }
-      case 11: { // 玉藻前
+
+      case 11: { // 玉藻前 (大招強化：九尾妖月三連巨砲 + 殺生結界四方魅影交叉終焉光束)
+        const px = this.player ? this.player.x : this.W * 0.5;
+        const py = this.player ? this.player.y : this.H * 0.72;
         if (variant === 0) {
-          // 大招 1：九尾妖火・媚影迷蹤 (18 發粉紫狐火迴旋)
+          this.showToast('🦊【玉藻前・九尾妖月傾國巨型光束】三道妖狐冥火巨束交錯貫穿！');
+          [-110, 0, 110].forEach(offset => {
+            const tx = Math.max(25, Math.min(this.W - 25, px + offset));
+            this.hazardTelegraphs.push({
+              type: 'line', x1: boss.x, y1: boss.y, x2: tx, y2: this.H,
+              life: 1.05, width: 54, color: 'rgba(224, 64, 154, 0.8)'
+            });
+          });
+          setTimeout(() => {
+            if (!boss || boss.dead) return;
+            this.sound.playLaser(1280);
+            [-110, 0, 110].forEach(offset => {
+              const tx = Math.max(25, Math.min(this.W - 25, px + offset));
+              this.spawnBossGiantBeam({ x1: boss.x, y1: boss.y, x2: tx, y2: this.H, width: 58, color: '#ec4899', coreColor: '#fdf2f8', life: 1.0 });
+            });
+          }, 1050);
           for (let i = 0; i < 18; i++) {
             const ang = (i / 18) * Math.PI * 2;
             const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 200, Math.sin(ang) * 200, false, 1, 'foxfire');
@@ -7406,34 +7633,59 @@ class Game {
             this.ebullets.push(eb);
           }
         } else {
-          // 新增大招 2：殺生結界・八面魅影幻滅 (召喚 4 具殘影交錯齊射幽冥狐火光刃)
+          this.showToast('🌸【玉藻前・殺生結界四方魅影終焉光束】四具殘影同時向戰機發射交叉巨型狐火光束！');
           const offsets = [
             { x: 50, y: 150 }, { x: this.W - 50, y: 150 },
             { x: 70, y: 320 }, { x: this.W - 70, y: 320 }
           ];
           offsets.forEach(pt => {
             this.hazardTelegraphs.push({
-              type: 'circle', x: pt.x, y: pt.y, r: 35, life: 1.2, color: 'rgba(224, 64, 154, 0.6)'
+              type: 'circle', x: pt.x, y: pt.y, r: 40, life: 1.15, color: 'rgba(224, 64, 154, 0.75)'
+            });
+            this.hazardTelegraphs.push({
+              type: 'line', x1: pt.x, y1: pt.y, x2: px, y2: py,
+              life: 1.15, width: 44, color: 'rgba(244, 114, 182, 0.75)'
             });
           });
           setTimeout(() => {
             if (!boss || boss.dead) return;
             this.sound.playLaser(1250);
             offsets.forEach(pt => {
-              const ang = Math.atan2(this.player.y - pt.y, this.player.x - pt.x);
+              this.spawnBossGiantBeam({ x1: pt.x, y1: pt.y, x2: px, y2: this.H, width: 48, color: '#f472b6', coreColor: '#ffffff', life: 1.0 });
+              const ang = Math.atan2(py - pt.y, px - pt.x);
               for (let d = -1; d <= 1; d++) {
                 const eb = new Bullet(pt.x, pt.y, Math.cos(ang + d * 0.25) * 240, Math.sin(ang + d * 0.25) * 240, false, 1, 'foxfire');
                 eb.color = '#f472b6'; eb.r = 7;
                 this.ebullets.push(eb);
               }
             });
-          }, 1200);
+          }, 1150);
         }
         break;
       }
-      case 12: { // 提亞瑪特
+
+      case 12: { // 提亞瑪特 (大招強化：創世終焉五帝龍息滅世巨砲 + 雙子黑洞維度坍縮巨束)
+        const px = this.player ? this.player.x : this.W * 0.5;
         if (variant === 0) {
-          // 大招 1：創世終焉・萬象歸虛 (全屏十字毀滅星光 + 24 發五彩混沌龍息)
+          this.showToast('🌌【提亞瑪特・創世終焉萬象歸虛巨砲】原初龍神三連超巨型毀滅光束轟擊！');
+          const beams = [
+            { x2: Math.max(30, px - 140), color: '#38bdf8', w: 58 },
+            { x2: px, color: '#ff4766', w: 92 },
+            { x2: Math.min(this.W - 30, px + 140), color: '#a855f7', w: 58 }
+          ];
+          beams.forEach(bm => {
+            this.hazardTelegraphs.push({
+              type: 'line', x1: boss.x, y1: boss.y + 15, x2: bm.x2, y2: this.H,
+              life: 1.15, width: bm.w, color: 'rgba(255, 71, 102, 0.85)'
+            });
+          });
+          setTimeout(() => {
+            if (!boss || boss.dead) return;
+            this.sound.playLaser(1450);
+            beams.forEach(bm => {
+              this.spawnBossGiantBeam({ x1: boss.x, y1: boss.y + 15, x2: bm.x2, y2: this.H, width: bm.w + 6, color: bm.color, coreColor: '#ffffff', life: 1.2 });
+            });
+          }, 1150);
           for (let i = 0; i < 24; i++) {
             const ang = (i / 24) * Math.PI * 2;
             const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 220, Math.sin(ang) * 220, false, 1, 'chaos');
@@ -7442,13 +7694,26 @@ class Game {
             this.ebullets.push(eb);
           }
         } else {
-          // 新增大招 2：虛數深淵・維度坍縮黑星 (召喚 2 顆雙子黑洞拋射反物質泯滅碎星)
+          this.showToast('🕳️【提亞瑪特・雙子黑洞維度坍縮巨砲】雙子奇點引力封鎖與雙重超空間巨型死光！');
           this.singularities.push({
             x: this.W * 0.3, y: 200, r: 36, pullRadius: 220, duration: 4.0, maxDuration: 4.0, isPlayer: false
           });
           this.singularities.push({
             x: this.W * 0.7, y: 200, r: 36, pullRadius: 220, duration: 4.0, maxDuration: 4.0, isPlayer: false
           });
+          [this.W * 0.3, this.W * 0.7].forEach(bx => {
+            this.hazardTelegraphs.push({
+              type: 'line', x1: bx, y1: 0, x2: bx, y2: this.H,
+              life: 1.15, width: 64, color: 'rgba(168, 85, 247, 0.82)'
+            });
+          });
+          setTimeout(() => {
+            if (!boss || boss.dead) return;
+            this.sound.playLaser(1380);
+            [this.W * 0.3, this.W * 0.7].forEach(bx => {
+              this.spawnBossGiantBeam({ x1: bx, y1: 0, x2: bx, y2: this.H, width: 70, color: '#a855f7', coreColor: '#ffffff', life: 1.15 });
+            });
+          }, 1150);
           for (let i = 0; i < 20; i++) {
             const ang = (i / 20) * Math.PI * 2;
             const eb = new Bullet(boss.x, boss.y, Math.cos(ang) * 210, Math.sin(ang) * 210, false, 1, 'chaos');
@@ -7458,6 +7723,7 @@ class Game {
         }
         break;
       }
+
       default: {
         const count = 24 + this.knowledgePressure * 2;
         for (let i = 0; i < count; i++) {
@@ -9231,6 +9497,33 @@ class Game {
     });
     this.hazardTelegraphs = this.hazardTelegraphs.filter(h => h.life > 0);
 
+    // BUILD-036: Boss 終極巨型光束 / 毀滅巨柱生命週期與碰撞判定
+    if (!this.bossGiantBeams) this.bossGiantBeams = [];
+    this.bossGiantBeams.forEach(beam => {
+      if (beam.maxLife === undefined) beam.maxLife = beam.life;
+      beam.life -= dt;
+      // 光束主體爆發期間 (前 82% 生命週期) 對戰機進行線段距離碰撞判定
+      if (beam.life > beam.maxLife * 0.18 && this.player && this.player.invulnTime <= 0) {
+        const px = this.player.x;
+        const py = this.player.y;
+        const dx = beam.x2 - beam.x1;
+        const dy = beam.y2 - beam.y1;
+        const lenSq = dx * dx + dy * dy;
+        let tProj = 0;
+        if (lenSq > 0) {
+          tProj = Math.max(0, Math.min(1, ((px - beam.x1) * dx + (py - beam.y1) * dy) / lenSq));
+        }
+        const nearX = beam.x1 + tProj * dx;
+        const nearY = beam.y1 + tProj * dy;
+        const dist = Math.hypot(px - nearX, py - nearY);
+        const hitHalfWidth = Math.max(10, (beam.width || 48) * 0.38);
+        if (dist <= hitHalfWidth + (this.player.r || 6)) {
+          this.onPlayerHit();
+        }
+      }
+    });
+    this.bossGiantBeams = this.bossGiantBeams.filter(b => b.life > 0);
+
     // 靈丸純白擴散衝擊波生命週期
     if (this.reiganShockwaves && this.reiganShockwaves.length > 0) {
       this.reiganShockwaves.forEach(sw => { sw.life -= dt; });
@@ -9352,20 +9645,34 @@ class Game {
       ctx.fillRect(0, 0, W, H);
     }
 
-    // 2. 超音速飛行流星與光速粒子 (3 層景深：遠景星塵、中景光束、近景拉絲)
+    // BUILD-036: 戰術深淵暗化濾鏡與四角暗角 (解決背景色調過亮導致敵方彈幕與雷射消失之問題)
+    const isUltActive = (this.hazardTelegraphs && this.hazardTelegraphs.length > 0) ||
+                        (this.bossGiantBeams && this.bossGiantBeams.length > 0);
+    const baseDarkAlpha = isUltActive ? 0.78 : 0.66;
+    ctx.fillStyle = `rgba(3, 6, 15, ${baseDarkAlpha})`;
+    ctx.fillRect(0, 0, W, H);
+
+    const vignetteGrad = ctx.createRadialGradient(W * 0.5, H * 0.5, W * 0.18, W * 0.5, H * 0.5, Math.max(W, H) * 0.75);
+    vignetteGrad.addColorStop(0, 'rgba(2, 5, 14, 0.18)');
+    vignetteGrad.addColorStop(0.65, 'rgba(2, 4, 12, 0.42)');
+    vignetteGrad.addColorStop(1, 'rgba(1, 2, 8, 0.68)');
+    ctx.fillStyle = vignetteGrad;
+    ctx.fillRect(0, 0, W, H);
+
+    // 2. 超音速飛行流星與光速粒子 (壓低亮度避免干擾彈幕辨識)
     if (this.flightParticles && this.flightParticles.length > 0) {
       ctx.save();
       for (let i = 0; i < this.flightParticles.length; i++) {
         const fp = this.flightParticles[i];
         if (fp.layer === 0) {
           // 遠景星塵
-          ctx.fillStyle = `rgba(255, 255, 255, ${fp.alpha * 0.6})`;
+          ctx.fillStyle = `rgba(190, 220, 255, ${fp.alpha * 0.32})`;
           ctx.beginPath();
           ctx.arc(fp.x, fp.y, fp.width * 0.8, 0, Math.PI * 2);
           ctx.fill();
         } else if (fp.layer === 1) {
           // 中景光束
-          ctx.strokeStyle = `rgba(180, 220, 255, ${fp.alpha * 0.75})`;
+          ctx.strokeStyle = `rgba(140, 190, 240, ${fp.alpha * 0.38})`;
           ctx.lineWidth = fp.width;
           ctx.beginPath();
           ctx.moveTo(fp.x, fp.y);
@@ -9375,10 +9682,10 @@ class Game {
           // 近景超光速拉絲
           const grad = ctx.createLinearGradient(fp.x, fp.y, fp.x, fp.y + fp.len);
           grad.addColorStop(0, 'rgba(255, 255, 255, 0)');
-          grad.addColorStop(0.5, `rgba(140, 210, 255, ${fp.alpha})`);
-          grad.addColorStop(1, `rgba(255, 255, 255, ${fp.alpha * 1.2})`);
+          grad.addColorStop(0.5, `rgba(120, 185, 245, ${fp.alpha * 0.45})`);
+          grad.addColorStop(1, `rgba(200, 235, 255, ${fp.alpha * 0.55})`);
           ctx.strokeStyle = grad;
-          ctx.lineWidth = fp.width * 1.4;
+          ctx.lineWidth = fp.width * 1.2;
           ctx.beginPath();
           ctx.moveTo(fp.x, fp.y);
           ctx.lineTo(fp.x, fp.y + fp.len);
@@ -9388,8 +9695,9 @@ class Game {
       ctx.restore();
     }
 
-    // 2. 疊加各關卡神話環境氣氛微光與粒子
+    // 2. 疊加各關卡神話環境氣氛微光與粒子 (壓低粒子不透明度以凸顯彈幕)
     ctx.save();
+    ctx.globalAlpha = 0.48;
     switch (s) {
       case 1: // 機甲庫巴：蘑菇王國金幣閃爍與烈焰餘燼
         for (let j = 0; j < 5; j++) {
@@ -9619,18 +9927,44 @@ class Game {
       ctx.stroke();
     }
 
-    // 5. 終點/目標命中點發光瞄準環 (Target Reticle)
-    ctx.strokeStyle = ctx.strokeStyle;
-    ctx.lineWidth = 2.0;
+    // 5. 終點/目標命中點發光瞄準環 (Target Reticle) 與炮口蓄力核心奇點 (Charging Muzzle Core)
+    const accentHex = isThunder ? '#38bdf8' : (isFeather ? '#ffd700' : (isFire ? '#f59e0b' : '#ff4766'));
+    ctx.strokeStyle = accentHex;
+    ctx.lineWidth = 2.4;
     ctx.beginPath();
-    ctx.arc(len, 0, Math.min(halfW, 16), 0, Math.PI * 2);
+    ctx.arc(len, 0, Math.min(halfW, 18), 0, Math.PI * 2);
     ctx.stroke();
 
-    // 6. 臨近爆發時的極限危險閃爍
-    if (progress > 0.75) {
-      const flashPulse = Math.sin(this.time * 40) * 0.5 + 0.5;
-      ctx.fillStyle = `rgba(255, 255, 255, ${flashPulse * 0.35})`;
-      ctx.fillRect(0, -halfW * 0.6, len, halfW * 1.2);
+    // BUILD-036: 雙側動態收縮夾角鎖定軌道 (Converging Lock-on Rails)
+    const convergeOffset = halfW * (1.0 + (1.0 - progress) * 0.85);
+    ctx.strokeStyle = `rgba(255, 255, 255, ${(0.35 + progress * 0.55).toFixed(2)})`;
+    ctx.lineWidth = 1.8;
+    ctx.setLineDash([14, 10]);
+    ctx.lineDashOffset = -this.time * 120;
+    ctx.beginPath();
+    ctx.moveTo(0, -convergeOffset);
+    ctx.lineTo(len, -convergeOffset);
+    ctx.moveTo(0, convergeOffset);
+    ctx.lineTo(len, convergeOffset);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // BUILD-036: 發射源頭高壓坍縮蓄力球 (Charging Muzzle Orb)
+    const muzzleR = Math.min(36, halfW * (0.45 + 0.55 * progress));
+    const muzzleGrad = ctx.createRadialGradient(0, 0, 2, 0, 0, muzzleR * 1.4);
+    muzzleGrad.addColorStop(0, '#ffffff');
+    muzzleGrad.addColorStop(0.45, accentHex);
+    muzzleGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = muzzleGrad;
+    ctx.beginPath();
+    ctx.arc(0, 0, muzzleR * 1.4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 6. 臨近爆發時的極限危險閃爍與核心充能線
+    if (progress > 0.65) {
+      const flashPulse = Math.sin(this.time * 48) * 0.5 + 0.5;
+      ctx.fillStyle = `rgba(255, 255, 255, ${(flashPulse * 0.48).toFixed(2)})`;
+      ctx.fillRect(0, -halfW * 0.72, len, halfW * 1.44);
     }
 
     ctx.restore();
@@ -9654,56 +9988,68 @@ class Game {
     ctx.save();
     ctx.translate(x, y);
 
+    // BUILD-036: 天頂衛星鎖定垂直導引光束 (Orbital Lock-on Laser)
+    if (progress > 0.3) {
+      const beamAlpha = ((progress - 0.3) / 0.7) * 0.55;
+      ctx.strokeStyle = mainColor;
+      ctx.globalAlpha = beamAlpha;
+      ctx.lineWidth = 2 + progress * 6;
+      ctx.beginPath();
+      ctx.moveTo(0, -y);
+      ctx.lineTo(0, 0);
+      ctx.stroke();
+      ctx.globalAlpha = 1.0;
+    }
+
     // 1. 柔和擴散光暈底層 (漸層取代單調色塊)
-    const radGrad = ctx.createRadialGradient(0, 0, r * 0.2, 0, 0, r);
-    radGrad.addColorStop(0, `${mainColor}22`);
-    radGrad.addColorStop(0.7, `${mainColor}11`);
-    radGrad.addColorStop(1, `${mainColor}44`);
+    const radGrad = ctx.createRadialGradient(0, 0, r * 0.15, 0, 0, r * 1.15);
+    radGrad.addColorStop(0, `${mainColor}44`);
+    radGrad.addColorStop(0.65, `${mainColor}22`);
+    radGrad.addColorStop(1, `${mainColor}66`);
     ctx.fillStyle = radGrad;
     ctx.beginPath();
     ctx.arc(0, 0, r, 0, Math.PI * 2);
     ctx.fill();
 
     // 2. 雙層旋轉法陣光環
-    const rot = this.time * 2.8;
+    const rot = this.time * 3.4;
     ctx.strokeStyle = mainColor;
-    ctx.lineWidth = 2.4;
+    ctx.lineWidth = 2.8;
     ctx.shadowColor = mainColor;
-    ctx.shadowBlur = 10;
+    ctx.shadowBlur = 14;
     ctx.beginPath();
     ctx.arc(0, 0, r, 0, Math.PI * 2);
     ctx.stroke();
 
     // 內層逆轉刻度環
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([5, 5]);
-    ctx.lineDashOffset = rot * 15;
+    ctx.lineWidth = 1.8;
+    ctx.setLineDash([6, 5]);
+    ctx.lineDashOffset = rot * 18;
     ctx.beginPath();
     ctx.arc(0, 0, r * 0.82, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // 3. 四方羅盤刻度針
-    ctx.lineWidth = 2.0;
+    // 3. 四方羅盤刻度針與外擴鎖定括號
+    ctx.lineWidth = 2.4;
     for (let k = 0; k < 4; k++) {
-      const a = (k * Math.PI) / 2;
+      const a = (k * Math.PI) / 2 + rot * 0.35;
       ctx.beginPath();
-      ctx.moveTo(Math.cos(a) * (r - 8), Math.sin(a) * (r - 8));
-      ctx.lineTo(Math.cos(a) * (r + 4), Math.sin(a) * (r + 4));
+      ctx.moveTo(Math.cos(a) * (r - 10), Math.sin(a) * (r - 10));
+      ctx.lineTo(Math.cos(a) * (r + 8), Math.sin(a) * (r + 8));
       ctx.stroke();
     }
 
     // 4. 動態收縮倒數環 (Countdown Shrink Ring)
     const shrinkR = r * (1.0 - progress);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.lineWidth = 1.8;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
+    ctx.lineWidth = 2.2;
     ctx.beginPath();
     ctx.arc(0, 0, Math.max(4, shrinkR), 0, Math.PI * 2);
     ctx.stroke();
 
     // 5. 核心主題符印
     if (isFeather) {
-      // 🪶 迦樓羅神羽炸彈符印：中心旋轉金羽＋倒數刻度
       ctx.fillStyle = '#ffd700';
       ctx.shadowColor = '#f59e0b';
       ctx.shadowBlur = 12;
@@ -9714,7 +10060,6 @@ class Game {
       ctx.quadraticCurveTo(-r * 0.15, 0, 0, -r * 0.35);
       ctx.fill();
     } else if (isThunder) {
-      // ⚡ 雷公天雷符印：中心閃電十字與靜電芒刺
       ctx.strokeStyle = '#e0f2fe';
       ctx.lineWidth = 2.5;
       ctx.beginPath();
@@ -9724,10 +10069,9 @@ class Game {
       ctx.lineTo(r * 0.25, -r * 0.1);
       ctx.stroke();
     } else {
-      // 菱形警示核心
       ctx.fillStyle = mainColor;
       ctx.beginPath();
-      const dr = r * 0.25;
+      const dr = r * 0.28;
       ctx.moveTo(0, -dr);
       ctx.lineTo(dr, 0);
       ctx.lineTo(0, dr);
@@ -9736,13 +10080,126 @@ class Game {
       ctx.fill();
     }
 
-    // 6. 臨爆發急速警告脈衝 (Progress > 0.8)
-    if (progress > 0.8) {
-      const flash = Math.sin(this.time * 36) * 0.5 + 0.5;
-      ctx.fillStyle = `rgba(255, 255, 255, ${flash * 0.4})`;
+    // 6. 臨爆發急速警告脈衝 (Progress > 0.72)
+    if (progress > 0.72) {
+      const flash = Math.sin(this.time * 42) * 0.5 + 0.5;
+      ctx.fillStyle = `rgba(255, 255, 255, ${flash * 0.45})`;
       ctx.beginPath();
       ctx.arc(0, 0, r, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  // ------------------------------------------------------------
+  // BUILD-036: Boss 終極巨型毀滅光束 / 能量巨柱生成與超華麗渲染器
+  // ------------------------------------------------------------
+  spawnBossGiantBeam(opts = {}) {
+    if (!this.bossGiantBeams) this.bossGiantBeams = [];
+    const life = opts.life || 0.95;
+    this.bossGiantBeams.push({
+      x1: opts.x1 !== undefined ? opts.x1 : this.W * 0.5,
+      y1: opts.y1 !== undefined ? opts.y1 : 120,
+      x2: opts.x2 !== undefined ? opts.x2 : this.W * 0.5,
+      y2: opts.y2 !== undefined ? opts.y2 : this.H,
+      width: opts.width || 68,
+      color: opts.color || '#ff4766',
+      coreColor: opts.coreColor || '#ffffff',
+      subType: opts.subType || 'plasma',
+      life: life,
+      maxLife: life
+    });
+    this.shake(Math.max(this.shakeMag || 0, 16), 0.55);
+    this.screenFlashAlpha = Math.max(this.screenFlashAlpha || 0, 0.45);
+  }
+
+  renderBossGiantBeams(ctx) {
+    if (!this.bossGiantBeams || this.bossGiantBeams.length === 0) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+
+    for (let i = 0; i < this.bossGiantBeams.length; i++) {
+      const b = this.bossGiantBeams[i];
+      const ratio = Math.max(0, Math.min(1, b.life / (b.maxLife || 0.95)));
+      // 爆發瞬間迅速撐開，尾段收束消散
+      const scaleW = ratio > 0.85 ? ((1.0 - ratio) / 0.15) * 0.5 + 0.7 : Math.pow(ratio, 0.45);
+      const halfW = Math.max(6, (b.width || 68) * 0.5 * scaleW);
+      const dx = b.x2 - b.x1;
+      const dy = b.y2 - b.y1;
+      const len = Math.hypot(dx, dy) || 1;
+      const ang = Math.atan2(dy, dx);
+
+      ctx.save();
+      ctx.translate(b.x1, b.y1);
+      ctx.rotate(ang);
+
+      // 1. 外層廣域虹彩電漿光暈鞘 (Outer Chromatic Energy Sheath)
+      const outerGrad = ctx.createLinearGradient(0, -halfW * 1.75, 0, halfW * 1.75);
+      outerGrad.addColorStop(0, 'rgba(0, 0, 0, 0)');
+      outerGrad.addColorStop(0.2, b.color + '66');
+      outerGrad.addColorStop(0.5, b.color + 'ee');
+      outerGrad.addColorStop(0.8, b.color + '66');
+      outerGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = outerGrad;
+      ctx.fillRect(0, -halfW * 1.75, len, halfW * 3.5);
+
+      // 2. 中層高密度能量主體走廊 (High-Energy Plasma Corridor)
+      ctx.fillStyle = b.color;
+      ctx.shadowColor = b.color;
+      ctx.shadowBlur = 26;
+      ctx.fillRect(0, -halfW * 0.85, len, halfW * 1.7);
+
+      // 3. 內層熾白超載核心光束 (Blinding White-Hot Core)
+      const coreH = halfW * (0.48 + Math.sin(this.time * 55) * 0.08);
+      ctx.fillStyle = b.coreColor || '#ffffff';
+      ctx.fillRect(0, -coreH, len, coreH * 2);
+
+      // 4. 雙螺旋能量纏繞光帶與狂暴閃電鏈 (Double-Helix Spiral & Lightning Arcs)
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      const step = 22;
+      for (let x = 0; x <= len; x += step) {
+        const waveY = Math.sin(x * 0.045 - this.time * 32) * (halfW * 0.95);
+        if (x === 0) ctx.moveTo(x, waveY);
+        else ctx.lineTo(x, waveY);
+      }
+      ctx.stroke();
+
+      ctx.strokeStyle = b.color;
+      ctx.lineWidth = 2.0;
+      ctx.beginPath();
+      for (let x = 0; x <= len; x += step) {
+        const waveY2 = -Math.sin(x * 0.045 - this.time * 32) * (halfW * 0.95);
+        if (x === 0) ctx.moveTo(x, waveY2);
+        else ctx.lineTo(x, waveY2);
+      }
+      ctx.stroke();
+
+      // 5. 沿光束高速推進的毀滅衝擊環 (Shockwave Rings)
+      for (let rIdx = 0; rIdx < 4; rIdx++) {
+        const rx = ((this.time * 520 + rIdx * (len / 4)) % len);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2.6;
+        ctx.beginPath();
+        ctx.ellipse(rx, 0, 10, halfW * 1.25, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // 6. 炮口爆發星芒與終點轟擊爆裂球 (Muzzle & Impact Supernova Flares)
+      const flareR = halfW * 1.85;
+      const muzzleFlare = ctx.createRadialGradient(0, 0, 2, 0, 0, flareR);
+      muzzleFlare.addColorStop(0, '#ffffff');
+      muzzleFlare.addColorStop(0.5, b.color);
+      muzzleFlare.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = muzzleFlare;
+      ctx.beginPath();
+      ctx.arc(0, 0, flareR, 0, Math.PI * 2);
+      ctx.arc(len, 0, flareR * 1.15, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
     }
 
     ctx.restore();
@@ -9774,6 +10231,9 @@ class Game {
         this.renderHazardCircleTelegraph(ctx, h);
       }
     });
+
+    // 2.2 BUILD-036: Boss 終極巨型毀滅光束與能量巨柱渲染
+    this.renderBossGiantBeams(ctx);
 
     // 2.5 Boss / 小Boss 震撼降臨召喚法陣與空間裂隙衝擊波
     if (this.bossIntroSequence && this.bossIntroSequence.active) {
