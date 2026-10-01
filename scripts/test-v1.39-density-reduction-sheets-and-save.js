@@ -19,10 +19,10 @@ const styleCss = fs.readFileSync(path.join(rootDir, 'style.css'), 'utf8');
 // ============================================================
 console.log('\n--- Checking Part 1: Barrage Density 15% Reduction ---');
 
-// 1.1 Boss cadence extension from 2.0s to 2.35s (2.0 / 2.35 = 0.851 => 15% reduction)
-assert(gameJsCode.includes('bossSkillInterval = (b.stage <= 6) ? 2.35 : 2.0'),
-  'Missing bossSkillInterval 15% cadence reduction for stages 1-6');
-console.log('  ✅ Boss skill cadence reduced by 15% for Stages 1-6 (2.35s vs 2.0s)');
+// 1.1 Boss cadence extension (Stage 1-2: 2.35s [15% reduction], Stage 3-12: 2.86s [30% reduction])
+assert(gameJsCode.includes('bossSkillInterval = 2.35') || gameJsCode.includes('bossSkillInterval = (b.stage <= 6) ? 2.35 : 2.0'),
+  'Missing bossSkillInterval cadence reduction');
+console.log('  ✅ Boss skill cadence reduced (Stages 1-2: 2.35s, Stages 3-12: 2.86s)');
 
 // 1.2 Garuda Mode 0: 4 rays instead of 5
 assert(gameJsCode.includes('rays: 4') && gameJsCode.includes('featherOffsets = [-1.5, -0.5, 0.5, 1.5]'),

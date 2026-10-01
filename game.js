@@ -5231,6 +5231,7 @@ class Game {
   // 神話暗線剋制彩蛋機制 (Secret Mythic Weakness Counters)
   checkBossMythicWeakness(boss, type, source) {
     if (!boss || boss.dead || boss.dying) return;
+    if (boss.stunTimer && boss.stunTimer > 0) return; // 處於癱瘓狀態中，不重複疊加計數
     if (!boss.weaknessCounters) boss.weaknessCounters = {};
     if (boss.weaknessCooldown && boss.weaknessCooldown > 0) return;
 
@@ -5240,6 +5241,7 @@ class Game {
       boss.weaknessCounters.spirit = (boss.weaknessCounters.spirit || 0) + 1;
       if (boss.weaknessCounters.spirit >= 2) {
         boss.weaknessCounters.spirit = 0;
+        boss.weaknessCooldown = 12.0; // 設置 12 秒冷卻防連鎖無限硬直
         boss.stunTimer = 3.0;
         this.sound.playMarioStomp();
         this.shake(8, 0.3);
@@ -5252,6 +5254,7 @@ class Game {
       boss.weaknessCounters.light = (boss.weaknessCounters.light || 0) + 1;
       if (boss.weaknessCounters.light >= 15) {
         boss.weaknessCounters.light = 0;
+        boss.weaknessCooldown = 12.0; // 核心修復：設置 12 秒弱點冷卻，徹底杜絕光束每秒60次判定引發的無限癱瘓停機！
         boss.stunTimer = 3.0;
         this.sound.playZeldaSecretChime();
         this.shake(10, 0.35);
@@ -6113,6 +6116,7 @@ class Game {
       x: this.W / 2,
       y: -60,
       targetY: 155,
+      hasEntered: false,
       hp: hp,
       maxHp: hp,
       hitboxRadius: 42,
@@ -6188,6 +6192,7 @@ class Game {
       x: this.W / 2,
       y: -100,
       targetY: 168,
+      hasEntered: false,
       hp: hp,
       maxHp: hp,
       hitboxRadius: bData.hitboxRadius || 50,
@@ -6310,6 +6315,7 @@ class Game {
     // 弱點反制冷卻與硬直癱瘓倒數
     if (b.weaknessCooldown > 0) b.weaknessCooldown -= dt;
     if (b.stunTimer > 0) {
+      b.stunTimer = Math.min(3.0, b.stunTimer); // 保障上限至多 3 秒，徹底杜絕連鎖疊加
       b.stunTimer -= dt;
       // 處於硬直癱瘓狀態，產生電弧/冰晶粒子，停止移動與技能發射
       this.particles.push(new Particle(
@@ -6324,9 +6330,14 @@ class Game {
       return;
     }
 
-    // 進場與十大 Boss 專屬移動軌跡演算法
-    if (b.y < b.targetY) {
-      b.y += 130 * dt;
+    // 進場與十大 Boss 專屬移動軌跡演算法 (進場完畢設置 hasEntered，防止後續垂直振盪反向觸發進場導致 Boss 定格)
+    if (!b.hasEntered) {
+      if (b.y < b.targetY) {
+        b.y += 130 * dt;
+      } else {
+        b.y = b.targetY;
+        b.hasEntered = true;
+      }
     } else {
       const s = b.stage || 1;
       const t = this.time;
@@ -6473,10 +6484,10 @@ class Game {
         }
       }
 
-      // 蛇首分身自發射擊 (扇形預警 + 3倍巨型毒彈)
+      // 蛇首分身自發射擊 (射擊頻率調降 30%：1.8s -> 2.57s)
       if (m.type === 'hydra_head' && !m.dead) {
         m.shootTimer = (m.shootTimer || 0) + dt;
-        if (m.shootTimer >= 1.8) {
+        if (m.shootTimer >= 2.57) {
           m.shootTimer = 0;
           this.hazardTelegraphs.push({
             type: 'cone', x: m.x, y: m.y + 12, angle: Math.PI / 2, spread: 0.75, radius: 360, rays: 3,
@@ -6493,10 +6504,10 @@ class Game {
         }
       }
 
-      // 蛇髮鏡像分身射擊 (星爆預警 + 3倍巨型鏡光彈)
+      // 蛇髮鏡像分身射擊 (射擊頻率調降 30%：2.2s -> 3.14s)
       if (m.type === 'gorgon_clone' && !m.dead) {
         m.shootTimer = (m.shootTimer || 0) + dt;
-        if (m.shootTimer >= 2.2) {
+        if (m.shootTimer >= 3.14) {
           m.shootTimer = 0;
           this.hazardTelegraphs.push({
             type: 'ring_nova', x: m.x, y: m.y, r: 95, spokes: 6,
@@ -6574,8 +6585,16 @@ class Game {
     b.skillTimer += dt;
     b.ultimateTimer += dt;
 
-    // BUILD-039: 第 1-6 關 Boss 專屬機制彈幕密度調降 15% (攻擊週期由 2.0s 延長至 2.35s，2.0/2.35 = 0.851)
-    const bossSkillInterval = (b.stage <= 6) ? 2.35 : 2.0;
+    // BUILD-041: 所有小Boss與第3-12關Boss攻擊頻率調降 30% (間隔由 2.0s 延長至 2.86s，2.0/2.86 = 0.70)
+    let bossSkillInterval = 2.0;
+    if (b.isMini) {
+      bossSkillInterval = 2.86; // 所有小 Boss 頻率調降 30%
+    } else if (b.stage >= 3) {
+      bossSkillInterval = 2.86; // 第 3-12 關 Boss 頻率調降 30%
+    } else {
+      bossSkillInterval = 2.35; // 第 1-2 關 Boss 維持調降 15% 節奏
+    }
+
     if (b.skillTimer >= bossSkillInterval) {
       b.skillTimer = 0;
       if (b.isMini) {
@@ -6585,8 +6604,8 @@ class Game {
       }
     }
 
-    // 大招預警 (每 14 秒一次，預警 2.8 秒)
-    const ultCooldown = 14.0;
+    // 大招預警與釋放：第 3-12 關魔王大招頻率同步調降 30% (冷卻由 14s 延長至 20s，14/20 = 0.70)
+    const ultCooldown = (b.stage >= 3 && !b.isMini) ? 20.0 : 14.0;
     if (b.ultimateTimer >= ultCooldown - 2.8 && !b.warningActive) {
       b.warningActive = true;
       b.ultVariant = (b.ultVariant === undefined ? 0 : (b.ultVariant + 1));
@@ -6602,10 +6621,11 @@ class Game {
       this.releaseBossUltimate(b);
     }
 
-    // 雷公 Phase 2：每 3 秒引發全場磁暴，戰機強制停頓 0.5 秒
+    // 雷公 Phase 2：全場磁暴頻率同步調降 30% (週期由 3.0s 延長至 4.3s)
+    const shockMax = (b.stage === 4) ? 4.3 : 3.0;
     if (b.stage === 4 && b.phase >= 2 && !b.dead && !b.dying) {
       b.shockCycleTimer = (b.shockCycleTimer || 0) + dt;
-      if (b.shockCycleTimer >= 2.4 && !b.shockTelegraphed) {
+      if (b.shockCycleTimer >= shockMax - 0.6 && !b.shockTelegraphed) {
         b.shockTelegraphed = true;
         this.showToast('⚡【九天磁暴預警】0.6 秒後天雷拘束！注意安全走位！');
         this.hazardTelegraphs.push({
@@ -6613,7 +6633,7 @@ class Game {
           life: 0.6, color: 'rgba(56, 189, 248, 0.65)'
         });
       }
-      if (b.shockCycleTimer >= 3.0) {
+      if (b.shockCycleTimer >= shockMax) {
         b.shockCycleTimer = 0;
         b.shockTelegraphed = false;
         this.player.stunTimer = 0.5;
@@ -6631,7 +6651,7 @@ class Game {
         subTitleEl.textContent = `🛡️ 金羽神盾: ${Math.round(b.featherBarrierHp)} / ${b.maxFeatherBarrierHp || 10000}`;
         subTitleEl.style.color = '#ffd700';
       } else if (b.stage === 4 && b.phase >= 2) {
-        const shockIn = Math.max(0, 3.0 - (b.shockCycleTimer || 0)).toFixed(1);
+        const shockIn = Math.max(0, shockMax - (b.shockCycleTimer || 0)).toFixed(1);
         subTitleEl.textContent = `⚡ 磁暴拘束倒數: ${shockIn}s`;
         subTitleEl.style.color = '#38bdf8';
       } else if (b.stage === 5 && b.phase >= 2) {
@@ -6668,8 +6688,8 @@ class Game {
         tacAlert.innerHTML = `🛡️ <b>【金羽天罡神盾】常規攻擊無效並彈開！</b> ➔ 🎯 <b>戰術指示：蓄力發射【靈丸】或高貫穿武器強行破盾！</b>`;
       } else if (b.stage === 4 && b.phase >= 2) {
         tacAlert.style.display = 'block';
-        const shockIn = Math.max(0, 3.0 - (b.shockCycleTimer || 0)).toFixed(1);
-        tacAlert.innerHTML = `⚡ <b>【九天磁暴】倒數 ${shockIn}s</b> ➔ 🎯 <b>戰術指示：注意每 3 秒引發 0.5s 戰機短路拘束！</b>`;
+        const shockIn = Math.max(0, shockMax - (b.shockCycleTimer || 0)).toFixed(1);
+        tacAlert.innerHTML = `⚡ <b>【九天磁暴】倒數 ${shockIn}s</b> ➔ 🎯 <b>戰術指示：注意每 4.3 秒引發 0.5s 戰機短路拘束！</b>`;
       } else {
         tacAlert.style.display = 'none';
       }
