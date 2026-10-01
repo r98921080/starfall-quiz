@@ -1,10 +1,11 @@
 const SHEETS = {
-  QUESTIONS: 'Questions',
-  STUDENTS: 'Students',
   PARENT_DASHBOARD: 'ParentDashboard',
-  ATTEMPTS: 'Attempts'
+  QUESTIONS: 'Questions',
+  ATTEMPTS: 'Attempts',
+  STUDENTS: 'Students' // 相容舊版，若不存在會自動從 Attempts 整合學生名冊
 };
 
+// 極簡 3 分頁架構：僅保留 Questions (題庫) 與 Attempts (作答紀錄)，其餘報表全由 ParentDashboard 呈現
 const REQUIRED_HEADERS = {
   Questions: [
     'question_id', 'enabled', 'grade', 'subject', 'unit', 'skill',
@@ -13,7 +14,6 @@ const REQUIRED_HEADERS = {
     'explanation_detail', 'memory_tip', 'target_words', 'concept_tags',
     'error_pattern', 'next_step', 'source_type', 'review_priority'
   ],
-  Students: ['student_id', 'display_name', 'grade', 'pin_hash', 'active', 'created_at', 'notes'],
   Attempts: [
     'timestamp', 'student_id', 'session_id', 'stage', 'boss_name', 'question_id',
     'selected_option', 'correct', 'response_time_ms', 'attempt_index', 'is_review',
@@ -24,11 +24,11 @@ const REQUIRED_HEADERS = {
 
 function onOpen() {
   SpreadsheetApp.getUi()
-    .createMenu('星墜答問')
-    .addItem('初始化與檢查資料表', 'setupStarfall')
-    .addItem('🧹 一鍵去重與選項均衡清洗 (刪除重複題並平衡A/B/C/D)', 'cleanDuplicateQuestions')
-    .addItem('更新家長報表', 'refreshReports')
-    .addItem('建立測試作答資料', 'createDemoAttempts')
+    .createMenu('🌟 星墜答問')
+    .addItem('🧹 一鍵極簡化分頁 (刪除多餘工作表，只留 3 個核心分頁)', 'cleanAllExtraSheets')
+    .addItem('📊 立即更新家長報表 (ParentDashboard)', 'refreshReports')
+    .addItem('✨ 題庫智慧去重與選項均衡清洗', 'cleanDuplicateQuestions')
+    .addItem('⚙️ 初始化與檢查資料表', 'setupStarfall')
     .addToUi();
 }
 
@@ -38,10 +38,9 @@ function setupStarfall() {
     ensureSheetAndHeaders_(ss, sheetName, REQUIRED_HEADERS[sheetName]);
   });
   ensureReportSheets_(ss);
-  cleanLegacySheets_(ss);
-  refreshReports();
-  logActivity_('SETUP', '初始化完成，精簡家長總覽資料表與報表已建立。');
-  SpreadsheetApp.getUi().alert('初始化完成', '已檢查資料表並建立精簡清晰的【家長學習總覽】報表。', SpreadsheetApp.getUi().ButtonSet.OK);
+  cleanAllExtraSheets_(ss);
+  logActivity_('SETUP', '初始化完成，極簡家長總覽資料表與報表已建立。');
+  SpreadsheetApp.getUi().alert('初始化完成', '已檢查資料表並將工作表極簡化為 3 個核心分頁：\n1. 【ParentDashboard】家長學習總覽\n2. 【Questions】題目庫\n3. 【Attempts】即時作答紀錄', SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function doGet(e) {
@@ -66,11 +65,15 @@ function doGet(e) {
       const result = cleanDuplicateQuestions_();
       return jsonOutput_({ ok: true, message: '去重清洗完成', result: result });
     }
+    if (action === 'clean_sheets') {
+      const result = cleanAllExtraSheets_();
+      return jsonOutput_({ ok: true, message: '工作表極簡化完成', result: result });
+    }
     return jsonOutput_({
       ok: true,
       service: 'Starfall Quiz Learning API',
       version: '1.2.6',
-      actions: ['questions', 'students', 'student_progress', 'register_student', 'attempt', 'attempt_batch', 'settings', 'report', 'clean_questions']
+      actions: ['questions', 'students', 'student_progress', 'register_student', 'attempt', 'attempt_batch', 'settings', 'report', 'clean_questions', 'clean_sheets']
     });
   } catch (err) {
     return jsonOutput_({ ok: false, error: String(err.message || err) });
@@ -92,6 +95,10 @@ function doPost(e) {
       const result = cleanDuplicateQuestions_();
       return jsonOutput_({ ok: true, message: '去重清洗完成', result: result });
     }
+    if (action === 'clean_sheets') {
+      const result = cleanAllExtraSheets_();
+      return jsonOutput_({ ok: true, message: '工作表極簡化完成', result: result });
+    }
     return jsonOutput_({ ok: false, error: '不支援的 action：' + action });
   } catch (err) {
     return jsonOutput_({ ok: false, error: String(err.message || err) });
@@ -101,70 +108,106 @@ function doPost(e) {
 function registerStudent_(payload) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(SHEETS.STUDENTS);
-  if (!sheet) throw new Error('找不到 Students 資料表。');
-  const rows = sheetObjects_(sheet);
   const name = String(payload.name || payload.display_name || '').trim();
   const grade = String(payload.grade || '').trim();
   if (!name) throw new Error('學生姓名不可為空。');
 
-  // 1. 檢查是否已有相同姓名 (及年級) 的現存學生
-  const existing = rows.find(function(r) {
-    return String(r.display_name).trim() === name && (!grade || String(r.grade).trim() === grade);
-  });
-  if (existing) {
+  if (sheet) {
+    const rows = sheetObjects_(sheet);
+    // 1. 檢查是否已有相同姓名 (及年級) 的現存學生
+    const existing = rows.find(function(r) {
+      return String(r.display_name).trim() === name && (!grade || String(r.grade).trim() === grade);
+    });
+    if (existing) {
+      return {
+        ok: true,
+        student_id: existing.student_id,
+        display_name: existing.display_name,
+        grade: existing.grade,
+        isNew: false,
+        message: '學生已存在，綁定既有學號。'
+      };
+    }
+
+    // 2. 自動分配 "S0000" 格式的新序號 (例如 S0001, S0002, ...)
+    let maxNum = 0;
+    rows.forEach(function(r) {
+      const m = String(r.student_id || '').match(/^S(\d+)$/i);
+      if (m) {
+        const num = parseInt(m[1], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    });
+    const newNum = maxNum + 1;
+    const newId = 'S' + String(newNum).padStart(4, '0');
+
+    const headers = getHeaders_(sheet);
+    const now = new Date();
+    const newRow = {
+      student_id: newId,
+      display_name: name,
+      grade: grade,
+      pin_hash: '',
+      active: 'TRUE',
+      created_at: now.toISOString(),
+      notes: '遊戲端自動登錄註冊'
+    };
+
+    sheet.appendRow(headers.map(function(h) {
+      return newRow[h] !== undefined ? newRow[h] : '';
+    }));
+
+    logActivity_('REGISTER_STUDENT', newId + '｜' + name + '｜' + grade);
     return {
       ok: true,
-      student_id: existing.student_id,
-      display_name: existing.display_name,
-      grade: existing.grade,
-      isNew: false,
-      message: '學生已存在，綁定既有學號。'
+      student_id: newId,
+      display_name: name,
+      grade: grade,
+      isNew: true,
+      message: '新學生註冊成功，配發學號 ' + newId + '。'
+    };
+  } else {
+    // 極簡 3 分頁模式 (無獨立 Students 表)：由 Attempts 作答歷程直接推算學號與綁定
+    const aSheet = ss.getSheetByName(SHEETS.ATTEMPTS);
+    const attempts = aSheet ? sheetObjects_(aSheet) : [];
+    const matched = attempts.find(function(a) {
+      return String(a.student_name).trim() === name && (!grade || String(a.student_grade).trim() === grade);
+    });
+    if (matched) {
+      return {
+        ok: true,
+        student_id: matched.student_id,
+        display_name: matched.student_name,
+        grade: matched.student_grade || grade,
+        isNew: false,
+        message: '學生已存在作答紀錄中，綁定既有學號。'
+      };
+    }
+    let maxNum = 0;
+    attempts.forEach(function(a) {
+      const m = String(a.student_id || '').match(/^S(\d+)$/i);
+      if (m) {
+        const num = parseInt(m[1], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    });
+    const newNum = maxNum + 1;
+    const newId = 'S' + String(newNum).padStart(4, '0');
+    return {
+      ok: true,
+      student_id: newId,
+      display_name: name,
+      grade: grade,
+      isNew: true,
+      message: '新學生註冊成功，配發學號 ' + newId + '。'
     };
   }
-
-  // 2. 自動分配 "S0000" 格式的新序號 (例如 S0001, S0002, ...)
-  let maxNum = 0;
-  rows.forEach(function(r) {
-    const m = String(r.student_id || '').match(/^S(\d+)$/i);
-    if (m) {
-      const num = parseInt(m[1], 10);
-      if (num > maxNum) maxNum = num;
-    }
-  });
-  const newNum = maxNum + 1;
-  const newId = 'S' + String(newNum).padStart(4, '0');
-
-  const headers = getHeaders_(sheet);
-  const now = new Date();
-  const newRow = {
-    student_id: newId,
-    display_name: name,
-    grade: grade,
-    pin_hash: '',
-    active: 'TRUE',
-    created_at: now.toISOString(),
-    notes: '遊戲端自動登錄註冊'
-  };
-
-  sheet.appendRow(headers.map(function(h) {
-    return newRow[h] !== undefined ? newRow[h] : '';
-  }));
-
-  logActivity_('REGISTER_STUDENT', newId + '｜' + name + '｜' + grade);
-  return {
-    ok: true,
-    student_id: newId,
-    display_name: name,
-    grade: grade,
-    isNew: true,
-    message: '新學生註冊成功，配發學號 ' + newId + '。'
-  };
 }
 
 function ensureStudentExists_(ss, studentId, name, grade) {
   if (!studentId) return;
   const sheet = ss.getSheetByName(SHEETS.STUDENTS);
-  if (!sheet) return;
+  if (!sheet) return; // 極簡 3 分頁模式下無須寫入額外 Students 表
   const rows = sheetObjects_(sheet);
   const foundIndex = rows.findIndex(function(r) { return String(r.student_id).trim() === String(studentId).trim(); });
   if (foundIndex === -1) {
@@ -236,12 +279,33 @@ function getQuestions_(params) {
 
 function getStudents_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const students = sheetObjects_(ss.getSheetByName(SHEETS.STUDENTS))
-    .filter(function(row) { return String(row.active).toUpperCase() !== 'FALSE'; })
-    .map(function(row) {
-      return { student_id: row.student_id, display_name: row.display_name, grade: row.grade, notes: row.notes || '' };
-    });
-  return { ok: true, students: students };
+  const sSheet = ss.getSheetByName(SHEETS.STUDENTS);
+  if (sSheet) {
+    const students = sheetObjects_(sSheet)
+      .filter(function(row) { return String(row.active).toUpperCase() !== 'FALSE'; })
+      .map(function(row) {
+        return { student_id: row.student_id, display_name: row.display_name, grade: row.grade, notes: row.notes || '' };
+      });
+    if (students.length > 0) return { ok: true, students: students };
+  }
+
+  // 極簡 3 分頁備援：若無 Students 表，直接從 Attempts 作答紀錄中自動匯聚不重複學生名冊！
+  const aSheet = ss.getSheetByName(SHEETS.ATTEMPTS);
+  const attempts = aSheet ? sheetObjects_(aSheet) : [];
+  const map = {};
+  attempts.forEach(function(a) {
+    const sid = String(a.student_id || '').trim();
+    if (sid && !map[sid]) {
+      map[sid] = {
+        student_id: sid,
+        display_name: a.student_name || sid,
+        name: a.student_name || sid,
+        grade: a.student_grade || '三年級',
+        active: 'TRUE'
+      };
+    }
+  });
+  return { ok: true, students: Object.values(map) };
 }
 
 function getStudentProgressData_(params) {
@@ -667,14 +731,49 @@ function ensureReportSheets_(ss) {
   }
 }
 
-function cleanLegacySheets_(ss) {
-  const legacyNames = ['QuestionStats', 'WordStats', 'SkillStats', 'ActivityLog', 'Settings'];
+function cleanAllExtraSheets() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const res = cleanAllExtraSheets_(ss);
+  const msg = res.deleted.length > 0
+    ? '✅ 簡化成功！已刪除以下多餘工作表：\n' + res.deleted.join('、') + '\n\n目前試算表已極簡化為 3 個核心分頁：\n1. 【ParentDashboard】家長學習總覽（第一頁）\n2. 【Questions】題目庫\n3. 【Attempts】即時作答紀錄'
+    : 'ℹ️ 目前試算表已是極簡 3 分頁狀態（ParentDashboard、Questions、Attempts），無多餘工作表。';
+  SpreadsheetApp.getUi().alert('工作表極簡化完成', msg, SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+function cleanAllExtraSheets_(ss) {
+  if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
+  // 欲刪除的多餘分頁名稱（統計表、記錄表、設定表、獨立學生名單、未命名的空工作表）
+  const legacyNames = ['QuestionStats', 'WordStats', 'SkillStats', 'ActivityLog', 'Settings', 'Students', 'Sheet1', '工作表1'];
+  const deleted = [];
   legacyNames.forEach(function(name) {
     const s = ss.getSheetByName(name);
     if (s && ss.getSheets().length > 1) {
-      try { ss.deleteSheet(s); } catch (e) {}
+      try {
+        ss.deleteSheet(s);
+        deleted.push(name);
+      } catch (e) {}
     }
   });
+
+  // 確保三大核心分頁存在
+  ensureSheetAndHeaders_(ss, SHEETS.QUESTIONS, REQUIRED_HEADERS.Questions);
+  ensureSheetAndHeaders_(ss, SHEETS.ATTEMPTS, REQUIRED_HEADERS.Attempts);
+  ensureReportSheets_(ss);
+
+  // 將 ParentDashboard 移到最左側第一個分頁，打開試算表第一眼即見家長總覽
+  const dash = ss.getSheetByName(SHEETS.PARENT_DASHBOARD);
+  if (dash) {
+    ss.setActiveSheet(dash);
+    ss.moveActiveSheet(1);
+  }
+
+  // 重新產生最新家長報表
+  refreshReports();
+  return { ok: true, deleted: deleted };
+}
+
+function cleanLegacySheets_(ss) {
+  return cleanAllExtraSheets_(ss);
 }
 
 function sheetObjects_(sheet) {
