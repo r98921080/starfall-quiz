@@ -1998,5 +1998,48 @@ canvas#gameCanvas {
   }
 }
 
+/* ============================================================
+   BUILD-039: 存檔系統卡片與按鈕樣式 (Player Save & Resume Styles)
+   ============================================================ */
+#saveInfoCard {
+  animation: saveCardGaze 2.5s ease-in-out infinite alternate;
+}
+
+@keyframes saveCardGaze {
+  0% {
+    box-shadow: 0 0 12px rgba(245, 188, 56, 0.15);
+    border-color: rgba(245, 188, 56, 0.4);
+  }
+  100% {
+    box-shadow: 0 0 22px rgba(245, 188, 56, 0.35);
+    border-color: rgba(245, 188, 56, 0.7);
+  }
+}
+
+.save-weapon-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.15);
+}
+
+.btn.danger {
+  background: linear-gradient(135deg, #ef4444, #b91c1c);
+  color: #ffffff;
+  border: 1px solid #f87171;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.35);
+}
+
+.btn.danger:hover {
+  background: linear-gradient(135deg, #dc2626, #991b1b);
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.55);
+}
+
 
 

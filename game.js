@@ -1937,8 +1937,13 @@ class DataStore {
     if (statusEl) {
       statusEl.textContent = `✅ 當前駕駛員：${this.studentName} (${studentId})，獨立學習歷程已就緒`;
     }
-    if (window.__starfallGame && typeof window.__starfallGame.updatePermissionUI === 'function') {
-      window.__starfallGame.updatePermissionUI();
+    if (window.__starfallGame) {
+      if (typeof window.__starfallGame.updatePermissionUI === 'function') {
+        window.__starfallGame.updatePermissionUI();
+      }
+      if (typeof window.__starfallGame.updateStartScreenSaveUI === 'function') {
+        window.__starfallGame.updateStartScreenSaveUI();
+      }
     }
   }
 
@@ -2078,8 +2083,13 @@ class DataStore {
           if (mistakeBadge) {
             mistakeBadge.textContent = mistakes > 0 ? `待雪恥錯題：${mistakes} 題` : '待雪恥錯題：0 題 (新學員)';
           }
-          if (window.__starfallGame && typeof window.__starfallGame.updatePermissionUI === 'function') {
-            window.__starfallGame.updatePermissionUI();
+          if (window.__starfallGame) {
+            if (typeof window.__starfallGame.updatePermissionUI === 'function') {
+              window.__starfallGame.updatePermissionUI();
+            }
+            if (typeof window.__starfallGame.updateStartScreenSaveUI === 'function') {
+              window.__starfallGame.updateStartScreenSaveUI();
+            }
           }
           return data.student_id;
         }
@@ -2159,8 +2169,13 @@ class DataStore {
     if (mistakeBadge) {
       mistakeBadge.textContent = mistakes > 0 ? `待雪恥錯題：${mistakes} 題` : '待雪恥錯題：0 題 (新學員)';
     }
-    if (window.__starfallGame && typeof window.__starfallGame.updatePermissionUI === 'function') {
-      window.__starfallGame.updatePermissionUI();
+    if (window.__starfallGame) {
+      if (typeof window.__starfallGame.updatePermissionUI === 'function') {
+        window.__starfallGame.updatePermissionUI();
+      }
+      if (typeof window.__starfallGame.updateStartScreenSaveUI === 'function') {
+        window.__starfallGame.updateStartScreenSaveUI();
+      }
     }
     return existing.student_id;
   }
@@ -2243,11 +2258,9 @@ class DataStore {
     p.lastAttempt = Date.now();
     if (attempt.correct) {
       p.streak++;
-      if (attempt.is_review) p.avenged = true;
     } else {
       p.wrong++;
       p.streak = 0;
-      p.avenged = false;
     }
 
     // 跨局題幹指紋更新 (Mastered vs Mistake，杜絕不同 ID 但同題幹之重複題)
@@ -2256,6 +2269,7 @@ class DataStore {
     const fp = this.getQuestionFingerprint(qText);
     const accuracy = p.attempts > 0 ? ((p.attempts - (p.wrong || 0)) / p.attempts) : 0;
     const isMastered = (p.wrong === 0) || (accuracy > 0.5);
+    p.avenged = (accuracy > 0.5);
 
     if (fp) {
       if (isMastered) {
@@ -2861,29 +2875,27 @@ class DataStore {
     return true; // 全題庫所有考題均已在本輪中抽過作答，全數耗盡
   }
 
-  // 計算指定題目對於該學員的層級分類 (Tier 1 / Tier 2 / Tier 3)
-  // Tier 1: 全新題目 (attempts === 0) 或 歷史錯題且累積答對率 <= 50%
-  // Tier 2: 之前輪次答對之題目 (attempts > 0 && wrong === 0)
-  // Tier 3: 錯題且累積答對率 > 50% (視為新題答對之掌握題)
+  // BUILD-039: 計算指定題目對於該學員的層級分類
+  // Tier 1 (全新題): 從未作答過 (attempts === 0)
+  // Tier 2 (待加強錯題): 有答錯過且累積正確率 <= 50% (隨機重複出現直到正確率 > 50%)
+  // Tier 3 (已掌握題): 答對且無答錯，或答錯後累積正確率超過 50% (掌握後幾乎不再出現)
   getQuestionTier(q, sidProgress) {
     const p = sidProgress[q.question_id];
     if (!p || !p.attempts || p.attempts === 0) {
-      return 1; // 新題
+      return 1; // Tier 1: 全新題目
     }
     const attempts = p.attempts;
     const wrong = p.wrong || 0;
     const correct = attempts - wrong;
-    const accuracy = correct / attempts;
+    const accuracy = attempts > 0 ? (correct / attempts) : 0;
 
-    if (wrong === 0) {
-      return 2; // 之前輪次答對的題目
+    // 依使用者需求：每個小孩在遊戲中答對的問題幾乎不再出現即可 (Mastered)
+    // 答錯的則會隨機重複出現直到正確率超過 50%
+    if ((wrong === 0 && attempts > 0) || (accuracy > 0.5)) {
+      return 3; // Tier 3: 已掌握題，幾乎不再出現
     }
 
-    if (accuracy > 0.5) {
-      return 3; // 錯題正確率超過 50% (視為新題答對)
-    } else {
-      return 1; // 錯題正確率 <= 50% (與新題一同優先作答)
-    }
+    return 2; // Tier 2: 待雪恥錯題 (accuracy <= 50%)
   }
 
   pickAdaptiveQuestions(count = 5, stage = 1) {
@@ -2891,7 +2903,7 @@ class DataStore {
     const sid = this.currentStudentId || 'S0001';
     const sidProgress = this.getStudentProgressMap(sid);
 
-    // 完整開放全題庫 (136 題跨年級題庫全數納入可用池，不再因單一年級僅 15 題而在第 3~5 關提早乾涸！)
+    // 完整開放全題庫跨年級可用池
     const pool = [...this.questionBank];
 
     if (!this.sessionUsedQuestionIds) this.sessionUsedQuestionIds = new Set();
@@ -2907,13 +2919,13 @@ class DataStore {
 
     const availablePool = pool.filter(isUnused);
 
-    // 依據三層出題優先級分流可用題目：
-    // Tier 1: 【同一輪新題 + 錯題 (正確率 <= 50%)】
-    // Tier 2: 【之前輪次答對的題目】
-    // Tier 3: 【錯題正確率超過 50% 題目】
-    const tier1Candidates = availablePool.filter(q => this.getQuestionTier(q, sidProgress) === 1);
-    const tier2Candidates = availablePool.filter(q => this.getQuestionTier(q, sidProgress) === 2);
-    const tier3Candidates = availablePool.filter(q => this.getQuestionTier(q, sidProgress) === 3);
+    // 依據三層出題體系分流可用題目：
+    // Tier 1: 【全新題目】
+    // Tier 2: 【待雪恥錯題 (正確率 <= 50%)】-> 隨機重複出現直到正確率超過 50%
+    // Tier 3: 【已掌握題目 (答對或正確率 > 50%)】-> 掌握後幾乎不再出現，除非題庫耗盡
+    const tier1Fresh = availablePool.filter(q => this.getQuestionTier(q, sidProgress) === 1);
+    const tier2Mistakes = availablePool.filter(q => this.getQuestionTier(q, sidProgress) === 2);
+    const tier3Mastered = availablePool.filter(q => this.getQuestionTier(q, sidProgress) === 3);
 
     const selected = [];
     const selectedFps = new Set();
@@ -2932,84 +2944,92 @@ class DataStore {
     };
 
     // ----------------------------------------------------
-    // 第一階抽題：從 Tier 1 【同一輪新題 + 錯題 (<= 50%)】優先抽取
+    // 第一步：【錯題複習復仇機制】
+    // 依需求：答錯的則會隨機重複出現直到正確率超過 50%
+    // 每輪測驗 (5 題) 優先隨機抽出 1~2 題未掌握錯題 (Tier 2)
     // ----------------------------------------------------
-    if (tier1Candidates.length > 0) {
-      // 1A.【同儕易錯攻堅題】：若其他人有錯題且未在該玩家答題紀錄出現過，優先出題 1~2 題
-      const peerMistakes = this.getPeerMistakes(sid, tier1Candidates);
-      if (peerMistakes.length > 0) {
-        peerMistakes.sort(() => Math.random() - 0.5);
-        const peerTargetCount = Math.min(2, Math.min(count - selected.length, peerMistakes.length));
-        for (let i = 0; i < peerTargetCount; i++) {
-          const pq = peerMistakes[i];
-          const fp = this.getQuestionFingerprint(pq);
+    if (tier2Mistakes.length > 0) {
+      // 隨機打亂錯題候選池
+      const shuffledMistakes = [...tier2Mistakes].sort(() => Math.random() - 0.5);
+      const mistakeTargetCount = Math.min(2, Math.min(count, shuffledMistakes.length));
+      for (let i = 0; i < mistakeTargetCount; i++) {
+        const mq = shuffledMistakes[i];
+        const fp = this.getQuestionFingerprint(mq);
+        if (!selectedFps.has(fp)) {
+          addQuestion(mq, { isPeerMistake: false, isReview: true, isRevenge: true });
+        }
+      }
+    }
+
+    // ----------------------------------------------------
+    // 第二步：【全新題目推進】
+    // 從 Tier 1 (全新未答過題目) 中，依關卡難度加權補齊剩餘題目槽位
+    // ----------------------------------------------------
+    const neededFromFresh = count - selected.length;
+    if (neededFromFresh > 0 && tier1Fresh.length > 0) {
+      const remainingFresh = tier1Fresh.filter(q => {
+        const fp = this.getQuestionFingerprint(q);
+        return !selectedFps.has(fp);
+      });
+
+      if (remainingFresh.length > 0) {
+        const drawn = this.drawWeightedQuestions(remainingFresh, neededFromFresh, stage);
+        for (const dq of drawn) {
+          const fp = this.getQuestionFingerprint(dq);
           if (!selectedFps.has(fp)) {
-            addQuestion(pq, { isPeerMistake: true, isReview: false, isRevenge: false });
-          }
-        }
-      }
-
-      // 1B.【自身未掌握錯題攻堅復仇】：優先從 Tier 1 中抽取 1~2 題未雪恥錯題
-      const neededForMistakes = count - selected.length;
-      if (neededForMistakes > 0) {
-        const unavengedMistakes = tier1Candidates.filter(q => {
-          const fp = this.getQuestionFingerprint(q);
-          if (selectedFps.has(fp)) return false;
-          const p = sidProgress[q.question_id];
-          return p && p.wrong > 0 && !p.avenged;
-        });
-
-        if (unavengedMistakes.length > 0) {
-          unavengedMistakes.sort(() => Math.random() - 0.5);
-          const mistakeTargetCount = Math.min(2, Math.min(neededForMistakes, unavengedMistakes.length));
-          for (let i = 0; i < mistakeTargetCount; i++) {
-            const mq = unavengedMistakes[i];
-            const fp = this.getQuestionFingerprint(mq);
-            if (!selectedFps.has(fp)) {
-              addQuestion(mq, { isPeerMistake: false, isReview: true, isRevenge: true });
-            }
-          }
-        }
-      }
-
-      // 1C.【Tier 1 其餘新題與題目，依關卡難度加權抽取】
-      const stillNeededInTier1 = count - selected.length;
-      if (stillNeededInTier1 > 0) {
-        const remainingTier1 = tier1Candidates.filter(q => {
-          const fp = this.getQuestionFingerprint(q);
-          return !selectedFps.has(fp);
-        });
-
-        if (remainingTier1.length > 0) {
-          const drawn = this.drawWeightedQuestions(remainingTier1, stillNeededInTier1, stage);
-          for (const dq of drawn) {
-            const fp = this.getQuestionFingerprint(dq);
-            if (!selectedFps.has(fp)) {
-              const p = sidProgress[dq.question_id];
-              addQuestion(dq, {
-                isPeerMistake: false,
-                isReview: !!(p && p.attempts > 0),
-                isRevenge: !!(p && p.wrong > 0 && !p.avenged)
-              });
-            }
+            addQuestion(dq, {
+              isPeerMistake: false,
+              isReview: false,
+              isRevenge: false
+            });
           }
         }
       }
     }
 
     // ----------------------------------------------------
-    // 第二階抽題：Tier 1 用完時，從 Tier 2 【之前輪次答對的題目】補充
+    // 第三步：若全新題目 (Tier 1) 不足，從剩餘錯題 (Tier 2) 補充
     // ----------------------------------------------------
-    const neededFromTier2 = count - selected.length;
-    if (neededFromTier2 > 0 && tier2Candidates.length > 0) {
-      const remainingTier2 = tier2Candidates.filter(q => {
+    const neededFromRemainingMistakes = count - selected.length;
+    if (neededFromRemainingMistakes > 0 && tier2Mistakes.length > 0) {
+      const remainingMistakes = tier2Mistakes.filter(q => {
+        const fp = this.getQuestionFingerprint(q);
+        return !selectedFps.has(fp);
+      });
+      if (remainingMistakes.length > 0) {
+        remainingMistakes.sort(() => Math.random() - 0.5);
+        const toTake = Math.min(neededFromRemainingMistakes, remainingMistakes.length);
+        for (let i = 0; i < toTake; i++) {
+          const mq = remainingMistakes[i];
+          const fp = this.getQuestionFingerprint(mq);
+          if (!selectedFps.has(fp)) {
+            addQuestion(mq, { isPeerMistake: false, isReview: true, isRevenge: true });
+          }
+        }
+      }
+    }
+
+    // ----------------------------------------------------
+    // 第四步：【已掌握題目兜底】(答對的問題幾乎不再出現)
+    // 只有在全題庫中新題與錯題皆已完全耗盡時，才作為保底抽取 Tier 3 題目
+    // ----------------------------------------------------
+    const neededFromMastered = count - selected.length;
+    if (neededFromMastered > 0 && tier3Mastered.length > 0) {
+      const remainingMastered = tier3Mastered.filter(q => {
         const fp = this.getQuestionFingerprint(q);
         return !selectedFps.has(fp);
       });
 
-      if (remainingTier2.length > 0) {
-        const drawn = this.drawWeightedQuestions(remainingTier2, neededFromTier2, stage);
-        for (const dq of drawn) {
+      if (remainingMastered.length > 0) {
+        // 最久未作答的掌握題優先
+        remainingMastered.sort((a, b) => {
+          const pa = sidProgress[a.question_id] || {};
+          const pb = sidProgress[b.question_id] || {};
+          return (pa.lastAttempt || 0) - (pb.lastAttempt || 0);
+        });
+        const toTake = Math.min(neededFromMastered, remainingMastered.length);
+        for (let i = 0; i < toTake; i++) {
+          const dq = remainingMastered[i];
           const fp = this.getQuestionFingerprint(dq);
           if (!selectedFps.has(fp)) {
             addQuestion(dq, {
@@ -3023,32 +3043,8 @@ class DataStore {
     }
 
     // ----------------------------------------------------
-    // 第三階抽題：Tier 2 也用完時，從 Tier 3 【錯題正確率超過 50% 題目】補充
+    // 保底湊滿 5 題機制：若可用池剛好剩餘少數題，從池中補齊
     // ----------------------------------------------------
-    const neededFromTier3 = count - selected.length;
-    if (neededFromTier3 > 0 && tier3Candidates.length > 0) {
-      const remainingTier3 = tier3Candidates.filter(q => {
-        const fp = this.getQuestionFingerprint(q);
-        return !selectedFps.has(fp);
-      });
-
-      if (remainingTier3.length > 0) {
-        const drawn = this.drawWeightedQuestions(remainingTier3, neededFromTier3, stage);
-        for (const dq of drawn) {
-          const fp = this.getQuestionFingerprint(dq);
-          if (!selectedFps.has(fp)) {
-            addQuestion(dq, {
-              isPeerMistake: false,
-              isReview: true,
-              isRevenge: false
-            });
-          }
-        }
-      }
-    }
-
-    // 保底湊滿 5 題機制：若全題庫 136 題剛好剩下最後 1~4 題尾數 (例如 136 % 5 = 1)，
-    // 自動從題庫中補齊不足的題數至完整 5 題，確保玩家在該次測驗仍能完整作答 5 題並爭取 5 題全對獎勵，絕不會被迫卡在只剩 1~2 題可答！
     if (selected.length > 0 && selected.length < count && pool.length >= count) {
       const neededToFill = count - selected.length;
       const fillerCandidates = pool.filter(q => {
@@ -3768,12 +3764,14 @@ class Game {
           if (mistakeBadge) mistakeBadge.textContent = '待雪恥錯題：0 題 (新學員)';
           if (statusEl) statusEl.textContent = '請輸入新學員姓名並點擊「確認學員」，將於 Google Sheet 建立新 S0000 學號';
           this.updatePermissionUI();
+          this.updateStartScreenSaveUI();
         } else {
           const opt = studentSelect.options[studentSelect.selectedIndex];
           const name = (opt && opt.dataset.name) || '';
           const grade = (opt && opt.dataset.grade) || '';
           await this.dataStore.switchStudent(val, name, grade);
           this.updatePermissionUI();
+          this.updateStartScreenSaveUI();
         }
       });
     }
@@ -3789,6 +3787,7 @@ class Game {
       const grade = (gradeSelect && gradeSelect.value) || '三年級';
       const sid = await this.dataStore.syncStudentProfile(name, grade, isNew);
       this.updatePermissionUI();
+      this.updateStartScreenSaveUI();
       this.showToast(`✅ 已確認學員：${name} (${sid})`);
     });
 
@@ -3843,6 +3842,25 @@ class Game {
         if (btn) btn.disabled = false;
       }
     });
+
+    // BUILD-039: 存檔控制按鈕綁定 (繼續遊戲 vs 重新開始)
+    setClick('continueGameBtn', async (e) => {
+      if (e && e.preventDefault) e.preventDefault();
+      const sid = (this.dataStore && this.dataStore.currentStudentId) || 'S0001';
+      const success = this.loadPlayerRunSave(sid);
+      if (!success) {
+        this.showToast('⚠️ 未能讀取存檔，以新遊戲啟動');
+        this.startNewGame(1);
+      }
+    });
+
+    setClick('restartNewGameBtn', (e) => {
+      if (e && e.preventDefault) e.preventDefault();
+      const sid = (this.dataStore && this.dataStore.currentStudentId) || 'S0001';
+      this.deletePlayerRunSave(sid);
+      this.showToast('🔄 已清除存檔，請選擇初始武裝出擊！');
+    });
+
     setClick('pauseBtn', () => this.togglePause());
     setClick('resumeBtn', () => this.togglePause());
     setClick('resumeHeaderBtn', () => this.togglePause());
@@ -3855,6 +3873,7 @@ class Game {
       if (document.activeElement && typeof document.activeElement.blur === 'function') {
         document.activeElement.blur();
       }
+      this.deletePlayerRunSave();
       this.togglePause();
       this.startNewGame(1);
     });
@@ -3870,6 +3889,7 @@ class Game {
       if (document.activeElement && typeof document.activeElement.blur === 'function') {
         document.activeElement.blur();
       }
+      this.deletePlayerRunSave();
       this.continueCount = 0;
       this.startNewGame(1);
     });
@@ -3894,6 +3914,7 @@ class Game {
     this.bindGsEvents();
     this.bindLabEvents();
     this.updatePermissionUI();
+    this.updateStartScreenSaveUI();
   }
 
   // 權限隔離控制：僅有 S0001 (測試玩家) 具備 LAB 與 Google Sheet 設定權限
@@ -5550,6 +5571,225 @@ class Game {
   }
 
   // ============================================================
+  // 玩家作戰進度存檔與接關系統 (Player Run Save & Continue System - BUILD-039)
+  // ============================================================
+  getSaveKey(studentId) {
+    const sid = studentId || (this.dataStore && this.dataStore.currentStudentId) || 'S0001';
+    return `starfall_run_save_${sid}`;
+  }
+
+  getPlayerRunSave(studentId) {
+    try {
+      const key = this.getSaveKey(studentId);
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const save = JSON.parse(raw);
+      if (save && save.stage && save.playerHp !== undefined) {
+        return save;
+      }
+    } catch (e) {
+      console.warn('[SaveSystem] 讀取存檔解析失敗：', e);
+    }
+    return null;
+  }
+
+  savePlayerRun(studentId) {
+    try {
+      const sid = studentId || (this.dataStore && this.dataStore.currentStudentId) || 'S0001';
+      if (!this.player || this.state === 'gameover') return;
+
+      const weapons = [];
+      if (this.arsenal) {
+        Object.keys(this.arsenal).forEach(id => {
+          const w = this.arsenal[id];
+          if (w && w.rank > 0) {
+            weapons.push({
+              id: id,
+              rank: w.rank,
+              quality: w.quality || 'common'
+            });
+          }
+        });
+      }
+
+      const now = new Date();
+      const timeStr = `${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+      const saveData = {
+        studentId: sid,
+        studentName: (this.dataStore && this.dataStore.studentName) || '學員',
+        stage: this.stage || 1,
+        playerHp: Math.max(1, this.player.hp || 3),
+        playerMaxHp: this.player.maxHp || 3,
+        score: this.score || 0,
+        weapons: weapons,
+        equippedActiveWeapons: [...(this.equippedActiveWeapons || ['multishot'])],
+        savedAt: now.toISOString(),
+        timestampText: timeStr
+      };
+
+      const key = this.getSaveKey(sid);
+      localStorage.setItem(key, JSON.stringify(saveData));
+      console.log(`[SaveSystem] ✅ 成功存檔！學號：${sid}，第 ${saveData.stage} 關，生命 ${saveData.playerHp}/${saveData.playerMaxHp}，持有武器 ${weapons.length} 款`);
+    } catch (e) {
+      console.warn('[SaveSystem] 存檔寫入失敗：', e);
+    }
+  }
+
+  deletePlayerRunSave(studentId) {
+    try {
+      const key = this.getSaveKey(studentId);
+      localStorage.removeItem(key);
+      this.updateStartScreenSaveUI();
+      console.log(`[SaveSystem] 🗑️ 已刪除存檔 (${key})`);
+    } catch (e) {}
+  }
+
+  loadPlayerRunSave(studentId) {
+    const save = this.getPlayerRunSave(studentId);
+    if (!save) return false;
+
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
+    if (this.canvas) {
+      this.canvas.tabIndex = 1;
+      if (typeof this.canvas.focus === 'function') {
+        try { this.canvas.focus(); } catch (err) {}
+      }
+    }
+
+    this.state = 'playing';
+    this.stage = Math.max(1, parseInt(save.stage) || 1);
+    this.wave = 1;
+    this.waveTimer = 0;
+    this.score = Math.max(0, parseInt(save.score) || 0);
+    this.continueCount = 0;
+    this.isResupplyContinue = false;
+    this.resetPlayerStatusEffects();
+    this.sessionTotalAnswered = 0;
+    this.sessionTotalCorrect = 0;
+    this.runConsecutiveCorrectStreak = 0;
+
+    if (this.dataStore) {
+      this.dataStore.resetSessionQuestions();
+    }
+
+    this.player.maxHp = Math.max(3, parseInt(save.playerMaxHp) || 3);
+    this.player.hp = Math.min(this.player.maxHp, Math.max(1, parseInt(save.playerHp) || 3));
+    this.player.shield = false;
+    this.player.grazeSync = 0;
+    this.player.bulletSlowFactor = 1.0;
+    this.player.moveSpeedMultiplier = 1.0;
+    this.player.speed = 400;
+    this.player.baseShootTimer = 0;
+    this.player.stunTimer = 0;
+    this.player.x = this.W / 2;
+    this.player.y = this.H - 100;
+    this.player.targetX = this.player.x;
+    this.player.targetY = this.player.y;
+    this.player.invulnTime = 2.5;
+
+    this.enemies = [];
+    this.bullets = [];
+    this.ebullets = [];
+    this.hazardTelegraphs = [];
+    this.lavaPools = [];
+    this.currentBoss = null;
+    this.bossDeathSequence = null;
+    this.screenFlashAlpha = 0;
+
+    // 重建武裝庫 (先清空重置，再注入存檔中持有之階級與品質)
+    if (this.arsenal) {
+      Object.keys(this.arsenal).forEach(key => {
+        this.arsenal[key].rank = 0;
+        this.arsenal[key].timer = 0;
+        this.arsenal[key].quality = 'common';
+      });
+      if (Array.isArray(save.weapons)) {
+        save.weapons.forEach(sw => {
+          if (this.arsenal[sw.id]) {
+            this.arsenal[sw.id].rank = Math.min(5, Math.max(1, parseInt(sw.rank) || 1));
+            this.arsenal[sw.id].quality = sw.quality || 'common';
+          }
+        });
+      }
+    }
+
+    // 恢復主動武器裝備槽
+    if (Array.isArray(save.equippedActiveWeapons) && save.equippedActiveWeapons.length > 0) {
+      this.equippedActiveWeapons = save.equippedActiveWeapons.filter(id => this.arsenal && this.arsenal[id] && this.arsenal[id].rank > 0);
+    }
+    if (!this.equippedActiveWeapons || this.equippedActiveWeapons.length === 0) {
+      const activeIds = Object.keys(this.arsenal || {}).filter(k => {
+        const cat = STARFALL_WEAPONS_CATALOG.find(w => w.id === k);
+        return cat && !cat.isPassive && this.arsenal[k].rank > 0;
+      });
+      this.equippedActiveWeapons = activeIds.length > 0 ? activeIds.slice(0, 3) : ['multishot'];
+    }
+
+    const firstActive = this.equippedActiveWeapons[0] || 'multishot';
+    if (this.arsenal && this.arsenal[firstActive]) {
+      this.equipped.main = this.arsenal[firstActive];
+    }
+
+    if (this.sound && this.sound.bgm) {
+      this.sound.bgm.setStage(this.stage);
+      this.sound.bgm.start();
+    }
+
+    document.querySelectorAll('.overlay').forEach(el => el.classList.add('hidden'));
+    this.updateHUD();
+    this.showToast(`▶️ 繼續作戰！恢復至第 ${this.stage} 關，生命 ${this.player.hp}/${this.player.maxHp} HP！`);
+    return true;
+  }
+
+  updateStartScreenSaveUI() {
+    const sid = (this.dataStore && this.dataStore.currentStudentId) || 'S0001';
+    const save = this.getPlayerRunSave(sid);
+
+    const saveInfoCard = document.getElementById('saveInfoCard');
+    const saveActionRow = document.getElementById('saveActionRow');
+    const normalActionRow = document.getElementById('normalActionRow');
+
+    if (save && save.stage && save.playerHp !== undefined) {
+      if (saveInfoCard) {
+        saveInfoCard.classList.remove('hidden');
+        const tsEl = document.getElementById('saveTimestamp');
+        const stgEl = document.getElementById('saveStageText');
+        const hpEl = document.getElementById('saveHpText');
+        const wListEl = document.getElementById('saveWeaponsList');
+
+        if (tsEl) tsEl.textContent = save.timestampText || '剛才';
+        if (stgEl) stgEl.textContent = `第 ${save.stage} 關`;
+        if (hpEl) hpEl.textContent = `${save.playerHp} / ${save.playerMaxHp || 3} HP`;
+
+        if (wListEl) {
+          wListEl.innerHTML = '';
+          if (Array.isArray(save.weapons) && save.weapons.length > 0) {
+            save.weapons.forEach(w => {
+              const cat = STARFALL_WEAPONS_CATALOG.find(c => c.id === w.id);
+              const name = cat ? cat.name : w.id;
+              const pill = document.createElement('span');
+              pill.className = 'save-weapon-pill';
+              pill.textContent = `${name} Lv.${w.rank}`;
+              wListEl.appendChild(pill);
+            });
+          } else {
+            wListEl.innerHTML = '<span style="font-size:10px; color:var(--text-muted);">無持有武裝</span>';
+          }
+        }
+      }
+      if (saveActionRow) saveActionRow.style.display = 'flex';
+      if (normalActionRow) normalActionRow.style.display = 'none';
+    } else {
+      if (saveInfoCard) saveInfoCard.classList.add('hidden');
+      if (saveActionRow) saveActionRow.style.display = 'none';
+      if (normalActionRow) normalActionRow.style.display = 'flex';
+    }
+  }
+
+  // ============================================================
   // 波次推進與神話 Boss 生成 (平衡 HP 與專屬多元機制)
   // ============================================================
   startNewGame(stage = 1) {
@@ -5634,6 +5874,9 @@ class Game {
       this.sound.bgm.setStage(this.stage);
       this.sound.bgm.start();
     }
+
+    // BUILD-039: 新局開始時立即自動存檔，以便中途退出能繼續遊戲
+    this.savePlayerRun();
 
     document.querySelectorAll('.overlay').forEach(el => el.classList.add('hidden'));
     this.updateHUD();
@@ -6284,8 +6527,9 @@ class Game {
     b.skillTimer += dt;
     b.ultimateTimer += dt;
 
-    // 每 2.0 秒執行一輪專屬機制攻擊
-    if (b.skillTimer >= 2.0) {
+    // BUILD-039: 第 1-6 關 Boss 專屬機制彈幕密度調降 15% (攻擊週期由 2.0s 延長至 2.35s，2.0/2.35 = 0.851)
+    const bossSkillInterval = (b.stage <= 6) ? 2.35 : 2.0;
+    if (b.skillTimer >= bossSkillInterval) {
       b.skillTimer = 0;
       if (b.isMini) {
         this.executeMiniBossAttack(b);
@@ -6665,23 +6909,24 @@ class Game {
       case 3: // 迦樓羅・裂空王 (全3模式：扇形3倍金羽 + 衝擊波留金羽二段大爆炸 + 裂空金羽煙火母彈)
         {
           if (mode === 0) {
-            // 模式 1：神鳥羽刃扇形旋風 (扇形彈道預警 cone + 3倍巨型金羽飛刃)
+            // 模式 1：神鳥羽刃扇形旋風 (BUILD-039: 彈幕密度調降 20%，5 枚 -> 4 枚)
             this.hazardTelegraphs.push({
-              type: 'cone', x: boss.x, y: boss.y + 20, angle: Math.PI / 2, spread: 1.05, radius: 500, rays: 5,
+              type: 'cone', x: boss.x, y: boss.y + 20, angle: Math.PI / 2, spread: 0.95, radius: 500, rays: 4,
               life: 0.85, accentColor: '#ffd700'
             });
             setTimeout(() => {
               if (!boss || boss.dead) return;
-              for (let i = -2; i <= 2; i++) {
-                const ang = Math.PI / 2 + (i / 2) * 0.48;
+              const featherOffsets = [-1.5, -0.5, 0.5, 1.5];
+              featherOffsets.forEach(fo => {
+                const ang = Math.PI / 2 + fo * 0.28;
                 const spd = isPhase2 ? 220 : 185;
                 const eb = new Bullet(boss.x, boss.y + 20, Math.cos(ang) * spd, Math.sin(ang) * spd, false, 1, 'feather');
                 eb.color = '#ffd700';
                 eb.r = 18; // 3倍巨型金羽
                 eb.isMega = true;
-                eb.driftPhase = i * 0.8;
+                eb.driftPhase = fo * 0.8;
                 this.ebullets.push(eb);
-              }
+              });
             }, 850);
           } else if (mode === 1) {
             // 模式 2：一飛沖天・神鳥衝擊波留羽爆破 (警示 ➔ 巨型衝擊波光束&衝擊波巨彈 ➔ 留下3枚羽毛 ➔ 羽毛爆炸！)
@@ -6781,19 +7026,20 @@ class Game {
       case 5: // 美杜莎・返照 (全3模式：扇形3倍石化魔鏡彈 + 萬蛇石化衝擊波留魔眼稜鏡二段爆炸 + 螺旋Diablo石化冰封球)
         {
           if (mode === 0) {
-            // 模式 1：蛇髮魔鏡扇形預警 cone + 5 枚 3倍巨型返照魔鏡彈
+            // 模式 1：蛇髮魔鏡扇形預警 (BUILD-039: 彈幕密度調降 20%，5 枚 -> 4 枚)
             this.hazardTelegraphs.push({
-              type: 'cone', x: boss.x, y: boss.y + 15, angle: Math.PI / 2, spread: 1.05, radius: 500, rays: 5,
+              type: 'cone', x: boss.x, y: boss.y + 15, angle: Math.PI / 2, spread: 0.95, radius: 500, rays: 4,
               life: 0.85, accentColor: '#c054ff'
             });
             setTimeout(() => {
               if (!boss || boss.dead) return;
-              for (let i = -2; i <= 2; i++) {
-                const ang = Math.PI / 2 + i * 0.24;
+              const mirrorOffsets = [-1.5, -0.5, 0.5, 1.5];
+              mirrorOffsets.forEach(mo => {
+                const ang = Math.PI / 2 + mo * 0.22;
                 const eb = new Bullet(boss.x, boss.y + 15, Math.cos(ang) * 185, Math.sin(ang) * 185, false, 1, 'mirror_bullet');
                 eb.color = '#c054ff'; eb.r = 19; eb.isMega = true;
                 this.ebullets.push(eb);
-              }
+              });
             }, 850);
           } else if (mode === 1) {
             // 模式 2：戈爾貢石化衝擊波 ➔ 沿途留下「石化魔眼稜鏡」 ➔ 二段引爆 3 倍紫晶石化煙火！
@@ -6843,7 +7089,8 @@ class Game {
           this.player.targetY -= (isPhase2 ? 22 : 14); // 引力向 Boss 牽引
           this.particles.push(new Particle(this.W / 2, boss.y + 30, (Math.random() - 0.5) * 80, (Math.random() - 0.5) * 80, '#ff9138', 5, 0.4));
           if (mode === 0) {
-            const fireCount = isPhase2 ? 7 : 5;
+            // BUILD-039: 第 6 關饕餮扇形熔火球數量調降 15% (7/5 枚 -> 6/4 枚)
+            const fireCount = isPhase2 ? 6 : 4;
             this.hazardTelegraphs.push({
               type: 'cone', x: boss.x, y: boss.y + 25, angle: Math.PI / 2, spread: 1.15, radius: 480, rays: fireCount,
               life: 0.8, accentColor: '#ff9138'
@@ -7370,17 +7617,17 @@ class Game {
         if (variant === 0) {
           this.showToast('🔥【機甲庫巴・終極焦熱崩星巨砲】廣角扇形彈道鎖定！3倍巨型熔岩主砲與烈焰煙火降臨！');
           this.sound.playMarioStomp();
-          // 扇形彈道預警 cone + 中央 3 倍巨型光束導軌
+          // BUILD-039: 扇形彈道預警 cone (7 條 -> 5 條，密度調降) + 中央 3 倍巨型光束導軌
           this.hazardTelegraphs.push({
-            type: 'cone', x: bx, y: by, angle: Math.PI / 2, spread: 1.25, radius: 540, rays: 7,
+            type: 'cone', x: bx, y: by, angle: Math.PI / 2, spread: 1.05, radius: 540, rays: 5,
             life: 1.0, accentColor: '#ea580c'
           });
           setTimeout(() => {
             if (!boss || boss.dead) return;
             this.sound.playLaser(980);
             this.spawnFireworkBurstShell({ x: bx, y: by, targetX: bx, targetY: 280, r: 28, color: '#ff4766', childType: 'fireball' });
-            for (let i = -3; i <= 3; i++) {
-              const eb = new Bullet(bx + i * 25, by, i * 52, 205, false, 1, 'fireball');
+            for (let i = -2; i <= 2; i++) {
+              const eb = new Bullet(bx + i * 28, by, i * 48, 205, false, 1, 'fireball');
               eb.color = '#ff4766';
               eb.r = 24; // 3倍巨型火球！
               eb.isMega = true;
@@ -8696,6 +8943,7 @@ class Game {
         this.showToast('干擾抑阻力場啟動！敵方彈幕速度降低 5%！');
       }
       this.sound.playCrit();
+      this.savePlayerRun();
       return;
     }
 
@@ -8704,6 +8952,7 @@ class Game {
       this.sound.playCrit();
       this.sound.speak(`真融合：${choice.name} 啟動！`);
       this.showToast(`啟動真融合：${choice.name}！火力全面昇華！`);
+      this.savePlayerRun();
       return;
     }
 
@@ -8743,6 +8992,7 @@ class Game {
     this.sound.playCrit();
     const rankLabel = choice.targetRank === 5 ? 'MAX (終極特化)' : `Lv.${choice.targetRank}`;
     this.sound.speak(`${choice.name} 升至第 ${choice.targetRank} 階！`);
+    this.savePlayerRun();
   }
 
   closeUpgradeScreen() {
@@ -8776,6 +9026,7 @@ class Game {
         this.sound.bgm.setStage(this.stage);
       }
 
+      this.savePlayerRun();
       this.showToast('🛡️ 補給整備完成！戰機滿血復原，重返戰場！');
       return;
     }
@@ -8790,6 +9041,7 @@ class Game {
       }
       this.wave = 3;
       this.waveTimer = 0;
+      this.savePlayerRun();
       this.showToast('喘息波次：測試新裝備火力！');
     } else if (this.wave === 4 || this.wave >= 3) {
       // 大 Boss 擊破，進入下一關卡 (第 1、2 關無縫接軌第 3 關，所有裝備武器火力完全繼承)
@@ -8820,6 +9072,7 @@ class Game {
         if (this.sound && this.sound.bgm) {
           this.sound.bgm.setStage(this.stage);
         }
+        this.savePlayerRun();
         this.showToast(`🚀 突破！帶著全新火力直奔第 ${this.stage} 關！`);
       } else {
         this.onGameVictory();
@@ -8830,6 +9083,7 @@ class Game {
   }
 
   onGameVictory() {
+    this.deletePlayerRunSave();
     this.state = 'gameover';
     document.getElementById('gameOverTitle').textContent = '神話登頂！全十二關通關！';
     document.getElementById('endScore').textContent = this.score;
@@ -9328,17 +9582,19 @@ class Game {
           const innerType = eb.innerType || 'feather';
           if (!this.reiganShockwaves) this.reiganShockwaves = [];
           this.reiganShockwaves.push({ x: eb.x, y: eb.y, r: 16, maxR: 155, life: 0.45, maxLife: 0.45, color: mainColor });
-          // 外圈 12 道 3 倍巨型主元素裂片 + 內圈 8 道 3 倍巨型次元素煙火式擴散
-          for (let a = 0; a < 12; a++) {
-            const angle = (a / 12) * Math.PI * 2;
+          // 外圈 12 (第1-6關降為10) 道 3 倍巨型主元素裂片 + 內圈 8 (第1-6關降為7) 道 3 倍巨型次元素煙火式擴散 (BUILD-039: 密度降 15%)
+          const outerCount = (this.stage <= 6) ? 10 : 12;
+          for (let a = 0; a < outerCount; a++) {
+            const angle = (a / outerCount) * Math.PI * 2;
             const shard = new Bullet(eb.x, eb.y, Math.cos(angle) * 235, Math.sin(angle) * 235, false, 1, outerType);
             shard.color = mainColor;
             shard.r = 16; // 原 r=5 放大超過 3 倍！
             shard.isMega = true;
             this.ebullets.push(shard);
           }
-          for (let bIdx = 0; bIdx < 8; bIdx++) {
-            const angle2 = (bIdx / 8) * Math.PI * 2 + (Math.PI / 8);
+          const innerCount = (this.stage <= 6) ? 7 : 8;
+          for (let bIdx = 0; bIdx < innerCount; bIdx++) {
+            const angle2 = (bIdx / innerCount) * Math.PI * 2 + (Math.PI / innerCount);
             const innerShard = new Bullet(eb.x, eb.y, Math.cos(angle2) * 145, Math.sin(angle2) * 145, false, 1, innerType);
             innerShard.color = secColor;
             innerShard.r = 14;
@@ -9350,7 +9606,8 @@ class Game {
         // BUILD-037: Diablo II 冰封球 (Frozen Orb) 風格神話魔球 —— 飛行途中持續 360 度螺旋噴射 3 倍巨型冰晶/元素彈，終點再引發超新星爆發！
         eb.orbSpinAngle = (eb.orbSpinAngle || 0) + dt * 11.5;
         eb.emitTimer = (eb.emitTimer || 0) + dt;
-        if (eb.emitTimer >= 0.095) {
+        const orbEmitInterval = (this.stage <= 6) ? 0.11 : 0.095; // BUILD-039: 第 1-6 關發射頻率調降 15%
+        if (eb.emitTimer >= orbEmitInterval) {
           eb.emitTimer = 0;
           // 每次對稱噴出 2 道旋轉冰晶/元素巨型尖梭
           for (let arm = 0; arm < 2; arm++) {
@@ -9376,8 +9633,9 @@ class Game {
           this.shake(12, 0.4);
           if (!this.reiganShockwaves) this.reiganShockwaves = [];
           this.reiganShockwaves.push({ x: eb.x, y: eb.y, r: 20, maxR: 190, life: 0.5, maxLife: 0.5, color: eb.color || '#38bdf8' });
-          for (let k = 0; k < 16; k++) {
-            const ang = (k / 16) * Math.PI * 2;
+          const burstCount = (this.stage <= 6) ? 14 : 16; // BUILD-039: 第 1-6 關爆裂彈幕調降 12.5%
+          for (let k = 0; k < burstCount; k++) {
+            const ang = (k / burstCount) * Math.PI * 2;
             const burst = new Bullet(eb.x, eb.y, Math.cos(ang) * 240, Math.sin(ang) * 240, false, 1, eb.shardType || 'petrify_beam');
             burst.color = eb.shardColor || eb.color || '#38bdf8';
             burst.r = 16;
@@ -9397,18 +9655,20 @@ class Game {
           if (!this.reiganShockwaves) this.reiganShockwaves = [];
           this.reiganShockwaves.push({ x: eb.x, y: eb.y, r: 18, maxR: 185, life: 0.52, maxLife: 0.52, color: eb.color || '#ff4766' });
           const palette = eb.palette || ['#ff4766', '#ffd700', '#38bdf8', '#c084fc', '#48e583'];
-          // 第一層外環：14 枚 3 倍巨型彩光星彗彈
-          for (let i = 0; i < 14; i++) {
-            const ang = (i / 14) * Math.PI * 2;
+          // 第一層外環：14 枚 (第1-6關降為12枚) 3 倍巨型彩光星彗彈
+          const outerShellCount = (this.stage <= 6) ? 12 : 14;
+          for (let i = 0; i < outerShellCount; i++) {
+            const ang = (i / outerShellCount) * Math.PI * 2;
             const b1 = new Bullet(eb.x, eb.y, Math.cos(ang) * 230, Math.sin(ang) * 230, false, 1, eb.childType || 'chaos_nova');
             b1.color = palette[i % palette.length];
             b1.r = 17; // 3倍巨型煙火彈
             b1.isMega = true;
             this.ebullets.push(b1);
           }
-          // 第二層內環：10 枚交錯慢速星瓣彈
-          for (let j = 0; j < 10; j++) {
-            const ang2 = (j / 10) * Math.PI * 2 + (Math.PI / 10);
+          // 第二層內環：10 枚 (第1-6關降為8枚) 交錯慢速星瓣彈 (BUILD-039: 20發 vs 24發，調降 16.7%)
+          const innerShellCount = (this.stage <= 6) ? 8 : 10;
+          for (let j = 0; j < innerShellCount; j++) {
+            const ang2 = (j / innerShellCount) * Math.PI * 2 + (Math.PI / innerShellCount);
             const b2 = new Bullet(eb.x, eb.y, Math.cos(ang2) * 140, Math.sin(ang2) * 140, false, 1, eb.childType || 'fireball');
             b2.color = '#ffffff';
             b2.r = 14;
@@ -12708,11 +12968,13 @@ class Game {
   togglePause() {
     if (this.state === 'playing') {
       this.state = 'pause';
+      this.savePlayerRun();
       this.updatePermissionUI();
       document.getElementById('pauseScreen').classList.remove('hidden');
       this.renderPauseArmory();
     } else if (this.state === 'pause') {
       this.state = 'playing';
+      this.savePlayerRun();
       document.getElementById('pauseScreen').classList.add('hidden');
     }
   }
@@ -13392,4 +13654,5 @@ window.addEventListener('DOMContentLoaded', () => {
   requestAnimationFrame(loop);
 
   window.__starfallGame = game;
+  game.updateStartScreenSaveUI();
 });

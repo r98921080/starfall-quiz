@@ -157,6 +157,26 @@
         <div id="studentSyncStatus" style="font-size:11px; color:var(--text-muted); text-align:left; margin-top:6px;">雲端作答歷程將如實記錄至 Google Sheet</div>
       </div>
 
+      <!-- 進行中作戰存檔卡片 (BUILD-039) -->
+      <div id="saveInfoCard" class="hidden" style="margin-top:10px; background:linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,41,59,0.92)); border:1px solid rgba(245,188,56,0.45); border-radius:12px; padding:12px 14px; width:100%; max-width:330px; box-sizing:border-box; box-shadow:0 0 16px rgba(245,188,56,0.18);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-size:12px; font-weight:800; color:var(--gold); display:flex; align-items:center; gap:4px;">
+            <span>💾 偵測到進行中作戰存檔</span>
+          </span>
+          <span id="saveTimestamp" style="font-size:10px; color:var(--text-muted);">--:--</span>
+        </div>
+        <div style="font-size:12px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center;">
+          <span style="color:#fff; font-weight:700;">作戰關卡：<span id="saveStageText" style="color:var(--cyan); font-weight:800;">第 1 關</span></span>
+          <span style="color:#fff; font-weight:700;">戰機生命：<span id="saveHpText" style="color:#48e583; font-weight:800;">3 / 3 HP</span></span>
+        </div>
+        <div style="margin-top:4px;">
+          <div style="font-size:11px; color:var(--text-muted); margin-bottom:4px;">已持有武裝與階級：</div>
+          <div id="saveWeaponsList" style="display:flex; flex-wrap:wrap; gap:4px;">
+            <!-- 動態填入武器膠囊標籤 -->
+          </div>
+        </div>
+      </div>
+
       <div id="stageSelectContainer" style="margin-top:10px; display:flex; flex-direction:column; gap:6px; align-items:center;">
         <label style="font-size:12px; color:var(--text-muted); font-weight:700;">選擇啟始關卡：</label>
         <select id="startStageSelect" style="background:#121a2c; color:var(--cyan); border:1px solid var(--border-cyan); padding:8px 16px; border-radius:8px; font-weight:700; font-size:14px; outline:none;">
@@ -185,8 +205,15 @@
         </div>
       </div>
 
-      <div class="btn-row" style="margin-top:10px;">
-        <button class="btn" id="startPlayBtn">出擊出航</button>
+      <!-- 存檔時顯示繼續遊戲與重新開始按鈕列 -->
+      <div class="btn-row" id="saveActionRow" style="margin-top:10px; display:none; gap:10px;">
+        <button class="btn gold" id="continueGameBtn" style="flex:1.2; font-weight:800; font-size:14px; min-height:42px;">▶️ 繼續遊戲</button>
+        <button class="btn danger" id="restartNewGameBtn" style="flex:0.8; font-weight:700; font-size:13px; min-height:42px;">🔄 重新開始</button>
+      </div>
+
+      <!-- 無存檔時之常規按鈕列 -->
+      <div class="btn-row" id="normalActionRow" style="margin-top:10px;">
+        <button class="btn" id="startPlayBtn">🚀 開始出擊</button>
         <button class="btn ghost" id="openGsBtn">連線 Google Sheet</button>
       </div>
       <p class="subtitle" style="font-size:11px; margin-top:12px;">📱 操作提示：點按或滑動螢幕任何一處皆可直接集氣，手指移開即發射！無需尋找集氣按鈕。</p>
@@ -514,7 +541,7 @@
 </div>
 
 <!-- 腳本引入 -->
-<script src="starfall-game-api-config.js?v=b38"></script>
-<script src="game.js?v=b38"></script>
+<script src="starfall-game-api-config.js?v=b39"></script>
+<script src="game.js?v=b39"></script>
 </body>
 </html>

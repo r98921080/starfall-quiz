@@ -1,13 +1,8 @@
 const SHEETS = {
   QUESTIONS: 'Questions',
   STUDENTS: 'Students',
-  ATTEMPTS: 'Attempts',
-  SETTINGS: 'Settings',
-  QUESTION_STATS: 'QuestionStats',
-  WORD_STATS: 'WordStats',
-  SKILL_STATS: 'SkillStats',
   PARENT_DASHBOARD: 'ParentDashboard',
-  ACTIVITY_LOG: 'ActivityLog'
+  ATTEMPTS: 'Attempts'
 };
 
 const REQUIRED_HEADERS = {
@@ -24,8 +19,7 @@ const REQUIRED_HEADERS = {
     'selected_option', 'correct', 'response_time_ms', 'attempt_index', 'is_review',
     'hint_used', 'difficulty_at_time', 'subject', 'unit', 'skill', 'target_words',
     'concept_tags', 'knowledge_pressure', 'weapon_quality', 'sync_status'
-  ],
-  Settings: ['setting_key', 'setting_value', 'description']
+  ]
 };
 
 function onOpen() {
@@ -44,9 +38,10 @@ function setupStarfall() {
     ensureSheetAndHeaders_(ss, sheetName, REQUIRED_HEADERS[sheetName]);
   });
   ensureReportSheets_(ss);
+  cleanLegacySheets_(ss);
   refreshReports();
-  logActivity_('SETUP', '初始化完成，資料表與報表已建立。');
-  SpreadsheetApp.getUi().alert('初始化完成', '已檢查資料表並建立家長報表。請回到試算表查看新增的報表分頁。', SpreadsheetApp.getUi().ButtonSet.OK);
+  logActivity_('SETUP', '初始化完成，精簡家長總覽資料表與報表已建立。');
+  SpreadsheetApp.getUi().alert('初始化完成', '已檢查資料表並建立精簡清晰的【家長學習總覽】報表。', SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function doGet(e) {
@@ -287,10 +282,19 @@ function getStudentProgressData_(params) {
 
 function getSettings_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const settings = {};
-  sheetObjects_(ss.getSheetByName(SHEETS.SETTINGS)).forEach(function(row) {
-    if (row.setting_key) settings[row.setting_key] = coerceValue_(row.setting_value);
-  });
+  const settings = {
+    minimum_attempts_for_word_analysis: 5,
+    word_bottleneck_accuracy: 0.65,
+    slow_response_seconds: 12,
+    weak_accuracy_threshold: 0.65,
+    mastery_correct_streak: 4
+  };
+  const sheet = ss.getSheetByName('Settings');
+  if (sheet) {
+    sheetObjects_(sheet).forEach(function(row) {
+      if (row.setting_key) settings[row.setting_key] = coerceValue_(row.setting_value);
+    });
+  }
   return { ok: true, settings: settings };
 }
 
@@ -374,148 +378,239 @@ function normalizeAttempt_(payload, ss) {
 function refreshReports() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   ensureReportSheets_(ss);
+  cleanLegacySheets_(ss);
   const attempts = sheetObjects_(ss.getSheetByName(SHEETS.ATTEMPTS));
   const questions = sheetObjects_(getQuestionsSheet_(ss));
   const students = sheetObjects_(ss.getSheetByName(SHEETS.STUDENTS));
-  const settings = settingsObject_(ss);
-  writeQuestionStats_(ss, attempts, questions, settings);
-  writeWordStats_(ss, attempts, settings);
-  writeSkillStats_(ss, attempts, settings);
-  writeParentDashboard_(ss, attempts, questions, students, settings);
-  logActivity_('REPORT', '家長報表已更新。');
+  writeParentDashboard_(ss, attempts, questions, students);
+  logActivity_('REPORT', '家長總覽報表已更新。');
 }
 
-function writeQuestionStats_(ss, attempts, questions, settings) {
-  const byQuestion = {};
-  questions.forEach(function(q) { byQuestion[q.question_id] = { question: q, attempts: [] }; });
-  attempts.forEach(function(a) {
-    if (!byQuestion[a.question_id]) byQuestion[a.question_id] = { question: { question_id: a.question_id, question: '', grade: '', unit: a.unit, skill: a.skill, difficulty: a.difficulty_at_time, target_words: a.target_words }, attempts: [] };
-    byQuestion[a.question_id].attempts.push(a);
-  });
-  const rows = Object.keys(byQuestion).sort().map(function(id) {
-    const item = byQuestion[id];
-    const list = item.attempts;
-    const total = list.length;
-    const correct = list.filter(function(a) { return toBool_(a.correct); }).length;
-    const wrong = total - correct;
-    const accuracy = total ? correct / total : '';
-    const avgMs = total ? Math.round(list.reduce(function(sum, a) { return sum + Number(a.response_time_ms || 0); }, 0) / total) : '';
-    const first = total ? list[0] : null;
-    const review = list.filter(function(a) { return toBool_(a.is_review); });
-    const reviewCorrect = review.filter(function(a) { return toBool_(a.correct); }).length;
-    const smoothWrong = (wrong + Number(settings.smoothing_wrong_prior || 2)) / (total + Number(settings.smoothing_total_prior || 4));
-    const status = masteryStatus_(total, correct, wrong, list, settings);
-    return [id, item.question.grade || '', item.question.unit || '', item.question.skill || '', item.question.difficulty || '', item.question.question || '', item.question.target_words || '', total, correct, wrong, accuracy, avgMs, first ? first.correct : '', review.length, reviewCorrect, smoothWrong, status];
-  });
-  writeTable_(ss.getSheetByName(SHEETS.QUESTION_STATS), [
-    'question_id', 'grade', 'unit', 'skill', 'difficulty', 'question', 'target_words', 'total_attempts', 'correct_count', 'wrong_count', 'accuracy', 'avg_response_time_ms', 'first_attempt_correct', 'review_attempts', 'review_correct_count', 'smoothed_wrong_rate', 'mastery_status'
-  ], rows);
-}
-
-function writeWordStats_(ss, attempts, settings) {
-  const byStudentWord = {};
-  attempts.forEach(function(a) {
-    const words = splitTags_(a.target_words);
-    words.forEach(function(word) {
-      const key = a.student_id + '||' + word;
-      if (!byStudentWord[key]) byStudentWord[key] = { student_id: a.student_id, word: word, attempts: [] };
-      byStudentWord[key].attempts.push(a);
-    });
-  });
-  const minAttempts = Number(settings.minimum_attempts_for_word_analysis || 5);
-  const threshold = Number(settings.word_bottleneck_accuracy || 0.65);
-  const slowSeconds = Number(settings.slow_response_seconds || 12);
-  const rows = Object.keys(byStudentWord).sort().map(function(key) {
-    const item = byStudentWord[key];
-    const list = item.attempts;
-    const total = list.length;
-    const correct = list.filter(function(a) { return toBool_(a.correct); }).length;
-    const accuracy = total ? correct / total : '';
-    const avgMs = total ? Math.round(list.reduce(function(sum, a) { return sum + Number(a.response_time_ms || 0); }, 0) / total) : '';
-    const wrongOptions = {};
-    list.filter(function(a) { return !toBool_(a.correct); }).forEach(function(a) { wrongOptions[a.selected_option || '未作答'] = (wrongOptions[a.selected_option || '未作答'] || 0) + 1; });
-    const commonWrong = Object.keys(wrongOptions).sort(function(a, b) { return wrongOptions[b] - wrongOptions[a]; })[0] || '';
-    let diagnosis = '樣本不足';
-    if (total >= minAttempts) {
-      if (accuracy < threshold && avgMs > slowSeconds * 1000) diagnosis = '正確率偏低且作答偏慢';
-      else if (accuracy < threshold) diagnosis = '正確率偏低';
-      else if (avgMs > slowSeconds * 1000) diagnosis = '理解可能不足或作答偏慢';
-      else diagnosis = '表現穩定';
-    }
-    return [item.student_id, item.word, total, correct, total - correct, accuracy, avgMs, commonWrong, diagnosis];
-  });
-  writeTable_(ss.getSheetByName(SHEETS.WORD_STATS), ['student_id', 'target_word', 'total_occurrences', 'correct_count', 'wrong_count', 'accuracy', 'avg_response_time_ms', 'common_wrong_option', 'diagnosis'], rows);
-}
-
-function writeSkillStats_(ss, attempts, settings) {
-  const bySkill = {};
-  attempts.forEach(function(a) {
-    const key = [a.student_id, a.grade || '', a.unit || '', a.skill || '', a.concept_tags || ''].join('||');
-    if (!bySkill[key]) bySkill[key] = { student_id: a.student_id, grade: a.grade || '', unit: a.unit || '', skill: a.skill || '', concept_tags: a.concept_tags || '', attempts: [] };
-    bySkill[key].attempts.push(a);
-  });
-  const rows = Object.keys(bySkill).sort().map(function(key) {
-    const item = bySkill[key];
-    const list = item.attempts;
-    const total = list.length;
-    const correct = list.filter(function(a) { return toBool_(a.correct); }).length;
-    const accuracy = total ? correct / total : '';
-    const avgMs = total ? Math.round(list.reduce(function(sum, a) { return sum + Number(a.response_time_ms || 0); }, 0) / total) : '';
-    const reviews = list.filter(function(a) { return toBool_(a.is_review); });
-    const reviewAccuracy = reviews.length ? reviews.filter(function(a) { return toBool_(a.correct); }).length / reviews.length : '';
-    let diagnosis = '觀察中';
-    if (total >= 3 && accuracy < Number(settings.weak_accuracy_threshold || 0.65)) diagnosis = '弱項：建議提高出題權重';
-    else if (total >= 3 && avgMs > Number(settings.slow_response_seconds || 12) * 1000) diagnosis = '作答偏慢：建議先用簡化題型複習';
-    else if (total >= 3 && accuracy >= 0.85) diagnosis = '熟練：可降低出現頻率';
-    return [item.student_id, item.grade, item.unit, item.skill, item.concept_tags, total, correct, total - correct, accuracy, avgMs, reviews.length, reviewAccuracy, diagnosis];
-  });
-  writeTable_(ss.getSheetByName(SHEETS.SKILL_STATS), ['student_id', 'grade', 'unit', 'skill', 'concept_tags', 'total_attempts', 'correct_count', 'wrong_count', 'accuracy', 'avg_response_time_ms', 'review_attempts', 'review_accuracy', 'diagnosis'], rows);
-}
-
-function writeParentDashboard_(ss, attempts, questions, students, settings) {
+function writeParentDashboard_(ss, attempts, questions, students) {
   const sheet = ss.getSheetByName(SHEETS.PARENT_DASHBOARD);
+  if (!sheet) return;
   sheet.clear();
-  sheet.getRange('A1').setValue('星墜答問｜家長學習儀表板');
-  sheet.getRange('A2').setValue('更新時間');
-  sheet.getRange('B2').setValue(new Date());
-  sheet.getRange('A4').setValue('學生總覽');
-  const byStudent = {};
-  students.forEach(function(s) { byStudent[s.student_id] = { student: s, attempts: [] }; });
+
+  // 1. 建立題庫快取
+  const qMap = {};
+  questions.forEach(function(q) {
+    qMap[q.question_id] = q;
+  });
+
+  // 2. 彙整學員作答進度
+  const studentMap = {};
+  students.forEach(function(s) {
+    const sid = String(s.student_id || '').trim();
+    studentMap[sid] = {
+      student: s,
+      display_name: s.display_name || sid,
+      grade: s.grade || '',
+      total_attempts: 0,
+      correct_count: 0,
+      wrong_count: 0,
+      last_active: 0,
+      qProgress: {}
+    };
+  });
+
   attempts.forEach(function(a) {
-    if (!byStudent[a.student_id]) byStudent[a.student_id] = { student: { student_id: a.student_id, display_name: a.student_id, grade: '' }, attempts: [] };
-    byStudent[a.student_id].attempts.push(a);
+    const sid = String(a.student_id || '').trim();
+    if (!sid) return;
+    if (!studentMap[sid]) {
+      studentMap[sid] = {
+        student: { student_id: sid, display_name: a.student_name || sid, grade: a.student_grade || '' },
+        display_name: a.student_name || sid,
+        grade: a.student_grade || '',
+        total_attempts: 0,
+        correct_count: 0,
+        wrong_count: 0,
+        last_active: 0,
+        qProgress: {}
+      };
+    }
+    const sObj = studentMap[sid];
+    sObj.total_attempts++;
+    const isCorrect = toBool_(a.correct);
+    if (isCorrect) sObj.correct_count++;
+    else sObj.wrong_count++;
+
+    const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+    if (aTime > sObj.last_active) {
+      sObj.last_active = aTime;
+    }
+
+    const qid = String(a.question_id || '').trim();
+    if (!sObj.qProgress[qid]) {
+      const qData = qMap[qid] || {};
+      sObj.qProgress[qid] = {
+        question_id: qid,
+        question_text: qData.question || a.question || qid,
+        correct: 0,
+        wrong: 0,
+        lastTime: 0
+      };
+    }
+    const qp = sObj.qProgress[qid];
+    if (isCorrect) qp.correct++;
+    else qp.wrong++;
+    if (aTime > qp.lastTime) {
+      qp.lastTime = aTime;
+    }
   });
-  const header = ['student_id', 'display_name', 'grade', 'total_attempts', 'correct_count', 'accuracy', 'avg_response_time_seconds', 'first_attempt_accuracy', 'review_accuracy', 'weak_skill_count', 'word_bottleneck_count', 'recent_7_day_attempts'];
-  const rows = Object.keys(byStudent).sort().map(function(id) {
-    const item = byStudent[id];
-    const list = item.attempts;
-    const total = list.length;
-    const correct = list.filter(function(a) { return toBool_(a.correct); }).length;
-    const avgSecs = total ? list.reduce(function(sum, a) { return sum + Number(a.response_time_ms || 0); }, 0) / total / 1000 : '';
-    const firsts = list.filter(function(a) { return Number(a.attempt_index) === 1; });
-    const reviews = list.filter(function(a) { return toBool_(a.is_review); });
-    const recent = list.filter(function(a) { return new Date(a.timestamp).getTime() >= Date.now() - 7 * 24 * 60 * 60 * 1000; });
-    const weakCount = countWeakSkills_(ss, id);
-    const wordCount = countWordBottlenecks_(ss, id);
-    return [id, item.student.display_name || '', item.student.grade || '', total, correct, total ? correct / total : '', avgSecs, firsts.length ? firsts.filter(function(a) { return toBool_(a.correct); }).length / firsts.length : '', reviews.length ? reviews.filter(function(a) { return toBool_(a.correct); }).length / reviews.length : '', weakCount, wordCount, recent.length];
+
+  // 3. 儀表板頁首標題
+  sheet.getRange('A1').setValue('🌟 星墜答問｜家長學習總覽 (Parent Learning Dashboard)');
+  sheet.getRange('A1').setFontWeight('bold').setFontSize(14).setFontColor('#0284c7');
+  sheet.getRange('A2').setValue('更新時間：' + Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy/MM/dd HH:mm:ss'));
+  sheet.getRange('A2').setFontColor('#64748b').setFontSize(10);
+  sheet.getRange('A3').setValue('📌 家長指南：答對的題目幾乎不再重複出現；答錯題目將隨機重複出現，直到該題正確率超過 50% 掌握為止。');
+  sheet.getRange('A3').setFontWeight('bold').setFontColor('#334155').setFontSize(10);
+
+  // 4. 第一部分：各學員整體學習成果總表
+  sheet.getRange('A5').setValue('📊 【第一部分：學員整體學習成效總覽】');
+  sheet.getRange('A5').setFontWeight('bold').setFontSize(11);
+
+  const summaryHeaders = [
+    '學號', '學生姓名', '年級', '總答題數', '答對次數', '答錯次數',
+    '整體正確率', '✨已掌握題數 (>50%)', '⚠️待加強題數 (≤50%)', '最近作答時間'
+  ];
+  sheet.getRange(6, 1, 1, summaryHeaders.length).setValues([summaryHeaders]);
+  sheet.getRange(6, 1, 1, summaryHeaders.length)
+    .setBackground('#1e293b')
+    .setFontColor('#ffffff')
+    .setFontWeight('bold')
+    .setHorizontalAlignment('center');
+
+  const summaryRows = [];
+  const detailRows = [];
+
+  Object.keys(studentMap).sort().forEach(function(sid) {
+    const s = studentMap[sid];
+    const total = s.total_attempts;
+    const correct = s.correct_count;
+    const wrong = s.wrong_count;
+    const acc = total > 0 ? (correct / total) : 0;
+
+    let masteredCount = 0;
+    let needsReviewCount = 0;
+
+    Object.keys(s.qProgress).forEach(function(qid) {
+      const qp = s.qProgress[qid];
+      const qTotal = qp.correct + qp.wrong;
+      const qAcc = qTotal > 0 ? (qp.correct / qTotal) : 0;
+      // 規則：初次答對 (wrong === 0) 或累積正確率 > 50% 視為已掌握；否則為待加強錯題
+      const isMastered = (qp.wrong === 0 && qp.correct > 0) || (qAcc > 0.5);
+      if (isMastered) masteredCount++;
+      else needsReviewCount++;
+
+      let statusLabel = '';
+      if (qp.wrong === 0 && qp.correct > 0) {
+        statusLabel = '✨ 已掌握 (初次答對 100%)';
+      } else if (qAcc > 0.5) {
+        statusLabel = '✨ 已掌握 (正確率 ' + Math.round(qAcc * 100) + '%)';
+      } else {
+        statusLabel = '⚠️ 待加強 (正確率 ' + Math.round(qAcc * 100) + '%・隨機重複出題中)';
+      }
+
+      const dateStr = qp.lastTime ? Utilities.formatDate(new Date(qp.lastTime), 'Asia/Taipei', 'yyyy/MM/dd HH:mm') : '';
+
+      detailRows.push({
+        sid: sid,
+        student_name: s.display_name,
+        question_id: qp.question_id,
+        question_text: qp.question_text,
+        correct: qp.correct,
+        wrong: qp.wrong,
+        total: qTotal,
+        accuracy: qAcc,
+        isMastered: isMastered,
+        status: statusLabel,
+        lastTimeStr: dateStr
+      });
+    });
+
+    const activeStr = s.last_active ? Utilities.formatDate(new Date(s.last_active), 'Asia/Taipei', 'yyyy/MM/dd HH:mm') : '尚未作答';
+    summaryRows.push([
+      sid,
+      s.display_name,
+      s.grade,
+      total,
+      correct,
+      wrong,
+      total > 0 ? acc : 0,
+      masteredCount,
+      needsReviewCount,
+      activeStr
+    ]);
   });
-  sheet.getRange(5, 1, 1, header.length).setValues([header]);
-  if (rows.length) sheet.getRange(6, 1, rows.length, header.length).setValues(rows);
-  sheet.getRange('A' + (8 + rows.length)).setValue('閱讀方式');
-  sheet.getRange('A' + (9 + rows.length)).setValue('弱項請查看 SkillStats；瓶頸生字／詞彙請查看 WordStats；逐題紀錄請查看 Attempts；每次答題後可由遊戲端或「星墜答問」選單更新報表。');
-  sheet.setFrozenRows(5);
-  sheet.autoResizeColumns(1, header.length);
-  sheet.getRange('A1:B2').setFontWeight('bold');
+
+  if (summaryRows.length) {
+    sheet.getRange(7, 1, summaryRows.length, summaryHeaders.length).setValues(summaryRows);
+    sheet.getRange(7, 7, summaryRows.length, 1).setNumberFormat('0.0%');
+    sheet.getRange(7, 1, summaryRows.length, summaryHeaders.length).setHorizontalAlignment('center');
+    sheet.getRange(7, 2, summaryRows.length, 1).setHorizontalAlignment('left');
+  }
+
+  // 5. 第二部分：逐題精準掌握清單 (答對什麼、答錯什麼)
+  const detailStartRow = 9 + summaryRows.length;
+  sheet.getRange('A' + detailStartRow).setValue('🎯 【第二部分：學生逐題掌握明細（家長精準掌握：答對什麼、答錯什麼）】');
+  sheet.getRange('A' + detailStartRow).setFontWeight('bold').setFontSize(11);
+
+  const detailHeaders = [
+    '學生姓名', '題目代碼', '題目內容', '答對次數', '答錯次數',
+    '總作答數', '題目正確率', '學習掌握狀態', '最近作答時間'
+  ];
+  sheet.getRange(detailStartRow + 1, 1, 1, detailHeaders.length).setValues([detailHeaders]);
+  sheet.getRange(detailStartRow + 1, 1, 1, detailHeaders.length)
+    .setBackground('#0f172a')
+    .setFontColor('#38bdf8')
+    .setFontWeight('bold')
+    .setHorizontalAlignment('center');
+
+  // 排序：先按學生，再將「⚠️ 待加強」錯題排在最上方（方便家長優先檢查），最後按題號
+  detailRows.sort(function(a, b) {
+    if (a.student_name !== b.student_name) return a.student_name.localeCompare(b.student_name);
+    if (a.isMastered !== b.isMastered) return a.isMastered ? 1 : -1;
+    return a.question_id.localeCompare(b.question_id);
+  });
+
+  const detailOutput = detailRows.map(function(d) {
+    return [
+      d.student_name,
+      d.question_id,
+      d.question_text,
+      d.correct,
+      d.wrong,
+      d.total,
+      d.accuracy,
+      d.status,
+      d.lastTimeStr
+    ];
+  });
+
+  if (detailOutput.length) {
+    sheet.getRange(detailStartRow + 2, 1, detailOutput.length, detailHeaders.length).setValues(detailOutput);
+    sheet.getRange(detailStartRow + 2, 7, detailOutput.length, 1).setNumberFormat('0.0%');
+    sheet.getRange(detailStartRow + 2, 1, detailOutput.length, detailHeaders.length).setHorizontalAlignment('center');
+    sheet.getRange(detailStartRow + 2, 3, detailOutput.length, 1).setHorizontalAlignment('left'); // 題目內容靠左
+    sheet.getRange(detailStartRow + 2, 8, detailOutput.length, 1).setHorizontalAlignment('left'); // 狀態標籤靠左
+  }
+
+  sheet.setFrozenRows(6);
+  sheet.autoResizeColumns(1, detailHeaders.length);
 }
 
 function getReportData_(params) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const studentId = params && params.student_id ? String(params.student_id) : '';
-  const filterRows = function(sheetName) {
-    const rows = sheetObjects_(ss.getSheetByName(sheetName));
-    return studentId ? rows.filter(function(r) { return r.student_id === studentId; }) : rows;
+  const attempts = sheetObjects_(ss.getSheetByName(SHEETS.ATTEMPTS));
+  const filterAttempts = studentId ? attempts.filter(function(a) { return String(a.student_id) === studentId; }) : attempts;
+  return {
+    ok: true,
+    student_id: studentId || null,
+    total_attempts: filterAttempts.length,
+    dashboard_sheet: SHEETS.PARENT_DASHBOARD
   };
-  return { ok: true, student_id: studentId || null, question_stats: filterRows(SHEETS.QUESTION_STATS), word_stats: filterRows(SHEETS.WORD_STATS), skill_stats: filterRows(SHEETS.SKILL_STATS) };
 }
 
 function createDemoAttempts() {
@@ -567,59 +662,19 @@ function ensureSheetAndHeaders_(ss, sheetName, headers) {
 }
 
 function ensureReportSheets_(ss) {
-  [SHEETS.QUESTION_STATS, SHEETS.WORD_STATS, SHEETS.SKILL_STATS, SHEETS.PARENT_DASHBOARD, SHEETS.ACTIVITY_LOG].forEach(function(name) {
-    if (!ss.getSheetByName(name)) ss.insertSheet(name);
-  });
-  const logSheet = ss.getSheetByName(SHEETS.ACTIVITY_LOG);
-  if (!getHeaders_(logSheet).length) logSheet.getRange(1, 1, 1, 3).setValues([['timestamp', 'event_type', 'message']]);
-  logSheet.setFrozenRows(1);
-}
-
-function findQuestion_(ss, questionId) {
-  const rows = sheetObjects_(getQuestionsSheet_(ss));
-  return rows.find(function(row) { return String(row.question_id) === String(questionId); }) || null;
-}
-
-function countAttempts_(ss, studentId, questionId) {
-  return sheetObjects_(ss.getSheetByName(SHEETS.ATTEMPTS)).filter(function(row) {
-    return String(row.student_id) === String(studentId) && String(row.question_id) === String(questionId);
-  }).length;
-}
-
-function updateQuestionProgress_(ss, attempt) {
-  // 原始作答紀錄保留在 Attempts；統計由 refreshReports 從原始資料重建，避免資料不一致。
-}
-
-function countWeakSkills_(ss, studentId) {
-  const rows = sheetObjects_(ss.getSheetByName(SHEETS.SKILL_STATS));
-  return rows.filter(function(r) { return r.student_id === studentId && String(r.diagnosis).indexOf('弱項') !== -1; }).length;
-}
-
-function countWordBottlenecks_(ss, studentId) {
-  const rows = sheetObjects_(ss.getSheetByName(SHEETS.WORD_STATS));
-  return rows.filter(function(r) { return r.student_id === studentId && (String(r.diagnosis).indexOf('偏低') !== -1 || String(r.diagnosis).indexOf('偏慢') !== -1); }).length;
-}
-
-function masteryStatus_(total, correct, wrong, list, settings) {
-  if (!total) return '新題';
-  const required = Number(settings.mastery_correct_streak || 4);
-  let streak = 0;
-  for (let i = list.length - 1; i >= 0; i--) {
-    if (toBool_(list[i].correct)) streak++;
-    else break;
+  if (!ss.getSheetByName(SHEETS.PARENT_DASHBOARD)) {
+    ss.insertSheet(SHEETS.PARENT_DASHBOARD);
   }
-  if (streak >= required) return '熟練';
-  if (wrong && list.length && !toBool_(list[list.length - 1].correct)) return '待複習';
-  if (total >= 3 && correct / total < Number(settings.weak_accuracy_threshold || 0.65)) return '弱點';
-  return '學習中';
 }
 
-function settingsObject_(ss) {
-  const result = {};
-  sheetObjects_(ss.getSheetByName(SHEETS.SETTINGS)).forEach(function(row) {
-    if (row.setting_key) result[row.setting_key] = coerceValue_(row.setting_value);
+function cleanLegacySheets_(ss) {
+  const legacyNames = ['QuestionStats', 'WordStats', 'SkillStats', 'ActivityLog', 'Settings'];
+  legacyNames.forEach(function(name) {
+    const s = ss.getSheetByName(name);
+    if (s && ss.getSheets().length > 1) {
+      try { ss.deleteSheet(s); } catch (e) {}
+    }
   });
-  return result;
 }
 
 function sheetObjects_(sheet) {
@@ -661,13 +716,9 @@ function writeTable_(sheet, headers, rows) {
 }
 
 function logActivity_(eventType, message) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = ss.getSheetByName(SHEETS.ACTIVITY_LOG);
-  if (!sheet) {
-    sheet = ss.insertSheet(SHEETS.ACTIVITY_LOG);
-    sheet.getRange(1, 1, 1, 3).setValues([['timestamp', 'event_type', 'message']]);
-  }
-  sheet.appendRow([new Date(), eventType, message]);
+  try {
+    console.log('[' + eventType + '] ' + message);
+  } catch (e) {}
 }
 
 function parsePayload_(e) {
