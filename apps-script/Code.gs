@@ -8,11 +8,7 @@ const SHEETS = {
 // 極簡 3 分頁架構：僅保留 Questions (題庫) 與 Attempts (作答紀錄)，其餘報表全由 ParentDashboard 呈現
 const REQUIRED_HEADERS = {
   Questions: [
-    'question_id', 'enabled', 'grade', 'subject', 'unit', 'skill',
-    'question_type', 'difficulty', 'question', 'option_a', 'option_b',
-    'option_c', 'option_d', 'answer', 'explanation_short',
-    'explanation_detail', 'memory_tip', 'target_words', 'concept_tags',
-    'error_pattern', 'next_step', 'source_type', 'review_priority'
+    '題號', '題目', '選項1', '選項2', '選項3', '選項4', '答案', '答案說明'
   ],
   Attempts: [
     'timestamp', 'student_id', 'session_id', 'stage', 'boss_name', 'question_id',
@@ -26,8 +22,9 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('🌟 星墜答問')
     .addItem('🧹 一鍵極簡化分頁 (刪除多餘工作表，只留 3 個核心分頁)', 'cleanAllExtraSheets')
+    .addItem('🔄 一鍵將題庫簡化為 8 欄 (題號、題目、選項1~4、答案、說明)', 'simplifyQuestionsColumns')
     .addItem('📊 立即更新家長報表 (ParentDashboard)', 'refreshReports')
-    .addItem('✨ 題庫智慧去重與選項均衡清洗', 'cleanDuplicateQuestions')
+    .addItem('✨ 題庫智慧去重清洗', 'cleanDuplicateQuestions')
     .addItem('⚙️ 初始化與檢查資料表', 'setupStarfall')
     .addToUi();
 }
@@ -40,7 +37,7 @@ function setupStarfall() {
   ensureReportSheets_(ss);
   cleanAllExtraSheets_(ss);
   logActivity_('SETUP', '初始化完成，極簡家長總覽資料表與報表已建立。');
-  SpreadsheetApp.getUi().alert('初始化完成', '已檢查資料表並將工作表極簡化為 3 個核心分頁：\n1. 【ParentDashboard】家長學習總覽\n2. 【Questions】題目庫\n3. 【Attempts】即時作答紀錄', SpreadsheetApp.getUi().ButtonSet.OK);
+  SpreadsheetApp.getUi().alert('初始化完成', '已檢查資料表並將工作表極簡化為 3 個核心分頁：\n1. 【ParentDashboard】家長學習總覽\n2. 【Questions】題目庫 (8 欄極簡模式)\n3. 【Attempts】即時作答紀錄', SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function doGet(e) {
@@ -69,11 +66,15 @@ function doGet(e) {
       const result = cleanAllExtraSheets_();
       return jsonOutput_({ ok: true, message: '工作表極簡化完成', result: result });
     }
+    if (action === 'simplify_questions') {
+      const result = simplifyQuestionsColumns_();
+      return jsonOutput_({ ok: true, message: '題庫簡化完成', result: result });
+    }
     return jsonOutput_({
       ok: true,
       service: 'Starfall Quiz Learning API',
-      version: '1.2.6',
-      actions: ['questions', 'students', 'student_progress', 'register_student', 'attempt', 'attempt_batch', 'settings', 'report', 'clean_questions', 'clean_sheets']
+      version: '1.2.7',
+      actions: ['questions', 'students', 'student_progress', 'register_student', 'attempt', 'attempt_batch', 'settings', 'report', 'clean_questions', 'clean_sheets', 'simplify_questions']
     });
   } catch (err) {
     return jsonOutput_({ ok: false, error: String(err.message || err) });
@@ -98,6 +99,10 @@ function doPost(e) {
     if (action === 'clean_sheets') {
       const result = cleanAllExtraSheets_();
       return jsonOutput_({ ok: true, message: '工作表極簡化完成', result: result });
+    }
+    if (action === 'simplify_questions') {
+      const result = simplifyQuestionsColumns_();
+      return jsonOutput_({ ok: true, message: '題庫簡化完成', result: result });
     }
     return jsonOutput_({ ok: false, error: '不支援的 action：' + action });
   } catch (err) {
@@ -243,38 +248,105 @@ function getQuestionsSheet_(ss) {
          null;
 }
 
+function parseQuestionRow_(row, idx) {
+  const qid = String(row['題號'] || row.question_id || row.id || ('Q-' + (idx + 1))).trim();
+  const qText = String(row['題目'] || row.question || '').trim();
+
+  const opt1 = String(row['選項1'] !== undefined ? row['選項1'] : (row.option_a !== undefined ? row.option_a : ''));
+  const opt2 = String(row['選項2'] !== undefined ? row['選項2'] : (row.option_b !== undefined ? row.option_b : ''));
+  const opt3 = String(row['選項3'] !== undefined ? row['選項3'] : (row.option_c !== undefined ? row.option_c : ''));
+  const opt4 = String(row['選項4'] !== undefined ? row['選項4'] : (row.option_d !== undefined ? row.option_d : ''));
+  const opts = [opt1, opt2, opt3, opt4];
+
+  const ansRaw = String(row['答案'] !== undefined ? row['答案'] : (row.answer !== undefined ? row.answer : '1')).trim();
+  const expDetail = String(row['答案說明'] !== undefined ? row['答案說明'] : (row.explanation_detail || row.explanation || row.explanation_short || '')).trim();
+
+  // 自動標準化答案為 A/B/C/D
+  let ansLetter = 'A';
+  const upper = ansRaw.toUpperCase();
+  if (['A', 'B', 'C', 'D'].indexOf(upper) !== -1) {
+    ansLetter = upper;
+  } else if (upper === '1' || upper === '選項1') {
+    ansLetter = 'A';
+  } else if (upper === '2' || upper === '選項2') {
+    ansLetter = 'B';
+  } else if (upper === '3' || upper === '選項3') {
+    ansLetter = 'C';
+  } else if (upper === '4' || upper === '選項4') {
+    ansLetter = 'D';
+  } else {
+    const matchIdx = opts.findIndex(function(o) { return String(o).trim() === ansRaw; });
+    if (matchIdx !== -1) {
+      ansLetter = ['A', 'B', 'C', 'D'][matchIdx];
+    }
+  }
+
+  return {
+    question_id: qid,
+    grade: row['年級'] || row.grade || '三年級',
+    subject: row['科目'] || row.subject || '國語文',
+    unit: row['單元'] || row.unit || '',
+    skill: row['技能'] || row.skill || '語文素養',
+    question_type: row['題型'] || row.question_type || '單選題',
+    difficulty: Number(row['難度'] || row.difficulty) || 1,
+    question: qText,
+    options: opts,
+    answer: ansLetter,
+    explanation_short: expDetail,
+    explanation_detail: expDetail,
+    memory_tip: row.memory_tip || '',
+    target_words: splitTags_(row.target_words),
+    concept_tags: splitTags_(row.concept_tags),
+    error_pattern: row.error_pattern || '',
+    next_step: row.next_step || '',
+    review_priority: Number(row.review_priority) || 1
+  };
+}
+
 function getQuestions_(params) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = getQuestionsSheet_(ss);
+  if (!sheet) return { ok: true, count: 0, questions: [] };
   const rows = sheetObjects_(sheet);
   const grade = params && params.grade ? String(params.grade).trim() : '';
   const enabledOnly = !params || String(params.enabled || 'true').toLowerCase() !== 'false';
   const questions = rows.filter(function(row) {
-    const enabled = String(row.enabled).toUpperCase() !== 'FALSE';
-    return (!enabledOnly || enabled) && (!grade || row.grade === grade);
-  }).map(function(row) {
-    return {
-      question_id: row.question_id,
-      grade: row.grade,
-      subject: row.subject,
-      unit: row.unit,
-      skill: row.skill,
-      question_type: row.question_type,
-      difficulty: Number(row.difficulty) || 1,
-      question: row.question,
-      options: [row.option_a, row.option_b, row.option_c, row.option_d],
-      answer: row.answer,
-      explanation_short: row.explanation_short,
-      explanation_detail: row.explanation_detail,
-      memory_tip: row.memory_tip,
-      target_words: splitTags_(row.target_words),
-      concept_tags: splitTags_(row.concept_tags),
-      error_pattern: row.error_pattern,
-      next_step: row.next_step,
-      review_priority: Number(row.review_priority) || 1
-    };
+    const enabled = (row.enabled !== undefined && row.enabled !== '') ? String(row.enabled).toUpperCase() !== 'FALSE' : true;
+    const rGrade = row['年級'] || row.grade || '';
+    return (!enabledOnly || enabled) && (!grade || !rGrade || rGrade === grade);
+  }).map(function(row, idx) {
+    return parseQuestionRow_(row, idx);
+  }).filter(function(q) {
+    return q.question && q.question.length > 0;
   });
   return { ok: true, updated_at: new Date().toISOString(), count: questions.length, questions: questions };
+}
+
+function findQuestion_(ss, questionId) {
+  if (!questionId) return null;
+  const sheet = getQuestionsSheet_(ss);
+  if (!sheet) return null;
+  const rows = sheetObjects_(sheet);
+  const qidStr = String(questionId).trim();
+  const row = rows.find(function(r) {
+    const rid = String(r['題號'] || r.question_id || r.id || '').trim();
+    return rid === qidStr;
+  });
+  if (!row) return null;
+  return parseQuestionRow_(row, 0);
+}
+
+function countAttempts_(ss, studentId, questionId) {
+  const sheet = ss.getSheetByName(SHEETS.ATTEMPTS);
+  if (!sheet) return 0;
+  return sheetObjects_(sheet).filter(function(row) {
+    return String(row.student_id).trim() === String(studentId).trim() &&
+           String(row.question_id).trim() === String(questionId).trim();
+  }).length;
+}
+
+function updateQuestionProgress_(ss, attempt) {
+  // 作答紀錄全數保存在 Attempts 表中，家長儀表板自動由此彙整計算
 }
 
 function getStudents_() {
@@ -717,6 +789,11 @@ function ensureSheetAndHeaders_(ss, sheetName, headers) {
     sheet.setFrozenRows(1);
     return sheet;
   }
+  // 若為 Questions 工作表且已具備題幹欄位 (無論中文「題目」或英文「question」)，視為已存在題庫欄位結構，不強行追加欄位
+  if (sheetName === SHEETS.QUESTIONS && (current.indexOf('題目') !== -1 || current.indexOf('question') !== -1)) {
+    sheet.setFrozenRows(1);
+    return sheet;
+  }
   const missing = headers.filter(function(header) { return current.indexOf(header) === -1; });
   if (missing.length) {
     sheet.getRange(1, current.length + 1, 1, missing.length).setValues([missing]);
@@ -729,6 +806,72 @@ function ensureReportSheets_(ss) {
   if (!ss.getSheetByName(SHEETS.PARENT_DASHBOARD)) {
     ss.insertSheet(SHEETS.PARENT_DASHBOARD);
   }
+}
+
+/**
+ * 試算表選單專用：一鍵將題庫簡化為 8 欄極簡模式
+ */
+function simplifyQuestionsColumns() {
+  const ui = SpreadsheetApp.getUi();
+  const resp = ui.alert(
+    '確認簡化題庫欄位為 8 欄',
+    '此操作將會把【Questions】工作表轉換為極簡 8 欄：\n' +
+    '【題號】｜【題目】｜【選項1】｜【選項2】｜【選項3】｜【選項4】｜【答案】｜【答案說明】\n\n' +
+    '所有題目的內容、選項、答案與說明都會 100% 完整保留！\n確定要開始執行簡化轉換嗎？',
+    ui.ButtonSet.YES_NO
+  );
+  if (resp !== ui.ButtonSet.YES) return;
+
+  try {
+    const res = simplifyQuestionsColumns_();
+    ui.alert(
+      '轉換完成！',
+      '題庫已成功簡化為 8 欄極簡格式！\n' +
+      '• 成功處理題數：' + res.count + ' 題\n' +
+      '• 目前欄位：題號、題目、選項1、選項2、選項3、選項4、答案、答案說明',
+      ui.ButtonSet.OK
+    );
+  } catch (err) {
+    ui.alert('轉換失敗', '錯誤原因：' + String(err.message || err), ui.ButtonSet.OK);
+  }
+}
+
+function simplifyQuestionsColumns_(ss) {
+  if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = getQuestionsSheet_(ss);
+  if (!sheet) throw new Error('找不到 Questions 工作表');
+
+  const rows = sheetObjects_(sheet);
+  if (rows.length === 0) return { ok: true, count: 0 };
+
+  const targetHeaders = ['題號', '題目', '選項1', '選項2', '選項3', '選項4', '答案', '答案說明'];
+  const newRows = rows.map(function(row, idx) {
+    const parsed = parseQuestionRow_(row, idx);
+    return [
+      parsed.question_id,
+      parsed.question,
+      parsed.options[0] || '',
+      parsed.options[1] || '',
+      parsed.options[2] || '',
+      parsed.options[3] || '',
+      parsed.answer,
+      parsed.explanation_detail || ''
+    ];
+  });
+
+  sheet.clear();
+  sheet.getRange(1, 1, 1, targetHeaders.length).setValues([targetHeaders]);
+  if (newRows.length > 0) {
+    sheet.getRange(2, 1, newRows.length, targetHeaders.length).setValues(newRows);
+  }
+  sheet.setFrozenRows(1);
+  sheet.autoResizeColumns(1, targetHeaders.length);
+  sheet.getRange(1, 1, 1, targetHeaders.length)
+    .setBackground('#1e293b')
+    .setFontColor('#38bdf8')
+    .setFontWeight('bold');
+
+  return { ok: true, count: newRows.length };
 }
 
 function cleanAllExtraSheets() {
@@ -892,13 +1035,20 @@ function cleanDuplicateQuestions_() {
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return { originalCount: 0, deletedCount: 0, cleanCount: 0 };
 
-  const headers = data[0].map(function(h) { return String(h || '').trim().toLowerCase(); });
-  const qidIdx = headers.indexOf('question_id');
-  const qIdx = headers.indexOf('question');
-  const ansIdx = headers.indexOf('answer');
+  const headers = data[0].map(function(h) { return String(h || '').trim(); });
+  const headersLower = headers.map(function(h) { return h.toLowerCase(); });
+
+  let qidIdx = headers.indexOf('題號');
+  if (qidIdx === -1) qidIdx = headersLower.indexOf('question_id');
+
+  let qIdx = headers.indexOf('題目');
+  if (qIdx === -1) qIdx = headersLower.indexOf('question');
+
+  let ansIdx = headers.indexOf('答案');
+  if (ansIdx === -1) ansIdx = headersLower.indexOf('answer');
 
   if (qIdx === -1 || ansIdx === -1) {
-    throw new Error('Questions 工作表缺少 question 或 answer 標題列');
+    throw new Error('Questions 工作表缺少「題目」或「答案」標題欄位');
   }
 
   const getFp = function(t) {

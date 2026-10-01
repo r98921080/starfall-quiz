@@ -2520,7 +2520,12 @@ class DataStore {
       } else if (Array.isArray(q.opts)) {
         opts = q.opts.filter(Boolean);
       } else {
-        opts = [q.option_a, q.option_b, q.option_c, q.option_d].filter(Boolean);
+        opts = [
+          q['選項1'] !== undefined ? q['選項1'] : (q.option_1 !== undefined ? q.option_1 : q.option_a),
+          q['選項2'] !== undefined ? q['選項2'] : (q.option_2 !== undefined ? q.option_2 : q.option_b),
+          q['選項3'] !== undefined ? q['選項3'] : (q.option_3 !== undefined ? q.option_3 : q.option_c),
+          q['選項4'] !== undefined ? q['選項4'] : (q.option_4 !== undefined ? q.option_4 : q.option_d)
+        ].filter(Boolean);
       }
       if (opts.length < 2) opts = ['選項A', '選項B', '選項C', '選項D'];
 
@@ -2528,13 +2533,23 @@ class DataStore {
       if (typeof q.ans === 'number' && q.ans >= 0 && q.ans < opts.length) {
         ansIdx = q.ans;
       } else {
-        const ansLetter = String(q.answer || 'A').trim().toUpperCase();
-        ansIdx = 'ABCD'.indexOf(ansLetter);
+        const rawAns = String(q['答案'] !== undefined ? q['答案'] : (q.answer !== undefined ? q.answer : 'A')).trim();
+        const upper = rawAns.toUpperCase();
+        if (upper === '1' || upper === '選項1') ansIdx = 0;
+        else if (upper === '2' || upper === '選項2') ansIdx = 1;
+        else if (upper === '3' || upper === '選項3') ansIdx = 2;
+        else if (upper === '4' || upper === '選項4') ansIdx = 3;
+        else if ('ABCD'.indexOf(upper) !== -1) ansIdx = 'ABCD'.indexOf(upper);
+        else {
+          const matchIdx = opts.findIndex(opt => String(opt).trim() === rawAns);
+          ansIdx = matchIdx !== -1 ? matchIdx : 0;
+        }
         if (ansIdx < 0 || ansIdx >= opts.length) ansIdx = 0;
       }
 
-      const qid = String(q.question_id || `Q-GS-${idx + 1}`).trim();
-      const qFp = getFp(q.question);
+      const qid = String(q['題號'] || q.question_id || `Q-GS-${idx + 1}`).trim();
+      const questionText = String(q['題目'] || q.question || '').trim();
+      const qFp = getFp(questionText);
       const correctText = opts[ansIdx] || '';
       const ansFp = getFp(correctText);
       const contentKey = `${qFp}:::${ansFp}`;
@@ -2545,18 +2560,20 @@ class DataStore {
       seenIds.add(qid);
       if (qFp) seenFps.add(contentKey);
 
+      const exp = q['答案說明'] || q.explanation_detail || q.explanation_short || q.explanation || '';
+
       // 100% 忠實保留使用者設定之選項與答案，絕不進行動態位移或竄改
       retained.push({
         question_id: qid,
-        grade: q.grade || '',
-        question: q.question,
+        grade: q['年級'] || q.grade || '',
+        question: questionText,
         opts: [...opts],
         ans: ansIdx,
-        subject: q.subject || '國語文',
-        skill: q.skill || '語文素養',
-        difficulty: parseInt(q.difficulty) || 1,
-        explanation_short: q.explanation_short || '',
-        explanation_detail: q.explanation_detail || '',
+        subject: q['科目'] || q.subject || '國語文',
+        skill: q['技能'] || q.skill || '語文素養',
+        difficulty: parseInt(q['難度'] || q.difficulty) || 1,
+        explanation_short: exp,
+        explanation_detail: exp,
         memory_tip: q.memory_tip || '',
         target_words: q.target_words || [],
         concept_tags: q.concept_tags || []
@@ -2689,45 +2706,75 @@ class DataStore {
     }
     if (lines.length < 2) return [];
 
-    const headers = lines[0].map(h => h.toLowerCase());
-    const idx = (name) => headers.indexOf(name);
-    const qidIdx = idx('question_id');
-    const gradeIdx = idx('grade');
-    const qIdx = idx('question');
-    const aIdx = idx('option_a');
-    const bIdx = idx('option_b');
-    const cIdx = idx('option_c');
-    const dIdx = idx('option_d');
-    const ansIdx = idx('answer');
-    const expSIdx = idx('explanation_short');
-    const expDIdx = idx('explanation_detail');
-    const tipIdx = idx('memory_tip');
-    const skillIdx = idx('skill');
-    const subIdx = idx('subject');
-    const diffIdx = idx('difficulty');
+    const headers = lines[0].map(h => String(h || '').trim());
+    const headersLower = headers.map(h => h.toLowerCase());
+    const findIdx = (names) => {
+      for (const n of names) {
+        let i = headers.indexOf(n);
+        if (i !== -1) return i;
+        i = headersLower.indexOf(n.toLowerCase());
+        if (i !== -1) return i;
+      }
+      return -1;
+    };
+
+    const qidIdx = findIdx(['題號', 'question_id', 'id']);
+    const gradeIdx = findIdx(['年級', 'grade']);
+    const qIdx = findIdx(['題目', 'question']);
+    const aIdx = findIdx(['選項1', 'option_a', 'option_1', 'a']);
+    const bIdx = findIdx(['選項2', 'option_b', 'option_2', 'b']);
+    const cIdx = findIdx(['選項3', 'option_c', 'option_3', 'c']);
+    const dIdx = findIdx(['選項4', 'option_d', 'option_4', 'd']);
+    const ansIdx = findIdx(['答案', 'answer', 'ans']);
+    const expSIdx = findIdx(['答案說明', 'explanation_short', 'explanation', '解析']);
+    const expDIdx = findIdx(['答案說明', 'explanation_detail', 'explanation', '解析']);
+    const tipIdx = findIdx(['memory_tip', 'tip']);
+    const skillIdx = findIdx(['技能', 'skill']);
+    const subIdx = findIdx(['科目', 'subject']);
+    const diffIdx = findIdx(['難度', 'difficulty']);
 
     const bank = [];
     for (let i = 1; i < lines.length; i++) {
       const r = lines[i];
-      if (!r[qIdx]) continue;
-      const opts = [r[aIdx], r[bIdx], r[cIdx], r[dIdx]].filter(Boolean);
+      if (qIdx === -1 || !r[qIdx]) continue;
+      const opts = [
+        aIdx !== -1 ? r[aIdx] : '',
+        bIdx !== -1 ? r[bIdx] : '',
+        cIdx !== -1 ? r[cIdx] : '',
+        dIdx !== -1 ? r[dIdx] : ''
+      ].filter(Boolean);
       if (opts.length < 2) continue;
-      let ansLetter = (r[ansIdx] || 'A').toUpperCase();
-      let ansNum = 'ABCD'.indexOf(ansLetter);
-      if (ansNum < 0) ansNum = 0;
+
+      let ansNum = 0;
+      if (ansIdx !== -1 && r[ansIdx]) {
+        const rawAns = String(r[ansIdx]).trim();
+        const upper = rawAns.toUpperCase();
+        if (upper === '1' || upper === '選項1') ansNum = 0;
+        else if (upper === '2' || upper === '選項2') ansNum = 1;
+        else if (upper === '3' || upper === '選項3') ansNum = 2;
+        else if (upper === '4' || upper === '選項4') ansNum = 3;
+        else if ('ABCD'.indexOf(upper) !== -1) ansNum = 'ABCD'.indexOf(upper);
+        else {
+          const matchIdx = opts.findIndex(o => String(o).trim() === rawAns);
+          ansNum = matchIdx !== -1 ? matchIdx : 0;
+        }
+      }
+      if (ansNum < 0 || ansNum >= opts.length) ansNum = 0;
+
+      const exp = (expSIdx !== -1 && r[expSIdx]) || (expDIdx !== -1 && r[expDIdx]) || '';
 
       bank.push({
-        question_id: r[qidIdx] || `Q-${i}`,
-        grade: r[gradeIdx] || '',
+        question_id: (qidIdx !== -1 && r[qidIdx]) || `Q-${i}`,
+        grade: (gradeIdx !== -1 && r[gradeIdx]) || '',
         question: r[qIdx],
         opts: opts,
         ans: ansNum,
-        subject: r[subIdx] || '國語文',
-        skill: r[skillIdx] || '語文素養',
-        difficulty: parseInt(r[diffIdx]) || 1,
-        explanation_short: r[expSIdx] || '',
-        explanation_detail: r[expDIdx] || '',
-        memory_tip: r[tipIdx] || ''
+        subject: (subIdx !== -1 && r[subIdx]) || '國語文',
+        skill: (skillIdx !== -1 && r[skillIdx]) || '語文素養',
+        difficulty: (diffIdx !== -1 && parseInt(r[diffIdx])) || 1,
+        explanation_short: exp,
+        explanation_detail: exp,
+        memory_tip: (tipIdx !== -1 && r[tipIdx]) || ''
       });
     }
     return bank;
