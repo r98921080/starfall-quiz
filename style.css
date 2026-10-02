@@ -782,16 +782,77 @@ canvas#gameCanvas {
   font-size: 13px;
   line-height: 1.6;
   color: var(--text-main);
-  background: rgba(10, 16, 28, 0.85);
-  border: 1px solid rgba(56, 189, 248, 0.35);
-  border-radius: 10px;
-  padding: 10px 14px;
+  background: rgba(10, 16, 28, 0.92);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 12px;
+  padding: 12px 14px;
   display: none;
-  max-height: 180px;
+  max-height: 190px;
   overflow-y: auto;
   word-break: break-word;
   scrollbar-width: thin;
   scrollbar-color: var(--cyan) rgba(10, 16, 30, 0.6);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45) inset;
+}
+.quiz-explain-status {
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.quiz-explain-status.correct {
+  color: #38ef7d;
+  text-shadow: 0 0 10px rgba(56, 239, 125, 0.4);
+}
+.quiz-explain-status.wrong {
+  color: #ff6b81;
+  text-shadow: 0 0 10px rgba(255, 107, 129, 0.4);
+}
+.quiz-explain-status.penalty {
+  color: #ff4766;
+  text-shadow: 0 0 12px rgba(255, 71, 102, 0.6);
+}
+.quiz-explain-row {
+  margin-top: 6px;
+  line-height: 1.55;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.quiz-explain-row:first-of-type {
+  margin-top: 0;
+}
+.quiz-explain-tag {
+  flex-shrink: 0;
+  font-weight: 800;
+  font-size: 12.5px;
+  color: var(--cyan-bright);
+  white-space: nowrap;
+}
+.quiz-explain-val {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-main);
+}
+.quiz-explain-val.ans-highlight {
+  color: #ffffff;
+  font-weight: 700;
+}
+.quiz-explain-val.ans-highlight span {
+  color: var(--cyan-bright);
+}
+.quiz-explain-row.tip-row .quiz-explain-tag {
+  color: var(--gold);
+}
+.quiz-explain-row.tip-row .quiz-explain-val {
+  color: #fef08a;
+  font-size: 12px;
 }
 
 #quizNextBtn {

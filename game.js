@@ -8916,19 +8916,40 @@ class Game {
     const expBox = document.getElementById('quizExplain');
     const nextBtn = document.getElementById('quizNextBtn');
 
+    const rawAnsOpt = (q.opts && q.opts[q.ans] !== undefined) ? q.opts[q.ans] : '';
+    const cleanAnsText = String(rawAnsOpt)
+      .replace(/^(?:[(（\[【]?[1-4A-Da-d①②③④❶❷❸❹⑴⑵⑶⑷一二三四][)）\]】.:、：\s-]+|\s+)/, '')
+      .trim() || rawAnsOpt;
+    const ansLabel = cleanAnsText ? `【${q.ans + 1}：${cleanAnsText}】` : `【選項 ${q.ans + 1}】`;
+
+    // 格式工整化：作答狀態、正確解答、答案解析、記憶要訣獨立換行對齊
+    const renderExplainCard = (statusClass, statusText) => {
+      let html = `<div class="quiz-explain-status ${statusClass}">${statusText}</div>`;
+      html += `<div class="quiz-explain-row">` +
+        `<span class="quiz-explain-tag">【正確解答】</span>` +
+        `<span class="quiz-explain-val ans-highlight">${ansLabel}</span>` +
+        `</div>`;
+      if (q.explanation_short) {
+        html += `<div class="quiz-explain-row">` +
+          `<span class="quiz-explain-tag">【答案解析】</span>` +
+          `<span class="quiz-explain-val">${q.explanation_short}</span>` +
+          `</div>`;
+      }
+      if (q.memory_tip) {
+        html += `<div class="quiz-explain-row tip-row">` +
+          `<span class="quiz-explain-tag">【記憶要訣】</span>` +
+          `<span class="quiz-explain-val tip-val">💡 ${q.memory_tip}</span>` +
+          `</div>`;
+      }
+      return html;
+    };
+
     if (isCorrect) {
       this._waitingQuizNext = false;
       if (nextBtn) nextBtn.style.display = 'none';
 
-      if (q.explanation_short) {
-        expBox.style.display = 'block';
-        const rawAnsOpt = (q.opts && q.opts[q.ans] !== undefined) ? q.opts[q.ans] : '';
-        const cleanAnsText = String(rawAnsOpt)
-          .replace(/^(?:[(（\[【]?[1-4A-Da-d①②③④❶❷❸❹⑴⑵⑶⑷一二三四][)）\]】.:、：\s-]+|\s+)/, '')
-          .trim() || rawAnsOpt;
-        const ansLabel = cleanAnsText ? `【${q.ans + 1}：${cleanAnsText}】` : `【選項 ${q.ans + 1}】`;
-        expBox.innerHTML = `<b>✨ 答對了！正確解答：${ansLabel}</b><br><b>解析：</b> ${q.explanation_short}`;
-      }
+      expBox.style.display = 'block';
+      expBox.innerHTML = renderExplainCard('correct', '✨ 答對了！');
 
       setTimeout(() => {
         if (!this._waitingQuizNext && this.state === 'quiz') {
@@ -8939,26 +8960,12 @@ class Game {
       // 答錯了：停止自動倒數跳題，展示解析說明並呈現「下一題」按鈕，讓玩家看清楚答案說明後自行點擊進入下一題
       this._waitingQuizNext = true;
       expBox.style.display = 'block';
-      const rawAnsOpt = (q.opts && q.opts[q.ans] !== undefined) ? q.opts[q.ans] : '';
-      const cleanAnsText = String(rawAnsOpt)
-        .replace(/^(?:[(（\[【]?[1-4A-Da-d①②③④❶❷❸❹⑴⑵⑶⑷一二三四][)）\]】.:、：\s-]+|\s+)/, '')
-        .trim() || rawAnsOpt;
-      const ansLabel = cleanAnsText ? `【${q.ans + 1}：${cleanAnsText}】` : `【選項 ${q.ans + 1}】`;
 
-      let explainHtml = '';
       if (isRepeatedWrong) {
-        explainHtml += `<span style="color:#ff4766; font-weight:800; font-size:13px;">❌ 舊錯題重複答錯！【重度懲罰】：結算評級額外扣減 1 題！</span><br>`;
+        expBox.innerHTML = renderExplainCard('penalty', '❌ 舊錯題重複答錯！【重度懲罰】：結算評級額外扣減 1 題！');
       } else {
-        explainHtml += `<span style="color:#ff6b81; font-weight:800; font-size:13px;">❌ 答錯了！</span><br>`;
+        expBox.innerHTML = renderExplainCard('wrong', '❌ 答錯了！');
       }
-      explainHtml += `<b>正確解答：</b> <span style="color:var(--cyan-bright); font-weight:800;">${ansLabel}</span>`;
-      if (q.explanation_short) {
-        explainHtml += `<br><b>解析說明：</b> ${q.explanation_short}`;
-      }
-      if (q.memory_tip) {
-        explainHtml += `<br><span style="color:var(--gold); font-size:11px;">💡 記憶要訣：${q.memory_tip}</span>`;
-      }
-      expBox.innerHTML = explainHtml;
 
       if (nextBtn) {
         nextBtn.style.display = 'inline-flex';

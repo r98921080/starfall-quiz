@@ -46,7 +46,7 @@ console.log('\nTest 2: Verifying index.html and starfall-quiz.html structures...
 
   assert(content.includes('id="quizNextBtn"'), `${filename} must have #quizNextBtn`);
   assert(content.includes('下一題'), `${filename} #quizNextBtn must display 下一題`);
-  assert(content.includes('game.js?v=b47'), `${filename} must reference game.js?v=b47 for cache busting`);
+  assert(/game\.js\?v=b(4[7-9]|[5-9]\d)/.test(content), `${filename} must reference game.js?v=b47 or newer for cache busting`);
   console.log(`✓ ${filename} passed structural checks.`);
 });
 
@@ -117,34 +117,50 @@ const mockElements = {
   const isCorrect = selectedIdx === q.ans;
   assert(!isCorrect, 'Selected index 0 should be wrong');
 
+  const rawAnsOpt = (q.opts && q.opts[q.ans] !== undefined) ? q.opts[q.ans] : '';
+  const cleanAnsText = String(rawAnsOpt)
+    .replace(/^(?:[(（\[【]?[1-4A-Da-d①②③④❶❷❸❹⑴⑵⑶⑷一二三四][)）\]】.:、：\s-]+|\s+)/, '')
+    .trim() || rawAnsOpt;
+  const ansLabel = cleanAnsText ? `【${q.ans + 1}：${cleanAnsText}】` : `【選項 ${q.ans + 1}】`;
+
+  const renderExplainCard = (statusClass, statusText) => {
+    let html = `<div class="quiz-explain-status ${statusClass}">${statusText}</div>`;
+    html += `<div class="quiz-explain-row">` +
+      `<span class="quiz-explain-tag">【正確解答】</span>` +
+      `<span class="quiz-explain-val ans-highlight">${ansLabel}</span>` +
+      `</div>`;
+    if (q.explanation_short) {
+      html += `<div class="quiz-explain-row">` +
+        `<span class="quiz-explain-tag">【答案解析】</span>` +
+        `<span class="quiz-explain-val">${q.explanation_short}</span>` +
+        `</div>`;
+    }
+    if (q.memory_tip) {
+      html += `<div class="quiz-explain-row tip-row">` +
+        `<span class="quiz-explain-tag">【記憶要訣】</span>` +
+        `<span class="quiz-explain-val tip-val">💡 ${q.memory_tip}</span>` +
+        `</div>`;
+    }
+    return html;
+  };
+
   // Logic from game.js for wrong answer
   if (!isCorrect) {
     waitingQuizNext = true;
     expBox.style.display = 'block';
-    const rawAnsOpt = (q.opts && q.opts[q.ans] !== undefined) ? q.opts[q.ans] : '';
-    const cleanAnsText = String(rawAnsOpt)
-      .replace(/^(?:[(（\[【]?[1-4A-Da-d①②③④❶❷❸❹⑴⑵⑶⑷一二三四][)）\]】.:、：\s-]+|\s+)/, '')
-      .trim() || rawAnsOpt;
-    const ansLabel = cleanAnsText ? `【${q.ans + 1}：${cleanAnsText}】` : `【選項 ${q.ans + 1}】`;
-
-    let explainHtml = `<span style="color:#ff6b81; font-weight:800; font-size:13px;">❌ 答錯了！</span><br>`;
-    explainHtml += `<b>正確解答：</b> <span style="color:var(--cyan-bright); font-weight:800;">${ansLabel}</span>`;
-    if (q.explanation_short) {
-      explainHtml += `<br><b>解析說明：</b> ${q.explanation_short}`;
-    }
-    if (q.memory_tip) {
-      explainHtml += `<br><span style="color:var(--gold); font-size:11px;">💡 記憶要訣：${q.memory_tip}</span>`;
-    }
-    expBox.innerHTML = explainHtml;
+    expBox.innerHTML = renderExplainCard('wrong', '❌ 答錯了！');
     nextBtn.style.display = 'inline-flex';
   }
 
   assert.strictEqual(waitingQuizNext, true, 'waitingQuizNext must be true on wrong answer');
   assert.strictEqual(nextBtn.style.display, 'inline-flex', 'Next button must be displayed on wrong answer');
   assert(expBox.innerHTML.includes('❌ 答錯了！'), 'Explanation must indicate wrong answer');
+  assert(expBox.innerHTML.includes('【正確解答】'), 'Explanation must include 【正確解答】 tag');
   assert(expBox.innerHTML.includes('【2：用錯方法徒勞無功】'), 'Explanation must include formatted correct answer');
+  assert(expBox.innerHTML.includes('【答案解析】'), 'Explanation must include 【答案解析】 tag');
   assert(expBox.innerHTML.includes('比喻用錯方法，徒勞無功。'), 'Explanation must include explanation text');
-  assert(expBox.innerHTML.includes('💡 記憶要訣'), 'Explanation must include memory tip if present');
+  assert(expBox.innerHTML.includes('【記憶要訣】'), 'Explanation must include 【記憶要訣】 tag');
+  assert(expBox.innerHTML.includes('💡 緣木＝爬樹；爬樹不可能找到魚。'), 'Explanation must include memory tip text');
 
   // Verify advanceQuizQuestion triggers the next question
   function advanceQuizQuestion() {
@@ -172,31 +188,55 @@ const mockElements = {
     stem: '成語「緣木求魚」的比喻為何？',
     opts: ['1. 捕魚方法正確', '2. 用錯方法徒勞無功', '3. 爬樹技術高超', '4. 隨機應變'],
     ans: 1,
-    explanation_short: '比喻用錯方法，徒勞無功。'
+    explanation_short: '比喻用錯方法，徒勞無功。',
+    memory_tip: '緣木＝爬樹；爬樹不可能找到魚。'
   };
 
   const selectedIdx = 1; // Correct answer!
   const isCorrect = selectedIdx === q.ans;
   assert(isCorrect, 'Selected index 1 should be correct');
 
+  const rawAnsOpt = (q.opts && q.opts[q.ans] !== undefined) ? q.opts[q.ans] : '';
+  const cleanAnsText = String(rawAnsOpt)
+    .replace(/^(?:[(（\[【]?[1-4A-Da-d①②③④❶❷❸❹⑴⑵⑶⑷一二三四][)）\]】.:、：\s-]+|\s+)/, '')
+    .trim() || rawAnsOpt;
+  const ansLabel = cleanAnsText ? `【${q.ans + 1}：${cleanAnsText}】` : `【選項 ${q.ans + 1}】`;
+
+  const renderExplainCard = (statusClass, statusText) => {
+    let html = `<div class="quiz-explain-status ${statusClass}">${statusText}</div>`;
+    html += `<div class="quiz-explain-row">` +
+      `<span class="quiz-explain-tag">【正確解答】</span>` +
+      `<span class="quiz-explain-val ans-highlight">${ansLabel}</span>` +
+      `</div>`;
+    if (q.explanation_short) {
+      html += `<div class="quiz-explain-row">` +
+        `<span class="quiz-explain-tag">【答案解析】</span>` +
+        `<span class="quiz-explain-val">${q.explanation_short}</span>` +
+        `</div>`;
+    }
+    if (q.memory_tip) {
+      html += `<div class="quiz-explain-row tip-row">` +
+        `<span class="quiz-explain-tag">【記憶要訣】</span>` +
+        `<span class="quiz-explain-val tip-val">💡 ${q.memory_tip}</span>` +
+        `</div>`;
+    }
+    return html;
+  };
+
   if (isCorrect) {
     waitingQuizNext = false;
     if (nextBtn) nextBtn.style.display = 'none';
-    if (q.explanation_short) {
-      expBox.style.display = 'block';
-      const rawAnsOpt = (q.opts && q.opts[q.ans] !== undefined) ? q.opts[q.ans] : '';
-      const cleanAnsText = String(rawAnsOpt)
-        .replace(/^(?:[(（\[【]?[1-4A-Da-d①②③④❶❷❸❹⑴⑵⑶⑷一二三四][)）\]】.:、：\s-]+|\s+)/, '')
-        .trim() || rawAnsOpt;
-      const ansLabel = cleanAnsText ? `【${q.ans + 1}：${cleanAnsText}】` : `【選項 ${q.ans + 1}】`;
-      expBox.innerHTML = `<b>✨ 答對了！正確解答：${ansLabel}</b><br><b>解析：</b> ${q.explanation_short}`;
-    }
+    expBox.style.display = 'block';
+    expBox.innerHTML = renderExplainCard('correct', '✨ 答對了！');
   }
 
   assert.strictEqual(waitingQuizNext, false, 'waitingQuizNext must remain false on correct answer');
   assert.strictEqual(nextBtn.style.display, 'none', 'Next button must remain hidden on correct answer');
   assert(expBox.innerHTML.includes('✨ 答對了！'), 'Explanation must indicate correct answer');
-  console.log('✓ Correct answer simulation passed: kept auto-advance smooth pacing.');
+  assert(expBox.innerHTML.includes('【正確解答】'), 'Explanation must include 【正確解答】 on correct answer too');
+  assert(expBox.innerHTML.includes('【答案解析】'), 'Explanation must include 【答案解析】 on correct answer too');
+  assert(expBox.innerHTML.includes('【記憶要訣】'), 'Explanation must include 【記憶要訣】 on correct answer too');
+  console.log('✓ Correct answer simulation passed: kept auto-advance smooth pacing and neat multi-line layout.');
 }
 
 console.log('\n=== All BUILD-046 Tests Passed Successfully! ===');
