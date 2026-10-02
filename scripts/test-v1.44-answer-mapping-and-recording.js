@@ -18,9 +18,10 @@ assert(gameJs.includes('function normalizeAnswerToIndex'), 'game.js must impleme
 assert(codeGs.includes('getOrCreateAttemptsSheet_'), 'Code.gs must implement getOrCreateAttemptsSheet_');
 assert(codeGs.includes('getAttemptsSheet_'), 'Code.gs must implement getAttemptsSheet_');
 assert(codeGs.includes('getQuestionsSheet_'), 'Code.gs must implement getQuestionsSheet_');
-assert(gameJs.includes('${idx + 1} (${keys[idx]})'), 'game.js quiz options must display dual keys (1 (A), 2 (B)...)');
+assert(!gameJs.includes('<span class="opt-key">'), 'Quiz option buttons must not show opt-key badge (ABCD or 1234)');
+assert(gameJs.includes('btn.innerHTML = `<span>${cleanText || optText}</span>`;'), 'Quiz option buttons must cleanly display option text without ABCD/1234');
 assert(gameJs.includes("e.key === '1' || e.key === 'a'"), 'game.js keyboard listener must accept keys 1~4 and A~D');
-console.log('  ✅ Static signatures and UI templates verified!');
+console.log('  ✅ Static signatures and clean UI templates verified!');
 
 // =========================================================================
 // 2. Testing Answer Normalization in Code.gs and game.js (VM Execution)

@@ -657,18 +657,23 @@ canvas#gameCanvas {
   pointer-events: auto;
   cursor: pointer;
   min-height: 48px;
-  padding: 10px 14px;
-  background: rgba(22, 32, 54, 0.85);
+  padding: 12px 18px;
+  background: rgba(22, 32, 54, 0.88);
   border: 1px solid rgba(120, 200, 230, 0.25);
   border-radius: 10px;
   color: var(--text-main);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   text-align: left;
   display: flex;
   align-items: center;
-  gap: 10px;
   transition: all 0.15s ease;
+  line-height: 1.45;
+}
+.opt-btn:hover:not(:disabled) {
+  background: rgba(30, 48, 80, 0.95);
+  border-color: rgba(56, 189, 248, 0.6);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
 }
 .opt-btn:active {
   transform: scale(0.98);

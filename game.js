@@ -8766,11 +8766,14 @@ class Game {
 
     const optsContainer = document.getElementById('quizOpts');
     optsContainer.innerHTML = '';
-    const keys = ['A', 'B', 'C', 'D'];
     q.opts.forEach((optText, idx) => {
       const btn = document.createElement('button');
       btn.className = 'opt-btn';
-      btn.innerHTML = `<span class="opt-key">${idx + 1} (${keys[idx]})</span><span>${optText}</span>`;
+      // 介面極簡化：不顯示 ABCD、1234 或 1(A)，直接顯示乾淨選項文字，並自動剝離原始文字中的序號前綴
+      const cleanText = String(optText || '')
+        .replace(/^(?:[(（\[【]?[1-4A-Da-d①②③④❶❷❸❹⑴⑵⑶⑷一二三四][)）\]】.:、\s-]+|\s+)/, '')
+        .trim();
+      btn.innerHTML = `<span>${cleanText || optText}</span>`;
       btn.onclick = () => this.handleAnswer(idx);
       optsContainer.appendChild(btn);
     });
@@ -8853,7 +8856,11 @@ class Game {
     if (q.explanation_short) {
       const expBox = document.getElementById('quizExplain');
       expBox.style.display = 'block';
-      const ansLabel = `選項 ${q.ans + 1} (${'ABCD'[q.ans]})`;
+      const rawAnsOpt = q.opts && q.opts[q.ans] ? q.opts[q.ans] : '';
+      const cleanAnsText = String(rawAnsOpt)
+        .replace(/^(?:[(（\[【]?[1-4A-Da-d①②③④❶❷❸❹⑴⑵⑶⑷一二三四][)）\]】.:、\s-]+|\s+)/, '')
+        .trim() || rawAnsOpt;
+      const ansLabel = cleanAnsText ? `【${cleanAnsText}】` : `選項 ${q.ans + 1}`;
       if (isRepeatedWrong) {
         expBox.innerHTML = `<span style="color:#ff4766; font-weight:800; font-size:13px;">❌ 舊錯題重複答錯！【重度懲罰】：結算評級額外扣減 1 題！</span><br><b>正確解答：</b> ${ansLabel}<br><b>解析：</b> ${q.explanation_short}`;
       } else {
