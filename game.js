@@ -4189,6 +4189,55 @@ class Game {
       }
     };
 
+    const checkUrlIsExec = (url) => {
+      if (url.includes('docs.google.com/spreadsheets')) {
+        this.showToast('⚠️ 此遠端功能需要 Apps Script Web App 網址 (/exec 結尾)。若為試算表，請在試算表選單中執行！');
+        document.getElementById('gsStatusBox').innerHTML = `
+          <span style="color:var(--gold); font-weight:800;">💡 提示：</span><br>
+          您目前輸入的是 Google 試算表直接網址。<br>
+          • 遊戲已支援直接讀取此網址的題庫！<br>
+          • 若要執行「一鍵轉化欄位」或「清理分頁」，請直接在您的 Google 試算表上方選單點選：<br>
+          <b>【🌟 星墜答問】➜【🚀 一鍵極簡化全部表格】</b>即可一鍵完成！
+        `;
+        return false;
+      }
+      return true;
+    };
+
+    const simplifyAllBtn = document.getElementById('gsSimplifyAllBtn');
+    if (simplifyAllBtn) {
+      simplifyAllBtn.onclick = async () => {
+        const url = document.getElementById('gsUrlInput').value.trim();
+        if (!url || !url.startsWith('http')) {
+          this.showToast('❌ 請先輸入有效的 Apps Script Web App 網址');
+          return;
+        }
+        if (!checkUrlIsExec(url)) return;
+
+        document.getElementById('gsStatusBox').innerHTML = '<span style="color:var(--gold);">⏳ 正在遠端極簡化全部表格 (Questions 8欄 + Attempts 8欄)，請稍候...</span>';
+        try {
+          const reqUrl = `${url}${url.includes('?') ? '&' : '?'}action=simplify_all`;
+          const res = await fetch(reqUrl);
+          const data = await res.json();
+          if (data && data.ok) {
+            this.showToast('✅ 試算表全部表格已成功極簡化！');
+            await this.dataStore.loadFromGoogleSheet(url);
+            document.getElementById('gsStatusBox').innerHTML = `
+              <span style="color:var(--green); font-weight:800;">✅ 全部表格極簡化成功！</span><br>
+              • 題庫 (Questions)：<b>${(data.result && data.result.questions_count) || this.dataStore.questionBank.length}</b> 題已轉為 8 欄極簡模式。<br>
+              • 作答紀錄 (Attempts)：<b>${(data.result && data.result.attempts_count) || 0}</b> 筆已轉為 8 欄極簡模式。<br>
+              • 家長總覽 (ParentDashboard)：已同步更新最新統計報表！<br>
+              已即時同步載入遊戲題庫！
+            `;
+          } else {
+            document.getElementById('gsStatusBox').innerHTML = `<span style="color:var(--red);">❌ 轉換失敗：${(data && data.error) || '未知錯誤'}</span>`;
+          }
+        } catch (err) {
+          document.getElementById('gsStatusBox').innerHTML = `<span style="color:var(--red);">❌ 遠端指令失敗：${err.message}</span>`;
+        }
+      };
+    }
+
     const simplifyBtn = document.getElementById('gsSimplifyBtn');
     if (simplifyBtn) {
       simplifyBtn.onclick = async () => {
@@ -4197,6 +4246,8 @@ class Game {
           this.showToast('❌ 請先輸入有效的 Apps Script Web App 網址');
           return;
         }
+        if (!checkUrlIsExec(url)) return;
+
         document.getElementById('gsStatusBox').innerHTML = '<span style="color:var(--gold);">⏳ 正在遠端轉換題庫為 8 欄極簡模式中，請稍候...</span>';
         try {
           const reqUrl = `${url}${url.includes('?') ? '&' : '?'}action=simplify_questions`;
@@ -4221,6 +4272,37 @@ class Game {
       };
     }
 
+    const simplifyAttemptsBtn = document.getElementById('gsSimplifyAttemptsBtn');
+    if (simplifyAttemptsBtn) {
+      simplifyAttemptsBtn.onclick = async () => {
+        const url = document.getElementById('gsUrlInput').value.trim();
+        if (!url || !url.startsWith('http')) {
+          this.showToast('❌ 請先輸入有效的 Apps Script Web App 網址');
+          return;
+        }
+        if (!checkUrlIsExec(url)) return;
+
+        document.getElementById('gsStatusBox').innerHTML = '<span style="color:var(--gold);">⏳ 正在遠端轉換作答紀錄為 8 欄極簡模式中，請稍候...</span>';
+        try {
+          const reqUrl = `${url}${url.includes('?') ? '&' : '?'}action=simplify_attempts`;
+          const res = await fetch(reqUrl);
+          const data = await res.json();
+          if (data && data.ok) {
+            this.showToast('✅ 作答紀錄已成功轉換為 8 欄極簡模式！');
+            document.getElementById('gsStatusBox').innerHTML = `
+              <span style="color:var(--green); font-weight:800;">✅ 作答紀錄轉化 8 欄成功！</span><br>
+              處理紀錄：<b>${(data.result && data.result.count) || 0}</b> 筆。<br>
+              欄位已精簡為：時間、學號、姓名、關卡、題號、學生選擇、是否答對、作答秒數。
+            `;
+          } else {
+            document.getElementById('gsStatusBox').innerHTML = `<span style="color:var(--red);">❌ 轉換失敗：${(data && data.error) || '未知錯誤'}</span>`;
+          }
+        } catch (err) {
+          document.getElementById('gsStatusBox').innerHTML = `<span style="color:var(--red);">❌ 遠端指令失敗：${err.message}</span>`;
+        }
+      };
+    }
+
     const cleanSheetsBtn = document.getElementById('gsCleanSheetsBtn');
     if (cleanSheetsBtn) {
       cleanSheetsBtn.onclick = async () => {
@@ -4229,6 +4311,8 @@ class Game {
           this.showToast('❌ 請先輸入有效的 Apps Script Web App 網址');
           return;
         }
+        if (!checkUrlIsExec(url)) return;
+
         document.getElementById('gsStatusBox').innerHTML = '<span style="color:var(--gold);">⏳ 正在遠端清理多餘工作表，請稍候...</span>';
         try {
           const reqUrl = `${url}${url.includes('?') ? '&' : '?'}action=clean_sheets`;

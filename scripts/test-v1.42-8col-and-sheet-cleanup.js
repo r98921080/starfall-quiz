@@ -16,8 +16,8 @@ console.log('--- 1. Testing apps-script/Code.gs Resilience & Non-Recursion ---')
 
 // 驗證 doGet / doPost 主動清理舊分頁
 assert(codeGs.includes('cleanLegacySheets_(ss)'), 'Code.gs 必須包含 cleanLegacySheets_(ss)');
-assert(codeGs.includes("version: '1.3.0'"), 'API 版本必須為 1.3.0');
-console.log('  ✅ API 版本已升級為 1.3.0，doGet 與 doPost 皆主動執行 cleanLegacySheets_ 巡檢');
+assert(codeGs.includes("version: '1.3.0'") || codeGs.includes("version: '1.4.0'"), 'API 版本必須為 1.3.0 或以上');
+console.log('  ✅ API 版本已升級為 1.3.0+，doGet 與 doPost 皆主動執行 cleanLegacySheets_ 巡檢');
 
 // 驗證 cleanLegacySheets_ 與 cleanAllExtraSheets_ 絕無無限遞迴
 const cleanLegacyMatch = codeGs.match(/function cleanLegacySheets_\([\s\S]*?\n\}/);

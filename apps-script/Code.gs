@@ -5,24 +5,23 @@ const SHEETS = {
   STUDENTS: 'Students' // 相容舊版，若不存在會自動從 Attempts 整合學生名冊
 };
 
-// 極簡 3 分頁架構：僅保留 Questions (題庫) 與 Attempts (作答紀錄)，其餘報表全由 ParentDashboard 呈現
+// 極簡 3 分頁架構：僅保留 Questions (題庫 8 欄) 與 Attempts (作答紀錄 8 欄)，其餘報表全由 ParentDashboard 呈現
 const REQUIRED_HEADERS = {
   Questions: [
     '題號', '題目', '選項1', '選項2', '選項3', '選項4', '答案', '答案說明'
   ],
   Attempts: [
-    'timestamp', 'student_id', 'session_id', 'stage', 'boss_name', 'question_id',
-    'selected_option', 'correct', 'response_time_ms', 'attempt_index', 'is_review',
-    'hint_used', 'difficulty_at_time', 'subject', 'unit', 'skill', 'target_words',
-    'concept_tags', 'knowledge_pressure', 'weapon_quality', 'sync_status'
+    '時間', '學號', '姓名', '關卡', '題號', '學生選擇', '是否答對', '作答秒數'
   ]
 };
 
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('🌟 星墜答問')
-    .addItem('🧹 一鍵極簡化分頁 (刪除多餘工作表，只留 3 個核心分頁)', 'cleanAllExtraSheets')
-    .addItem('🔄 一鍵將題庫簡化為 8 欄 (題號、題目、選項1~4、答案、說明)', 'simplifyQuestionsColumns')
+    .addItem('🚀 一鍵極簡化全部表格 (Questions 8欄 + Attempts 8欄 + 清理多餘分頁)', 'simplifyAllTables')
+    .addItem('🔄 一鍵簡化題庫為 8 欄 (Questions)', 'simplifyQuestionsColumns')
+    .addItem('📝 一鍵簡化作答紀錄為 8 欄 (Attempts)', 'simplifyAttemptsColumns')
+    .addItem('🧹 一鍵清理多餘分頁 (只留 3 個核心分頁)', 'cleanAllExtraSheets')
     .addItem('📊 立即更新家長報表 (ParentDashboard)', 'refreshReports')
     .addItem('✨ 題庫智慧去重清洗', 'cleanDuplicateQuestions')
     .addItem('⚙️ 初始化與檢查資料表', 'setupStarfall')
@@ -31,13 +30,9 @@ function onOpen() {
 
 function setupStarfall() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  Object.keys(REQUIRED_HEADERS).forEach(function(sheetName) {
-    ensureSheetAndHeaders_(ss, sheetName, REQUIRED_HEADERS[sheetName]);
-  });
-  ensureReportSheets_(ss);
-  cleanAllExtraSheets_(ss);
+  const res = simplifyAllTables_(ss);
   logActivity_('SETUP', '初始化完成，極簡家長總覽資料表與報表已建立。');
-  SpreadsheetApp.getUi().alert('初始化完成', '已檢查資料表並將工作表極簡化為 3 個核心分頁：\n1. 【ParentDashboard】家長學習總覽\n2. 【Questions】題目庫 (8 欄極簡模式)\n3. 【Attempts】即時作答紀錄', SpreadsheetApp.getUi().ButtonSet.OK);
+  SpreadsheetApp.getUi().alert('初始化完成', '已檢查資料表並將工作表極簡化為 3 個核心分頁：\n1. 【ParentDashboard】家長學習總覽\n2. 【Questions】題目庫 (8 欄極簡模式，共 ' + res.questions_count + ' 題)\n3. 【Attempts】即時作答紀錄 (8 欄極簡模式，共 ' + res.attempts_count + ' 筆紀錄)', SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function doGet(e) {
@@ -72,12 +67,20 @@ function doGet(e) {
       const result = simplifyQuestionsColumns_();
       return jsonOutput_({ ok: true, message: '題庫簡化完成', result: result });
     }
+    if (action === 'simplify_attempts') {
+      const result = simplifyAttemptsColumns_();
+      return jsonOutput_({ ok: true, message: '作答紀錄簡化完成', result: result });
+    }
+    if (action === 'simplify_all') {
+      const result = simplifyAllTables_();
+      return jsonOutput_({ ok: true, message: '全部表格極簡化完成', result: result });
+    }
     return jsonOutput_({
       ok: true,
       service: 'Starfall Quiz Learning API',
-      version: '1.3.0',
+      version: '1.4.0',
       active_sheets: ss.getSheets().map(function(s) { return s.getName(); }),
-      actions: ['questions', 'students', 'student_progress', 'register_student', 'attempt', 'attempt_batch', 'settings', 'report', 'clean_questions', 'clean_sheets', 'simplify_questions']
+      actions: ['questions', 'students', 'student_progress', 'register_student', 'attempt', 'attempt_batch', 'settings', 'report', 'clean_questions', 'clean_sheets', 'simplify_questions', 'simplify_attempts', 'simplify_all']
     });
   } catch (err) {
     return jsonOutput_({ ok: false, error: String(err.message || err) });
@@ -108,6 +111,14 @@ function doPost(e) {
     if (action === 'simplify_questions') {
       const result = simplifyQuestionsColumns_();
       return jsonOutput_({ ok: true, message: '題庫簡化完成', result: result });
+    }
+    if (action === 'simplify_attempts') {
+      const result = simplifyAttemptsColumns_();
+      return jsonOutput_({ ok: true, message: '作答紀錄簡化完成', result: result });
+    }
+    if (action === 'simplify_all') {
+      const result = simplifyAllTables_();
+      return jsonOutput_({ ok: true, message: '全部表格極簡化完成', result: result });
     }
     return jsonOutput_({ ok: false, error: '不支援的 action：' + action });
   } catch (err) {
@@ -411,8 +422,9 @@ function countAttempts_(ss, studentId, questionId) {
   const sheet = ss.getSheetByName(SHEETS.ATTEMPTS);
   if (!sheet) return 0;
   return sheetObjects_(sheet).filter(function(row) {
-    return String(row.student_id).trim() === String(studentId).trim() &&
-           String(row.question_id).trim() === String(questionId).trim();
+    const sid = String(row['學號'] || row.student_id || '').trim();
+    const qid = String(row['題號'] || row.question_id || '').trim();
+    return sid === String(studentId).trim() && qid === String(questionId).trim();
   }).length;
 }
 
@@ -420,14 +432,19 @@ function updateQuestionProgress_(ss, attempt) {
   // 作答紀錄全數保存在 Attempts 表中，家長儀表板自動由此彙整計算
 }
 
-function getStudents_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+function getStudents_(ss) {
+  if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
   const sSheet = ss.getSheetByName(SHEETS.STUDENTS);
   if (sSheet) {
     const students = sheetObjects_(sSheet)
       .filter(function(row) { return String(row.active).toUpperCase() !== 'FALSE'; })
       .map(function(row) {
-        return { student_id: row.student_id, display_name: row.display_name, grade: row.grade, notes: row.notes || '' };
+        return {
+          student_id: row['學號'] || row.student_id,
+          display_name: row['姓名'] || row.display_name || row.name,
+          grade: row['年級'] || row.grade,
+          notes: row.notes || ''
+        };
       });
     if (students.length > 0) return { ok: true, students: students };
   }
@@ -437,13 +454,15 @@ function getStudents_() {
   const attempts = aSheet ? sheetObjects_(aSheet) : [];
   const map = {};
   attempts.forEach(function(a) {
-    const sid = String(a.student_id || '').trim();
+    const sid = String(a['學號'] || a.student_id || '').trim();
     if (sid && !map[sid]) {
+      const sName = a['姓名'] || a.student_name || sid;
+      const sGrade = a['年級'] || a.student_grade || '三年級';
       map[sid] = {
         student_id: sid,
-        display_name: a.student_name || sid,
-        name: a.student_name || sid,
-        grade: a.student_grade || '三年級',
+        display_name: sName,
+        name: sName,
+        grade: sGrade,
         active: 'TRUE'
       };
     }
@@ -456,11 +475,12 @@ function getStudentProgressData_(params) {
   const studentId = String((params && params.student_id) || '').trim();
   if (!studentId) return { ok: false, error: '缺少 student_id 參數' };
   const attempts = sheetObjects_(ss.getSheetByName(SHEETS.ATTEMPTS))
-    .filter(function(a) { return String(a.student_id).trim() === studentId; });
+    .filter(function(a) { return String(a['學號'] || a.student_id || '').trim() === studentId; });
 
   const progressMap = {};
   attempts.forEach(function(a) {
-    const qid = a.question_id;
+    const qid = String(a['題號'] || a.question_id || '').trim();
+    if (!qid) return;
     if (!progressMap[qid]) {
       progressMap[qid] = {
         student_id: studentId,
@@ -474,10 +494,11 @@ function getStudentProgressData_(params) {
     }
     const p = progressMap[qid];
     p.attempts++;
-    const isCorrect = toBool_(a.correct);
+    const isCorrect = toBool_(a['是否答對'] !== undefined ? a['是否答對'] : (a['答對'] !== undefined ? a['答對'] : a.correct));
+    const isReview = toBool_(a['是否複習'] !== undefined ? a['是否複習'] : (a['複習'] !== undefined ? a['複習'] : a.is_review));
     if (isCorrect) {
       p.streak++;
-      if (toBool_(a.is_review)) p.avenged = true;
+      if (isReview) p.avenged = true;
     } else {
       p.wrong++;
       p.streak = 0;
@@ -556,17 +577,32 @@ function normalizeAttempt_(payload, ss) {
   }
   const selected = String(payload.selected_option || '').trim().toUpperCase();
   const correct = payload.correct === true || String(payload.correct).toUpperCase() === 'TRUE' || selected === String(question.answer).toUpperCase();
-  const priorAttempts = countAttempts_(ss, payload.student_id, payload.question_id);
+  const sid = String(payload.student_id || 'S0001');
+  const sName = String(payload.student_name || payload.display_name || sid);
+  const resMs = Math.max(0, Number(payload.response_time_ms) || 0);
+  const stageNum = Number(payload.stage) || 1;
+  const qid = question.question_id || payload.question_id || '';
+  const priorAttempts = countAttempts_(ss, sid, qid);
+  const now = payload.timestamp || new Date();
+  let timeStr = now;
+  try {
+    const d = (now instanceof Date) ? now : new Date(now);
+    if (!isNaN(d.getTime())) {
+      timeStr = Utilities.formatDate(d, Session.getScriptTimeZone() || 'Asia/Taipei', 'yyyy/MM/dd HH:mm:ss');
+    }
+  } catch (e) {}
+
   return {
-    timestamp: payload.timestamp || new Date(),
-    student_id: String(payload.student_id),
+    timestamp: timeStr,
+    student_id: sid,
+    student_name: sName,
     session_id: payload.session_id || Utilities.getUuid(),
-    stage: Number(payload.stage) || 1,
+    stage: stageNum,
     boss_name: payload.boss_name || '',
-    question_id: question.question_id,
+    question_id: qid,
     selected_option: selected,
     correct: correct,
-    response_time_ms: Math.max(0, Number(payload.response_time_ms) || 0),
+    response_time_ms: resMs,
     attempt_index: Number(payload.attempt_index) || priorAttempts + 1,
     is_review: payload.is_review === true || String(payload.is_review).toUpperCase() === 'TRUE',
     hint_used: payload.hint_used === true || String(payload.hint_used).toUpperCase() === 'TRUE',
@@ -578,12 +614,26 @@ function normalizeAttempt_(payload, ss) {
     concept_tags: question.concept_tags || '',
     knowledge_pressure: Number(payload.knowledge_pressure) || 0,
     weapon_quality: payload.weapon_quality || 'normal',
-    sync_status: payload.student_name ? ('已同步 (' + payload.student_name + ')') : '已同步'
+    sync_status: payload.student_name ? ('已同步 (' + payload.student_name + ')') : '已同步',
+
+    // 繁體中文 8 欄標準鍵
+    '時間': timeStr,
+    '學號': sid,
+    '姓名': sName,
+    '年級': payload.student_grade || '三年級',
+    '關卡': stageNum,
+    '題號': qid,
+    '學生選擇': selected,
+    '選擇': selected,
+    '是否答對': correct ? 'TRUE' : 'FALSE',
+    '答對': correct ? 'TRUE' : 'FALSE',
+    '作答秒數': (resMs / 1000).toFixed(1),
+    '是否複習': (payload.is_review === true || String(payload.is_review).toUpperCase() === 'TRUE') ? 'TRUE' : 'FALSE'
   };
 }
 
-function refreshReports() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+function refreshReports(ss) {
+  if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
   ensureReportSheets_(ss);
   cleanLegacySheets_(ss);
   const attempts = sheetObjects_(ss.getSheetByName(SHEETS.ATTEMPTS));
@@ -592,7 +642,7 @@ function refreshReports() {
   const questions = rawQuestions.map(function(row, idx) {
     return parseQuestionRow_(row, idx);
   });
-  const students = getStudents_().students;
+  const students = getStudents_(ss).students;
   writeParentDashboard_(ss, attempts, questions, students);
   logActivity_('REPORT', '家長總覽報表已更新。');
 }
@@ -625,13 +675,15 @@ function writeParentDashboard_(ss, attempts, questions, students) {
   });
 
   attempts.forEach(function(a) {
-    const sid = String(a.student_id || '').trim();
+    const sid = String(a['學號'] || a.student_id || '').trim();
     if (!sid) return;
+    const sName = String(a['姓名'] || a.student_name || sid).trim();
+    const sGrade = String(a['年級'] || a.student_grade || '').trim();
     if (!studentMap[sid]) {
       studentMap[sid] = {
-        student: { student_id: sid, display_name: a.student_name || sid, grade: a.student_grade || '' },
-        display_name: a.student_name || sid,
-        grade: a.student_grade || '',
+        student: { student_id: sid, display_name: sName, grade: sGrade },
+        display_name: sName,
+        grade: sGrade,
         total_attempts: 0,
         correct_count: 0,
         wrong_count: 0,
@@ -641,21 +693,22 @@ function writeParentDashboard_(ss, attempts, questions, students) {
     }
     const sObj = studentMap[sid];
     sObj.total_attempts++;
-    const isCorrect = toBool_(a.correct);
+    const isCorrect = toBool_(a['是否答對'] !== undefined ? a['是否答對'] : (a['答對'] !== undefined ? a['答對'] : a.correct));
     if (isCorrect) sObj.correct_count++;
     else sObj.wrong_count++;
 
-    const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+    const aTimeRaw = a['時間'] || a.timestamp;
+    const aTime = aTimeRaw ? new Date(aTimeRaw).getTime() : 0;
     if (aTime > sObj.last_active) {
       sObj.last_active = aTime;
     }
 
-    const qid = String(a.question_id || '').trim();
+    const qid = String(a['題號'] || a.question_id || '').trim();
     if (!sObj.qProgress[qid]) {
       const qData = qMap[qid] || {};
       sObj.qProgress[qid] = {
         question_id: qid,
-        question_text: qData.question || a.question || qid,
+        question_text: qData.question || a.question || a['題目'] || qid,
         correct: 0,
         wrong: 0,
         lastTime: 0
@@ -869,6 +922,11 @@ function ensureSheetAndHeaders_(ss, sheetName, headers) {
     sheet.setFrozenRows(1);
     return sheet;
   }
+  // 若為 Attempts 工作表且已有標題列，亦不擅自追加額外欄位，完整尊重使用者 8 欄極簡配置
+  if (sheetName === SHEETS.ATTEMPTS) {
+    sheet.setFrozenRows(1);
+    return sheet;
+  }
   const missing = headers.filter(function(header) { return current.indexOf(header) === -1; });
   if (missing.length) {
     sheet.getRange(1, current.length + 1, 1, missing.length).setValues([missing]);
@@ -930,10 +988,29 @@ function simplifyQuestionsColumns_(ss) {
   const sheet = getQuestionsSheet_(ss);
   if (!sheet) throw new Error('找不到 Questions 或題庫工作表，請確認分頁名稱包含 Questions 或題庫。');
 
-  const rows = sheetObjects_(sheet);
-  if (rows.length === 0) return { ok: true, count: 0 };
-
   const targetHeaders = ['題號', '題目', '選項1', '選項2', '選項3', '選項4', '答案', '答案說明'];
+  const rows = sheetObjects_(sheet);
+  if (rows.length === 0) {
+    sheet.clearContents();
+    sheet.clearFormats();
+    if (sheet.getMaxColumns() < targetHeaders.length) {
+      sheet.insertColumnsAfter(sheet.getMaxColumns(), targetHeaders.length - sheet.getMaxColumns());
+    } else if (sheet.getMaxColumns() > targetHeaders.length) {
+      try {
+        sheet.deleteColumns(targetHeaders.length + 1, sheet.getMaxColumns() - targetHeaders.length);
+      } catch (e) {}
+    }
+    sheet.getRange(1, 1, 1, targetHeaders.length).setValues([targetHeaders]);
+    sheet.setFrozenRows(1);
+    sheet.autoResizeColumns(1, targetHeaders.length);
+    sheet.getRange(1, 1, 1, targetHeaders.length)
+      .setBackground('#1e293b')
+      .setFontColor('#38bdf8')
+      .setFontWeight('bold')
+      .setHorizontalAlignment('center');
+    return { ok: true, count: 0 };
+  }
+
   const newRows = [];
   rows.forEach(function(row, idx) {
     const parsed = parseQuestionRow_(row, idx);
@@ -950,10 +1027,6 @@ function simplifyQuestionsColumns_(ss) {
     ]);
   });
 
-  if (newRows.length === 0) {
-    throw new Error('未讀取到有效的題目資料（題目內容皆為空白），請確認工作表中是否已有題目。');
-  }
-
   // 1. 清除舊資料與格式
   sheet.clearContents();
   sheet.clearFormats();
@@ -968,13 +1041,15 @@ function simplifyQuestionsColumns_(ss) {
   }
 
   // 3. 自動確保有足夠列數
-  if (sheet.getMaxRows() < newRows.length + 1) {
+  if (newRows.length > 0 && sheet.getMaxRows() < newRows.length + 1) {
     sheet.insertRowsAfter(sheet.getMaxRows(), (newRows.length + 1) - sheet.getMaxRows());
   }
 
   // 4. 寫入標題與資料
   sheet.getRange(1, 1, 1, targetHeaders.length).setValues([targetHeaders]);
-  sheet.getRange(2, 1, newRows.length, targetHeaders.length).setValues(newRows);
+  if (newRows.length > 0) {
+    sheet.getRange(2, 1, newRows.length, targetHeaders.length).setValues(newRows);
+  }
   sheet.setFrozenRows(1);
   sheet.autoResizeColumns(1, targetHeaders.length);
   sheet.getRange(1, 1, 1, targetHeaders.length)
@@ -984,6 +1059,235 @@ function simplifyQuestionsColumns_(ss) {
     .setHorizontalAlignment('center');
 
   return { ok: true, count: newRows.length };
+}
+
+function getAttemptsSheet_(ss) {
+  if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
+  const candidates = [SHEETS.ATTEMPTS, 'Attempts', 'Attempt', '作答紀錄', '作答記錄', '答題紀錄', '答題記錄', 'submissions', 'Submissions', 'attempts'];
+  for (let i = 0; i < candidates.length; i++) {
+    const s = ss.getSheetByName(candidates[i]);
+    if (s) return s;
+  }
+  const sheets = ss.getSheets();
+  for (let i = 0; i < sheets.length; i++) {
+    const n = sheets[i].getName().trim().toLowerCase();
+    if (n === 'attempts' || n === 'attempt' || n === '作答紀錄' || n === '作答記錄' || n === 'submissions') {
+      return sheets[i];
+    }
+  }
+  return null;
+}
+
+/**
+ * 試算表選單專用：一鍵將作答紀錄簡化為 8 欄極簡模式
+ */
+function simplifyAttemptsColumns() {
+  let ui = null;
+  try { ui = SpreadsheetApp.getUi(); } catch (e) { ui = null; }
+
+  if (ui) {
+    const resp = ui.alert(
+      '確認簡化作答紀錄欄位為 8 欄',
+      '此操作將會把【Attempts】作答紀錄工作表轉換為極簡 8 欄：\n' +
+      '【時間】｜【學號】｜【姓名】｜【關卡】｜【題號】｜【學生選擇】｜【是否答對】｜【作答秒數】\n\n' +
+      '所有學生的作答歷史紀錄都會 100% 完整保留！\n確定要開始執行簡化轉換嗎？',
+      ui.ButtonSet.YES_NO
+    );
+    if (resp !== ui.Button.YES && String(resp).toUpperCase() !== 'YES') return;
+  }
+
+  try {
+    const res = simplifyAttemptsColumns_();
+    if (ui) {
+      ui.alert(
+        '轉換完成！',
+        '作答紀錄已成功簡化為 8 欄極簡格式！\n' +
+        '• 成功處理作答數：' + res.count + ' 筆\n' +
+        '• 目前欄位：時間、學號、姓名、關卡、題號、學生選擇、是否答對、作答秒數',
+        ui.ButtonSet.OK
+      );
+    }
+  } catch (err) {
+    if (ui) {
+      ui.alert('轉換失敗', '錯誤原因：' + String(err.message || err), ui.ButtonSet.OK);
+    } else {
+      throw err;
+    }
+  }
+}
+
+function simplifyAttemptsColumns_(ss) {
+  if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = getAttemptsSheet_(ss);
+  const targetHeaders = ['時間', '學號', '姓名', '關卡', '題號', '學生選擇', '是否答對', '作答秒數'];
+
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEETS.ATTEMPTS);
+    sheet.getRange(1, 1, 1, targetHeaders.length).setValues([targetHeaders]);
+    sheet.setFrozenRows(1);
+    sheet.autoResizeColumns(1, targetHeaders.length);
+    sheet.getRange(1, 1, 1, targetHeaders.length)
+      .setBackground('#1e293b')
+      .setFontColor('#38bdf8')
+      .setFontWeight('bold')
+      .setHorizontalAlignment('center');
+    return { ok: true, count: 0 };
+  }
+
+  const rows = sheetObjects_(sheet);
+  if (rows.length === 0) {
+    sheet.clearContents();
+    sheet.clearFormats();
+    if (sheet.getMaxColumns() < targetHeaders.length) {
+      sheet.insertColumnsAfter(sheet.getMaxColumns(), targetHeaders.length - sheet.getMaxColumns());
+    } else if (sheet.getMaxColumns() > targetHeaders.length) {
+      try {
+        sheet.deleteColumns(targetHeaders.length + 1, sheet.getMaxColumns() - targetHeaders.length);
+      } catch (e) {}
+    }
+    sheet.getRange(1, 1, 1, targetHeaders.length).setValues([targetHeaders]);
+    sheet.setFrozenRows(1);
+    sheet.autoResizeColumns(1, targetHeaders.length);
+    sheet.getRange(1, 1, 1, targetHeaders.length)
+      .setBackground('#1e293b')
+      .setFontColor('#38bdf8')
+      .setFontWeight('bold')
+      .setHorizontalAlignment('center');
+    return { ok: true, count: 0 };
+  }
+
+  const newRows = rows.map(function(row, idx) {
+    let timeVal = row['時間'] || row.timestamp || '';
+    if (timeVal instanceof Date) {
+      try {
+        timeVal = Utilities.formatDate(timeVal, Session.getScriptTimeZone() || 'Asia/Taipei', 'yyyy/MM/dd HH:mm:ss');
+      } catch (e) {
+        timeVal = timeVal.toISOString();
+      }
+    } else if (timeVal) {
+      try {
+        const d = new Date(timeVal);
+        if (!isNaN(d.getTime())) {
+          timeVal = Utilities.formatDate(d, Session.getScriptTimeZone() || 'Asia/Taipei', 'yyyy/MM/dd HH:mm:ss');
+        }
+      } catch (e) {}
+    }
+
+    const sid = String(row['學號'] || row.student_id || ('S' + String(idx + 1).padStart(4, '0'))).trim();
+    const sName = String(row['姓名'] || row.student_name || row.display_name || sid).trim();
+    const stg = Number(row['關卡'] || row.stage) || 1;
+    const qid = String(row['題號'] || row.question_id || '').trim();
+    const sel = String(row['學生選擇'] || row['選擇'] || row.selected_option || '').trim().toUpperCase();
+    const correctVal = row['是否答對'] !== undefined ? row['是否答對'] : (row['答對'] !== undefined ? row['答對'] : row.correct);
+    const isCorrect = toBool_(correctVal);
+
+    let secVal = '';
+    if (row['作答秒數'] !== undefined && row['作答秒數'] !== '') {
+      secVal = Number(row['作答秒數']) || '';
+    } else if (row.response_time_ms !== undefined && row.response_time_ms !== '') {
+      secVal = (Number(row.response_time_ms) / 1000).toFixed(1);
+    }
+
+    return [
+      timeVal || new Date().toISOString(),
+      sid,
+      sName,
+      stg,
+      qid,
+      sel,
+      isCorrect ? 'TRUE' : 'FALSE',
+      secVal
+    ];
+  });
+
+  // 1. 清除舊資料與格式
+  sheet.clearContents();
+  sheet.clearFormats();
+
+  // 2. 調整欄位數為 8 欄（刪除第 9~21 欄多餘欄位）
+  if (sheet.getMaxColumns() < targetHeaders.length) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), targetHeaders.length - sheet.getMaxColumns());
+  } else if (sheet.getMaxColumns() > targetHeaders.length) {
+    try {
+      sheet.deleteColumns(targetHeaders.length + 1, sheet.getMaxColumns() - targetHeaders.length);
+    } catch (e) {}
+  }
+
+  // 3. 確保足夠列數
+  if (sheet.getMaxRows() < newRows.length + 1) {
+    sheet.insertRowsAfter(sheet.getMaxRows(), (newRows.length + 1) - sheet.getMaxRows());
+  }
+
+  // 4. 寫入標題與資料
+  sheet.getRange(1, 1, 1, targetHeaders.length).setValues([targetHeaders]);
+  if (newRows.length > 0) {
+    sheet.getRange(2, 1, newRows.length, targetHeaders.length).setValues(newRows);
+  }
+  sheet.setFrozenRows(1);
+  sheet.autoResizeColumns(1, targetHeaders.length);
+  sheet.getRange(1, 1, 1, targetHeaders.length)
+    .setBackground('#1e293b')
+    .setFontColor('#38bdf8')
+    .setFontWeight('bold')
+    .setHorizontalAlignment('center');
+
+  return { ok: true, count: newRows.length };
+}
+
+/**
+ * 試算表選單專用：一鍵極簡化全部表格 (Questions 8欄 + Attempts 8欄 + 清理多餘分頁)
+ */
+function simplifyAllTables() {
+  let ui = null;
+  try { ui = SpreadsheetApp.getUi(); } catch (e) { ui = null; }
+
+  if (ui) {
+    const resp = ui.alert(
+      '一鍵極簡化全部表格',
+      '此操作將會把整個試算表極簡化為 3 大核心分頁：\n' +
+      '1. 【ParentDashboard】家長學習總覽（自動統計）\n' +
+      '2. 【Questions】題庫：極簡 8 欄 (題號、題目、選項1~4、答案、說明)\n' +
+      '3. 【Attempts】作答紀錄：極簡 8 欄 (時間、學號、姓名、關卡、題號、學生選擇、是否答對、作答秒數)\n\n' +
+      '所有既有題目與作答歷史都會 100% 完整保留！\n確定要開始執行嗎？',
+      ui.ButtonSet.YES_NO
+    );
+    if (resp !== ui.Button.YES && String(resp).toUpperCase() !== 'YES') return;
+  }
+
+  try {
+    const res = simplifyAllTables_();
+    if (ui) {
+      ui.alert(
+        '極簡化全部表格完成！',
+        '試算表已成功完成極簡化：\n' +
+        '• 題庫 (Questions)：已整理為 8 欄，共 ' + res.questions_count + ' 題\n' +
+        '• 作答紀錄 (Attempts)：已整理為 8 欄，共 ' + res.attempts_count + ' 筆紀錄\n' +
+        '• 家長總覽 (ParentDashboard)：已同步更新最新統計報表！\n' +
+        '• 多餘分頁：已全數清理完畢！',
+        ui.ButtonSet.OK
+      );
+    }
+  } catch (err) {
+    if (ui) {
+      ui.alert('執行失敗', '錯誤原因：' + String(err.message || err), ui.ButtonSet.OK);
+    } else {
+      throw err;
+    }
+  }
+}
+
+function simplifyAllTables_(ss) {
+  if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
+  const resQ = simplifyQuestionsColumns_(ss);
+  const resA = simplifyAttemptsColumns_(ss);
+  cleanLegacySheets_(ss);
+  ensureReportSheets_(ss);
+  refreshReports(ss);
+  return {
+    ok: true,
+    questions_count: resQ.count,
+    attempts_count: resA.count
+  };
 }
 
 function cleanLegacySheets_(ss) {
@@ -1034,7 +1338,7 @@ function cleanAllExtraSheets_(ss) {
   }
 
   // 重新產生最新家長報表
-  refreshReports();
+  refreshReports(ss);
   return { ok: true, deleted: deleted };
 }
 
