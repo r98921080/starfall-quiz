@@ -2508,37 +2508,65 @@ class DataStore {
       .replace(/[「」『』""''，。、？！：；,.?!:;（）()]/g, '')
       .toLowerCase();
 
-    // 1. 去重保護：過濾重複的 question_id 或完全相同題幹與正確答案的副本
     const seenIds = new Set();
     const seenFps = new Set();
     const retained = [];
 
     questions.forEach((q, idx) => {
+      // 彈性讀取選項 1~4
       let opts = [];
-      if (Array.isArray(q.options)) {
-        opts = q.options.filter(Boolean);
-      } else if (Array.isArray(q.opts)) {
-        opts = q.opts.filter(Boolean);
+      if (Array.isArray(q.options) && q.options.length > 0) {
+        opts = q.options.map(o => String(o || '').trim()).filter(Boolean);
+      } else if (Array.isArray(q.opts) && q.opts.length > 0) {
+        opts = q.opts.map(o => String(o || '').trim()).filter(Boolean);
       } else {
+        const getOpt = (candidates) => {
+          for (const c of candidates) {
+            if (q[c] !== undefined && q[c] !== null && String(q[c]).trim() !== '') return String(q[c]).trim();
+          }
+          const cleanCandidates = candidates.map(c => c.toLowerCase().replace(/[\s_\-（）()、]/g, ''));
+          for (const k of Object.keys(q)) {
+            const cleanK = k.toLowerCase().replace(/[\s_\-（）()、]/g, '');
+            if (cleanCandidates.includes(cleanK) && q[k] !== undefined && q[k] !== null && String(q[k]).trim() !== '') {
+              return String(q[k]).trim();
+            }
+          }
+          return '';
+        };
         opts = [
-          q['選項1'] !== undefined ? q['選項1'] : (q.option_1 !== undefined ? q.option_1 : q.option_a),
-          q['選項2'] !== undefined ? q['選項2'] : (q.option_2 !== undefined ? q.option_2 : q.option_b),
-          q['選項3'] !== undefined ? q['選項3'] : (q.option_3 !== undefined ? q.option_3 : q.option_c),
-          q['選項4'] !== undefined ? q['選項4'] : (q.option_4 !== undefined ? q.option_4 : q.option_d)
-        ].filter(Boolean);
+          q['選項1'] !== undefined ? q['選項1'] : getOpt(['選項1', '選項 1', '選項一', 'option_1', 'option1', 'option_a', 'optiona', 'a', '選項A']),
+          q['選項2'] !== undefined ? q['選項2'] : getOpt(['選項2', '選項 2', '選項二', 'option_2', 'option2', 'option_b', 'optionb', 'b', '選項B']),
+          q['選項3'] !== undefined ? q['選項3'] : getOpt(['選項3', '選項 3', '選項三', 'option_3', 'option3', 'option_c', 'optionc', 'c', '選項C']),
+          q['選項4'] !== undefined ? q['選項4'] : getOpt(['選項4', '選項 4', '選項四', 'option_4', 'option4', 'option_d', 'optiond', 'd', '選項D'])
+        ].map(o => String(o || '').trim()).filter(Boolean);
       }
       if (opts.length < 2) opts = ['選項A', '選項B', '選項C', '選項D'];
 
+      const getField = (candidates, fallback = '') => {
+        for (const c of candidates) {
+          if (q[c] !== undefined && q[c] !== null && String(q[c]).trim() !== '') return String(q[c]).trim();
+        }
+        const cleanCandidates = candidates.map(c => c.toLowerCase().replace(/[\s_\-（）()、]/g, ''));
+        for (const k of Object.keys(q)) {
+          const cleanK = k.toLowerCase().replace(/[\s_\-（）()、]/g, '');
+          if (cleanCandidates.includes(cleanK) && q[k] !== undefined && q[k] !== null && String(q[k]).trim() !== '') {
+            return String(q[k]).trim();
+          }
+        }
+        return fallback;
+      };
+
+      // 彈性解析正確答案 (支援 1~4、A~D、選項1~4、選項文字本身)
       let ansIdx = 0;
       if (typeof q.ans === 'number' && q.ans >= 0 && q.ans < opts.length) {
         ansIdx = q.ans;
       } else {
-        const rawAns = String(q['答案'] !== undefined ? q['答案'] : (q.answer !== undefined ? q.answer : 'A')).trim();
+        const rawAns = String(q['答案'] !== undefined ? q['答案'] : getField(['答案', 'answer', 'ans', '正解', '解答', '正確答案'], '1')).trim();
         const upper = rawAns.toUpperCase();
-        if (upper === '1' || upper === '選項1') ansIdx = 0;
-        else if (upper === '2' || upper === '選項2') ansIdx = 1;
-        else if (upper === '3' || upper === '選項3') ansIdx = 2;
-        else if (upper === '4' || upper === '選項4') ansIdx = 3;
+        if (upper === '1' || upper === '選項1' || upper === '選項 1' || upper === '選項一' || upper === '一') ansIdx = 0;
+        else if (upper === '2' || upper === '選項2' || upper === '選項 2' || upper === '選項二' || upper === '二') ansIdx = 1;
+        else if (upper === '3' || upper === '選項3' || upper === '選項 3' || upper === '選項三' || upper === '三') ansIdx = 2;
+        else if (upper === '4' || upper === '選項4' || upper === '選項 4' || upper === '選項四' || upper === '四') ansIdx = 3;
         else if ('ABCD'.indexOf(upper) !== -1) ansIdx = 'ABCD'.indexOf(upper);
         else {
           const matchIdx = opts.findIndex(opt => String(opt).trim() === rawAns);
@@ -2547,8 +2575,10 @@ class DataStore {
         if (ansIdx < 0 || ansIdx >= opts.length) ansIdx = 0;
       }
 
-      const qid = String(q['題號'] || q.question_id || `Q-GS-${idx + 1}`).trim();
-      const questionText = String(q['題目'] || q.question || '').trim();
+      const qid = String(q['題號'] !== undefined ? q['題號'] : getField(['題號', 'question_id', 'id', '序號', '編號'], `Q-GS-${idx + 1}`)).trim();
+      const questionText = String(q['題目'] !== undefined ? q['題目'] : getField(['題目', 'question', '問題', '題幹', '內容'], '')).trim();
+      if (!questionText) return; // 略過無題幹之空白行
+
       const qFp = getFp(questionText);
       const correctText = opts[ansIdx] || '';
       const ansFp = getFp(correctText);
@@ -2560,21 +2590,21 @@ class DataStore {
       seenIds.add(qid);
       if (qFp) seenFps.add(contentKey);
 
-      const exp = q['答案說明'] || q.explanation_detail || q.explanation_short || q.explanation || '';
+      const exp = q['答案說明'] !== undefined ? q['答案說明'] : getField(['答案說明', '說明', '解析', '詳解', '解題說明', 'explanation_detail', 'explanation_short', 'explanation'], '');
 
       // 100% 忠實保留使用者設定之選項與答案，絕不進行動態位移或竄改
       retained.push({
         question_id: qid,
-        grade: q['年級'] || q.grade || '',
+        grade: getField(['年級', 'grade'], ''),
         question: questionText,
         opts: [...opts],
         ans: ansIdx,
-        subject: q['科目'] || q.subject || '國語文',
-        skill: q['技能'] || q.skill || '語文素養',
-        difficulty: parseInt(q['難度'] || q.difficulty) || 1,
+        subject: getField(['科目', 'subject'], '國語文'),
+        skill: getField(['技能', 'skill'], '語文素養'),
+        difficulty: parseInt(getField(['難度', 'difficulty'], '1'), 10) || 1,
         explanation_short: exp,
         explanation_detail: exp,
-        memory_tip: q.memory_tip || '',
+        memory_tip: getField(['memory_tip', 'tip'], ''),
         target_words: q.target_words || [],
         concept_tags: q.concept_tags || []
       });
@@ -2586,8 +2616,38 @@ class DataStore {
   async loadFromGoogleSheet(apiUrl) {
     if (!apiUrl || !apiUrl.startsWith('http')) return false;
     try {
-      console.log('[Google Sheet] 正在從 Apps Script 下載題庫...', apiUrl);
-      const res = await fetch(`${apiUrl}?action=questions`);
+      // 模式 A：支援直接貼上 Google 試算表檢視或發布網址 (docs.google.com/spreadsheets/d/...)
+      const sheetMatch = apiUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+      if (sheetMatch) {
+        const sheetId = sheetMatch[1];
+        console.log('[Google Sheet] 偵測到 Google 試算表直連網址，正在透過 CSV 介面載入...', sheetId);
+        let csvText = '';
+        try {
+          const csvRes = await fetch(`https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=Questions`);
+          if (csvRes.ok) csvText = await csvRes.text();
+        } catch (e) {}
+        if (!csvText || csvText.includes('<!DOCTYPE html>')) {
+          try {
+            const fallbackRes = await fetch(`https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`);
+            if (fallbackRes.ok) csvText = await fallbackRes.text();
+          } catch (e) {}
+        }
+        if (csvText && !csvText.includes('<!DOCTYPE html>')) {
+          const bank = this.parseCSV(csvText);
+          if (bank && bank.length > 0) {
+            this.questionBank = bank;
+            this.isCloudSynced = true;
+            this.updateBankStatusUI();
+            console.log(`[Google Sheet] ✅ 透過 Google 試算表直連成功載入 ${bank.length} 題題庫！`);
+            return true;
+          }
+        }
+      }
+
+      // 模式 B：Google Apps Script Web App API (script.google.com/macros/s/.../exec)
+      console.log('[Google Sheet] 正在從 Apps Script API 下載題庫...', apiUrl);
+      const reqUrl = `${apiUrl}${apiUrl.includes('?') ? '&' : '?'}action=questions`;
+      const res = await fetch(reqUrl);
       if (!res.ok) throw new Error(`HTTP 錯誤碼: ${res.status}`);
       const data = await res.json();
       if (data.ok && Array.isArray(data.questions) && data.questions.length > 0) {
@@ -2601,7 +2661,8 @@ class DataStore {
 
         // 同時獲取學生檔案並更新選單 (不強制覆蓋使用者當前選擇之學生)
         try {
-          const stRes = await fetch(`${apiUrl}?action=students`);
+          const stReqUrl = `${apiUrl}${apiUrl.includes('?') ? '&' : '?'}action=students`;
+          const stRes = await fetch(stReqUrl);
           if (stRes.ok) {
             const stData = await stRes.json();
             if (stData.ok && Array.isArray(stData.students) && stData.students.length > 0) {
@@ -2707,52 +2768,64 @@ class DataStore {
     if (lines.length < 2) return [];
 
     const headers = lines[0].map(h => String(h || '').trim());
-    const headersLower = headers.map(h => h.toLowerCase());
+    const cleanHeaders = headers.map(h => h.toLowerCase().replace(/[\s_\-（）()、]/g, ''));
     const findIdx = (names) => {
-      for (const n of names) {
-        let i = headers.indexOf(n);
-        if (i !== -1) return i;
-        i = headersLower.indexOf(n.toLowerCase());
+      const cleanNames = names.map(n => n.toLowerCase().replace(/[\s_\-（）()、]/g, ''));
+      for (const cn of cleanNames) {
+        const i = cleanHeaders.indexOf(cn);
         if (i !== -1) return i;
       }
       return -1;
     };
 
-    const qidIdx = findIdx(['題號', 'question_id', 'id']);
-    const gradeIdx = findIdx(['年級', 'grade']);
-    const qIdx = findIdx(['題目', 'question']);
-    const aIdx = findIdx(['選項1', 'option_a', 'option_1', 'a']);
-    const bIdx = findIdx(['選項2', 'option_b', 'option_2', 'b']);
-    const cIdx = findIdx(['選項3', 'option_c', 'option_3', 'c']);
-    const dIdx = findIdx(['選項4', 'option_d', 'option_4', 'd']);
-    const ansIdx = findIdx(['答案', 'answer', 'ans']);
-    const expSIdx = findIdx(['答案說明', 'explanation_short', 'explanation', '解析']);
-    const expDIdx = findIdx(['答案說明', 'explanation_detail', 'explanation', '解析']);
-    const tipIdx = findIdx(['memory_tip', 'tip']);
-    const skillIdx = findIdx(['技能', 'skill']);
-    const subIdx = findIdx(['科目', 'subject']);
-    const diffIdx = findIdx(['難度', 'difficulty']);
+    let qidIdx = findIdx(['題號', 'question_id', 'id', '序號', '編號', 'No']);
+    let gradeIdx = findIdx(['年級', 'grade']);
+    let qIdx = findIdx(['題目', 'question', '問題', '題幹', '內容']);
+    let aIdx = findIdx(['選項1', '選項 1', '選項一', 'option_1', 'option1', 'option_a', 'optiona', 'a', '選項A']);
+    let bIdx = findIdx(['選項2', '選項 2', '選項二', 'option_2', 'option2', 'option_b', 'optionb', 'b', '選項B']);
+    let cIdx = findIdx(['選項3', '選項 3', '選項三', 'option_3', 'option3', 'option_c', 'optionc', 'c', '選項C']);
+    let dIdx = findIdx(['選項4', '選項 4', '選項四', 'option_4', 'option4', 'option_d', 'optiond', 'd', '選項D']);
+    let ansIdx = findIdx(['答案', 'answer', 'ans', '正解', '解答', '正確答案']);
+    let expSIdx = findIdx(['答案說明', '說明', '解析', '詳解', '解題說明', 'explanation_short', 'explanation']);
+    let expDIdx = findIdx(['答案說明', '說明', '解析', '詳解', '解題說明', 'explanation_detail', 'explanation']);
+    let tipIdx = findIdx(['memory_tip', 'tip']);
+    let skillIdx = findIdx(['技能', 'skill']);
+    let subIdx = findIdx(['科目', 'subject']);
+    let diffIdx = findIdx(['難度', 'difficulty']);
+
+    // 8 欄極簡模式之位置備援 (Col 0:題號, 1:題目, 2:選項1, 3:選項2, 4:選項3, 5:選項4, 6:答案, 7:答案說明)
+    if (qIdx === -1 && headers.length >= 8) {
+      if (qidIdx === -1) qidIdx = 0;
+      qIdx = 1;
+      if (aIdx === -1) aIdx = 2;
+      if (bIdx === -1) bIdx = 3;
+      if (cIdx === -1) cIdx = 4;
+      if (dIdx === -1) dIdx = 5;
+      if (ansIdx === -1) ansIdx = 6;
+      if (expSIdx === -1) expSIdx = 7;
+      if (expDIdx === -1) expDIdx = 7;
+    }
 
     const bank = [];
     for (let i = 1; i < lines.length; i++) {
       const r = lines[i];
-      if (qIdx === -1 || !r[qIdx]) continue;
+      if (qIdx === -1 || !r[qIdx] || !String(r[qIdx]).trim()) continue;
       const opts = [
         aIdx !== -1 ? r[aIdx] : '',
         bIdx !== -1 ? r[bIdx] : '',
         cIdx !== -1 ? r[cIdx] : '',
         dIdx !== -1 ? r[dIdx] : ''
-      ].filter(Boolean);
+      ].map(o => String(o || '').trim()).filter(Boolean);
       if (opts.length < 2) continue;
 
       let ansNum = 0;
       if (ansIdx !== -1 && r[ansIdx]) {
         const rawAns = String(r[ansIdx]).trim();
         const upper = rawAns.toUpperCase();
-        if (upper === '1' || upper === '選項1') ansNum = 0;
-        else if (upper === '2' || upper === '選項2') ansNum = 1;
-        else if (upper === '3' || upper === '選項3') ansNum = 2;
-        else if (upper === '4' || upper === '選項4') ansNum = 3;
+        if (upper === '1' || upper === '選項1' || upper === '選項 1' || upper === '選項一' || upper === '一') ansNum = 0;
+        else if (upper === '2' || upper === '選項2' || upper === '選項 2' || upper === '選項二' || upper === '二') ansNum = 1;
+        else if (upper === '3' || upper === '選項3' || upper === '選項 3' || upper === '選項三' || upper === '三') ansNum = 2;
+        else if (upper === '4' || upper === '選項4' || upper === '選項 4' || upper === '選項四' || upper === '四') ansNum = 3;
         else if ('ABCD'.indexOf(upper) !== -1) ansNum = 'ABCD'.indexOf(upper);
         else {
           const matchIdx = opts.findIndex(o => String(o).trim() === rawAns);
@@ -2764,9 +2837,9 @@ class DataStore {
       const exp = (expSIdx !== -1 && r[expSIdx]) || (expDIdx !== -1 && r[expDIdx]) || '';
 
       bank.push({
-        question_id: (qidIdx !== -1 && r[qidIdx]) || `Q-${i}`,
+        question_id: (qidIdx !== -1 && r[qidIdx] && String(r[qidIdx]).trim()) || `Q-${i}`,
         grade: (gradeIdx !== -1 && r[gradeIdx]) || '',
-        question: r[qIdx],
+        question: String(r[qIdx]).trim(),
         opts: opts,
         ans: ansNum,
         subject: (subIdx !== -1 && r[subIdx]) || '國語文',
