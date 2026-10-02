@@ -1775,6 +1775,71 @@ class SoundManager {
   }
 }
 
+/**
+ * 智慧答案解析器：極致相容 1~4、A~D、①~④、(1)~(4)、1.~4.、一~四 以及選項文字比對
+ */
+function normalizeAnswerToIndex(rawAns, opts) {
+  if (rawAns === undefined || rawAns === null) return 0;
+  const s = String(rawAns).trim();
+  if (!s) return 0;
+
+  // 1. 全形字元轉半形
+  let fullToHalf = '';
+  for (let i = 0; i < s.length; i++) {
+    const code = s.charCodeAt(i);
+    if (code >= 0xFF01 && code <= 0xFF5E) {
+      fullToHalf += String.fromCharCode(code - 0xFEE0);
+    } else if (code === 0x3000) {
+      fullToHalf += ' ';
+    } else {
+      fullToHalf += s[i];
+    }
+  }
+  fullToHalf = fullToHalf.trim();
+
+  // 2. 抽取乾淨序號 (例如 "(1)", "1.", "1、", "[1]", "選項1", "Option 1", "A.", "(A)", "一")
+  const clean = fullToHalf.toUpperCase()
+    .replace(/^選項|^OPTION|^NO\.?|^第/i, '')
+    .replace(/[\s_\-（）()\[\]【】、.:：個題]/g, '');
+
+  if (clean === '1' || clean === 'A' || clean === '①' || clean === '❶' || clean === '⑴' || clean === '㈠' || clean === '一') return 0;
+  if (clean === '2' || clean === 'B' || clean === '②' || clean === '❷' || clean === '⑵' || clean === '㈡' || clean === '二') return 1;
+  if (clean === '3' || clean === 'C' || clean === '③' || clean === '❸' || clean === '⑶' || clean === '㈢' || clean === '三') return 2;
+  if (clean === '4' || clean === 'D' || clean === '④' || clean === '❹' || clean === '⑷' || clean === '㈣' || clean === '四') return 3;
+
+  // 3. 文字內容比對 (若答案欄填寫的是選項文字本身)
+  if (Array.isArray(opts) && opts.length > 0) {
+    const stripPrefix = (str) => String(str || '')
+      .replace(/^(?:[(（\[【]?[1-4A-Da-d①②③④❶❷❸❹⑴⑵⑶⑷一二三四][)）\]】.:、\s-]+|\s+)/, '')
+      .trim();
+
+    const cleanRaw = stripPrefix(fullToHalf);
+
+    // 3a. 完全一致
+    const directIdx = opts.findIndex(o => {
+      const oStr = String(o || '').trim();
+      return oStr === s || oStr === fullToHalf;
+    });
+    if (directIdx !== -1) return directIdx;
+
+    // 3b. 去除前綴後的文字一致 (例如選項是 "1. 太陽"，答案填 "太陽"；或反之)
+    const strippedIdx = opts.findIndex(o => {
+      const cleanOpt = stripPrefix(o);
+      return cleanOpt && cleanRaw && cleanOpt === cleanRaw;
+    });
+    if (strippedIdx !== -1) return strippedIdx;
+
+    // 3c. 選項包含答案或答案包含選項
+    const includeIdx = opts.findIndex(o => {
+      const cleanOpt = stripPrefix(o);
+      return cleanOpt && cleanRaw && (cleanOpt.includes(cleanRaw) || cleanRaw.includes(cleanOpt));
+    });
+    if (includeIdx !== -1) return includeIdx;
+  }
+
+  return 0; // 預設第 1 個選項
+}
+
 // ============================================================
 // 三、資料層與 IndexedDB 持久化 (DataStore & Adaptive Learning)
 // ============================================================
@@ -2311,77 +2376,85 @@ class DataStore {
     const apiUrl = localStorage.getItem('starfall_gs_url') || (window.STARFALL_CONFIG && window.STARFALL_CONFIG.apiBaseUrl);
     let syncedImmediately = false;
     if (apiUrl && apiUrl.startsWith('http') && !apiUrl.includes('PASTE_YOUR')) {
-      const postPayload = {
-        action: 'attempt',
-        student_id: sid,
-        student_name: attempt.student_name,
-        student_grade: attempt.student_grade,
-        question_id: qid,
-        selected_option: attempt.selected_option || '',
-        correct: !!attempt.correct,
-        stage: Number(attempt.stage || 1),
-        boss_name: attempt.boss_name || '',
-        is_review: !!attempt.is_review,
-        timestamp: attempt.timestamp || new Date().toISOString(),
-        difficulty_at_time: Number(attempt.difficulty || attempt.difficulty_at_time || 1),
-        subject: attempt.subject || '國語文',
-        unit: attempt.unit || '',
-        skill: attempt.skill || '',
-        target_words: attempt.target_words || '',
-        concept_tags: attempt.concept_tags || '',
-        knowledge_pressure: Number(attempt.knowledge_pressure || 0),
-        weapon_quality: attempt.weapon_quality || 'normal'
-      };
-
-      // 軌道 1：即時 POST 寫入 (Web App v1.0.0+ 原生直接入庫)
-      try {
-        const resPost = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify(postPayload)
-        });
-        if (resPost.ok) {
-          const data = await resPost.json().catch(() => null);
-          if (data && data.ok && (data.attempt || data.count !== undefined)) {
-            syncedImmediately = true;
-            console.log(`[Google Sheet] ✅ 單題即時 POST 成功！學號：${sid} (${attempt.student_name})，題目：${qid}`);
-          }
+      if (apiUrl.includes('docs.google.com/spreadsheets')) {
+        // 直接試算表網址為唯讀模式 (GViz CSV)，無法接收 POST/GET 寫入，作答紀錄安全保存於本機
+        if (!this._warnedDirectSpreadsheetWrite) {
+          this._warnedDirectSpreadsheetWrite = true;
+          console.warn('[Google Sheet] ⚠️ 目前使用 Google 試算表直接網址（僅能讀取題庫），無法直接寫入作答紀錄。作答歷程已安全暫存於本機。若需同步至試算表請在試算表中部署 Web App (/exec 網址)！');
         }
-      } catch (postErr) {
-        console.warn('[Google Sheet] POST 上報異常，嘗試 GET 備援：', postErr);
-      }
+      } else {
+        const postPayload = {
+          action: 'attempt',
+          student_id: sid,
+          student_name: attempt.student_name,
+          student_grade: attempt.student_grade,
+          question_id: qid,
+          selected_option: attempt.selected_option || '',
+          correct: !!attempt.correct,
+          stage: Number(attempt.stage || 1),
+          boss_name: attempt.boss_name || '',
+          is_review: !!attempt.is_review,
+          timestamp: attempt.timestamp || new Date().toISOString(),
+          difficulty_at_time: Number(attempt.difficulty || attempt.difficulty_at_time || 1),
+          subject: attempt.subject || '國語文',
+          unit: attempt.unit || '',
+          skill: attempt.skill || '',
+          target_words: attempt.target_words || '',
+          concept_tags: attempt.concept_tags || '',
+          knowledge_pressure: Number(attempt.knowledge_pressure || 0),
+          weapon_quality: attempt.weapon_quality || 'normal'
+        };
 
-      // 軌道 2：GET 備援
-      if (!syncedImmediately) {
+        // 軌道 1：即時 POST 寫入 (Web App v1.0.0+ 原生直接入庫)
         try {
-          const params = new URLSearchParams({
-            action: 'attempt',
-            student_id: sid,
-            student_name: attempt.student_name,
-            student_grade: attempt.student_grade,
-            question_id: qid,
-            selected_option: attempt.selected_option || '',
-            correct: attempt.correct ? 'true' : 'false',
-            stage: String(attempt.stage || 1),
-            boss_name: attempt.boss_name || '',
-            is_review: attempt.is_review ? 'true' : 'false',
-            timestamp: attempt.timestamp || new Date().toISOString()
+          const resPost = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(postPayload)
           });
-          const res = await fetch(`${apiUrl}?${params.toString()}`);
-          if (res.ok) {
-            const data = await res.json().catch(() => null);
+          if (resPost.ok) {
+            const data = await resPost.json().catch(() => null);
             if (data && data.ok && (data.attempt || data.count !== undefined)) {
               syncedImmediately = true;
-              console.log(`[Google Sheet] ✅ 單題 GET 備援成功！學號：${sid}，題目：${qid}`);
+              console.log(`[Google Sheet] ✅ 單題即時 POST 成功！學號：${sid} (${attempt.student_name})，題目：${qid}`);
             }
           }
-        } catch (e) {
-          console.warn('[Google Sheet] 單題即時上報失敗，加入離線隊列：', e);
+        } catch (postErr) {
+          console.warn('[Google Sheet] POST 上報異常，嘗試 GET 備援：', postErr);
+        }
+
+        // 軌道 2：GET 備援
+        if (!syncedImmediately) {
+          try {
+            const params = new URLSearchParams({
+              action: 'attempt',
+              student_id: sid,
+              student_name: attempt.student_name,
+              student_grade: attempt.student_grade,
+              question_id: qid,
+              selected_option: attempt.selected_option || '',
+              correct: attempt.correct ? 'true' : 'false',
+              stage: String(attempt.stage || 1),
+              boss_name: attempt.boss_name || '',
+              is_review: attempt.is_review ? 'true' : 'false',
+              timestamp: attempt.timestamp || new Date().toISOString()
+            });
+            const res = await fetch(`${apiUrl}?${params.toString()}`);
+            if (res.ok) {
+              const data = await res.json().catch(() => null);
+              if (data && data.ok && (data.attempt || data.count !== undefined)) {
+                syncedImmediately = true;
+                console.log(`[Google Sheet] ✅ 單題 GET 備援成功！學號：${sid}，題目：${qid}`);
+              }
+            }
+          } catch (e) {
+            console.warn('[Google Sheet] 單題即時上報失敗，加入離線隊列：', e);
+          }
         }
       }
     }
 
-    if (!syncedImmediately) {
+    if (!syncedImmediately && (!apiUrl || !apiUrl.includes('docs.google.com/spreadsheets'))) {
       this.offlineQueue.push(attempt);
       try {
         localStorage.setItem('starfall_offline_attempt_queue_v1', JSON.stringify(this.offlineQueue));
@@ -2392,7 +2465,7 @@ class DataStore {
 
   async syncOfflineQueue() {
     const apiUrl = localStorage.getItem('starfall_gs_url') || (window.STARFALL_CONFIG && window.STARFALL_CONFIG.apiBaseUrl);
-    if (!apiUrl || apiUrl.includes('PASTE_YOUR')) return;
+    if (!apiUrl || apiUrl.includes('PASTE_YOUR') || apiUrl.includes('docs.google.com/spreadsheets')) return;
     if (this.offlineQueue.length === 0 || this._isSyncing) return;
     this._isSyncing = true;
     try {
@@ -2534,10 +2607,10 @@ class DataStore {
           return '';
         };
         opts = [
-          q['選項1'] !== undefined ? q['選項1'] : getOpt(['選項1', '選項 1', '選項一', 'option_1', 'option1', 'option_a', 'optiona', 'a', '選項A']),
-          q['選項2'] !== undefined ? q['選項2'] : getOpt(['選項2', '選項 2', '選項二', 'option_2', 'option2', 'option_b', 'optionb', 'b', '選項B']),
-          q['選項3'] !== undefined ? q['選項3'] : getOpt(['選項3', '選項 3', '選項三', 'option_3', 'option3', 'option_c', 'optionc', 'c', '選項C']),
-          q['選項4'] !== undefined ? q['選項4'] : getOpt(['選項4', '選項 4', '選項四', 'option_4', 'option4', 'option_d', 'optiond', 'd', '選項D'])
+          q['選項1'] !== undefined ? q['選項1'] : getOpt(['選項1', '選項 1', '選項一', '1', '一', '①', '❶', '(1)', '（1）', 'option_1', 'option1', 'option_a', 'optiona', 'a', '選項A']),
+          q['選項2'] !== undefined ? q['選項2'] : getOpt(['選項2', '選項 2', '選項二', '2', '二', '②', '❷', '(2)', '（2）', 'option_2', 'option2', 'option_b', 'optionb', 'b', '選項B']),
+          q['選項3'] !== undefined ? q['選項3'] : getOpt(['選項3', '選項 3', '選項三', '3', '三', '③', '❸', '(3)', '（3）', 'option_3', 'option3', 'option_c', 'optionc', 'c', '選項C']),
+          q['選項4'] !== undefined ? q['選項4'] : getOpt(['選項4', '選項 4', '選項四', '4', '四', '④', '❹', '(4)', '（4）', 'option_4', 'option4', 'option_d', 'optiond', 'd', '選項D'])
         ].map(o => String(o || '').trim()).filter(Boolean);
       }
       if (opts.length < 2) opts = ['選項A', '選項B', '選項C', '選項D'];
@@ -2556,22 +2629,13 @@ class DataStore {
         return fallback;
       };
 
-      // 彈性解析正確答案 (支援 1~4、A~D、選項1~4、選項文字本身)
+      // 彈性解析正確答案 (支援 1~4、A~D、選項1~4、選項文字本身、①~④、(1)~(4) 等)
       let ansIdx = 0;
       if (typeof q.ans === 'number' && q.ans >= 0 && q.ans < opts.length) {
         ansIdx = q.ans;
       } else {
-        const rawAns = String(q['答案'] !== undefined ? q['答案'] : getField(['答案', 'answer', 'ans', '正解', '解答', '正確答案'], '1')).trim();
-        const upper = rawAns.toUpperCase();
-        if (upper === '1' || upper === '選項1' || upper === '選項 1' || upper === '選項一' || upper === '一') ansIdx = 0;
-        else if (upper === '2' || upper === '選項2' || upper === '選項 2' || upper === '選項二' || upper === '二') ansIdx = 1;
-        else if (upper === '3' || upper === '選項3' || upper === '選項 3' || upper === '選項三' || upper === '三') ansIdx = 2;
-        else if (upper === '4' || upper === '選項4' || upper === '選項 4' || upper === '選項四' || upper === '四') ansIdx = 3;
-        else if ('ABCD'.indexOf(upper) !== -1) ansIdx = 'ABCD'.indexOf(upper);
-        else {
-          const matchIdx = opts.findIndex(opt => String(opt).trim() === rawAns);
-          ansIdx = matchIdx !== -1 ? matchIdx : 0;
-        }
+        const rawAns = q['答案'] !== undefined ? q['答案'] : getField(['答案', 'answer', 'ans', '正解', '解答', '正確答案'], '1');
+        ansIdx = normalizeAnswerToIndex(rawAns, opts);
         if (ansIdx < 0 || ansIdx >= opts.length) ansIdx = 0;
       }
 
@@ -2599,6 +2663,8 @@ class DataStore {
         question: questionText,
         opts: [...opts],
         ans: ansIdx,
+        answer: ['A', 'B', 'C', 'D'][ansIdx],
+        answer_number: String(ansIdx + 1),
         subject: getField(['科目', 'subject'], '國語文'),
         skill: getField(['技能', 'skill'], '語文素養'),
         difficulty: parseInt(getField(['難度', 'difficulty'], '1'), 10) || 1,
@@ -2622,10 +2688,19 @@ class DataStore {
         const sheetId = sheetMatch[1];
         console.log('[Google Sheet] 偵測到 Google 試算表直連網址，正在透過 CSV 介面載入...', sheetId);
         let csvText = '';
-        try {
-          const csvRes = await fetch(`https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=Questions`);
-          if (csvRes.ok) csvText = await csvRes.text();
-        } catch (e) {}
+        const sheetCandidates = ['Questions', '題庫', '題目', 'questions'];
+        for (const sName of sheetCandidates) {
+          try {
+            const csvRes = await fetch(`https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sName)}`);
+            if (csvRes.ok) {
+              const txt = await csvRes.text();
+              if (txt && !txt.includes('<!DOCTYPE html>') && txt.length > 20) {
+                csvText = txt;
+                break;
+              }
+            }
+          } catch (e) {}
+        }
         if (!csvText || csvText.includes('<!DOCTYPE html>')) {
           try {
             const fallbackRes = await fetch(`https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`);
@@ -2699,11 +2774,15 @@ class DataStore {
     }
     const gsStatusBox = document.getElementById('gsStatusBox');
     if (gsStatusBox) {
+      const apiUrl = localStorage.getItem('starfall_gs_url') || (window.STARFALL_CONFIG && window.STARFALL_CONFIG.apiBaseUrl) || '';
+      const isDirectSheet = apiUrl.includes('docs.google.com/spreadsheets');
       gsStatusBox.innerHTML = `
         <span style="color:${isCloud ? 'var(--green)' : 'var(--cyan)'}; font-weight:800;">${isCloud ? '✅ Google Sheet 題庫已就緒！' : 'ℹ️ 當前為本機題庫狀態'}</span><br>
-        已對接題庫總數：<b>${count.toLocaleString()}</b> 題（${isCloud ? '雲端試算表直連' : '本機離線備援'}）。<br>
+        已對接題庫總數：<b>${count.toLocaleString()}</b> 題（${isCloud ? (isDirectSheet ? '試算表網址直連 [唯讀題庫模式]' : 'Apps Script Web App [讀寫完整雙向]') : '本機離線備援'}）。<br>
         綁定學生：<b>${this.studentName || 'S0001'}</b> (${this.currentStudentId || 'S0001'})<br>
-        作答歷程將即時寫入試算表 <code>Attempts</code> 分頁！
+        ${isDirectSheet 
+          ? '<span style="color:var(--gold); font-size:11px; font-weight:bold;">⚠️ 提醒：試算表直接網址為唯讀模式，作答歷程保存在本機。若需自動寫入 Attempts 分頁並更新 ParentDashboard 報表，請在試算表中部署 Web App（以 /exec 結尾）！</span>' 
+          : '作答歷程將即時寫入試算表 <code>Attempts</code> 分頁！'}
       `;
     }
   }
@@ -2781,10 +2860,10 @@ class DataStore {
     let qidIdx = findIdx(['題號', 'question_id', 'id', '序號', '編號', 'No']);
     let gradeIdx = findIdx(['年級', 'grade']);
     let qIdx = findIdx(['題目', 'question', '問題', '題幹', '內容']);
-    let aIdx = findIdx(['選項1', '選項 1', '選項一', 'option_1', 'option1', 'option_a', 'optiona', 'a', '選項A']);
-    let bIdx = findIdx(['選項2', '選項 2', '選項二', 'option_2', 'option2', 'option_b', 'optionb', 'b', '選項B']);
-    let cIdx = findIdx(['選項3', '選項 3', '選項三', 'option_3', 'option3', 'option_c', 'optionc', 'c', '選項C']);
-    let dIdx = findIdx(['選項4', '選項 4', '選項四', 'option_4', 'option4', 'option_d', 'optiond', 'd', '選項D']);
+    let aIdx = findIdx(['選項1', '選項 1', '選項一', '1', '一', '①', '❶', '(1)', '（1）', 'option_1', 'option1', 'option_a', 'optiona', 'a', '選項A']);
+    let bIdx = findIdx(['選項2', '選項 2', '選項二', '2', '二', '②', '❷', '(2)', '（2）', 'option_2', 'option2', 'option_b', 'optionb', 'b', '選項B']);
+    let cIdx = findIdx(['選項3', '選項 3', '選項三', '3', '三', '③', '❸', '(3)', '（3）', 'option_3', 'option3', 'option_c', 'optionc', 'c', '選項C']);
+    let dIdx = findIdx(['選項4', '選項 4', '選項四', '4', '四', '④', '❹', '(4)', '（4）', 'option_4', 'option4', 'option_d', 'optiond', 'd', '選項D']);
     let ansIdx = findIdx(['答案', 'answer', 'ans', '正解', '解答', '正確答案']);
     let expSIdx = findIdx(['答案說明', '說明', '解析', '詳解', '解題說明', 'explanation_short', 'explanation']);
     let expDIdx = findIdx(['答案說明', '說明', '解析', '詳解', '解題說明', 'explanation_detail', 'explanation']);
@@ -2794,9 +2873,9 @@ class DataStore {
     let diffIdx = findIdx(['難度', 'difficulty']);
 
     // 8 欄極簡模式之位置備援 (Col 0:題號, 1:題目, 2:選項1, 3:選項2, 4:選項3, 5:選項4, 6:答案, 7:答案說明)
-    if (qIdx === -1 && headers.length >= 8) {
+    if (headers.length >= 8) {
       if (qidIdx === -1) qidIdx = 0;
-      qIdx = 1;
+      if (qIdx === -1) qIdx = 1;
       if (aIdx === -1) aIdx = 2;
       if (bIdx === -1) bIdx = 3;
       if (cIdx === -1) cIdx = 4;
@@ -2820,17 +2899,7 @@ class DataStore {
 
       let ansNum = 0;
       if (ansIdx !== -1 && r[ansIdx]) {
-        const rawAns = String(r[ansIdx]).trim();
-        const upper = rawAns.toUpperCase();
-        if (upper === '1' || upper === '選項1' || upper === '選項 1' || upper === '選項一' || upper === '一') ansNum = 0;
-        else if (upper === '2' || upper === '選項2' || upper === '選項 2' || upper === '選項二' || upper === '二') ansNum = 1;
-        else if (upper === '3' || upper === '選項3' || upper === '選項 3' || upper === '選項三' || upper === '三') ansNum = 2;
-        else if (upper === '4' || upper === '選項4' || upper === '選項 4' || upper === '選項四' || upper === '四') ansNum = 3;
-        else if ('ABCD'.indexOf(upper) !== -1) ansNum = 'ABCD'.indexOf(upper);
-        else {
-          const matchIdx = opts.findIndex(o => String(o).trim() === rawAns);
-          ansNum = matchIdx !== -1 ? matchIdx : 0;
-        }
+        ansNum = normalizeAnswerToIndex(r[ansIdx], opts);
       }
       if (ansNum < 0 || ansNum >= opts.length) ansNum = 0;
 
@@ -2842,6 +2911,8 @@ class DataStore {
         question: String(r[qIdx]).trim(),
         opts: opts,
         ans: ansNum,
+        answer: ['A', 'B', 'C', 'D'][ansNum],
+        answer_number: String(ansNum + 1),
         subject: (subIdx !== -1 && r[subIdx]) || '國語文',
         skill: (skillIdx !== -1 && r[skillIdx]) || '語文素養',
         difficulty: (diffIdx !== -1 && parseInt(r[diffIdx])) || 1,
@@ -3781,6 +3852,21 @@ class Game {
       if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
         this.togglePause();
       }
+      if (this.state === 'quiz' && this.currentQuiz) {
+        let chosenIdx = -1;
+        if (e.key === '1' || e.key === 'a' || e.key === 'A') chosenIdx = 0;
+        else if (e.key === '2' || e.key === 'b' || e.key === 'B') chosenIdx = 1;
+        else if (e.key === '3' || e.key === 'c' || e.key === 'C') chosenIdx = 2;
+        else if (e.key === '4' || e.key === 'd' || e.key === 'D') chosenIdx = 3;
+
+        if (chosenIdx !== -1 && this.currentQuiz.opts && chosenIdx < this.currentQuiz.opts.length) {
+          const btns = document.querySelectorAll('.opt-btn');
+          if (btns[chosenIdx] && !btns[chosenIdx].disabled) {
+            e.preventDefault();
+            this.handleAnswer(chosenIdx);
+          }
+        }
+      }
     });
 
     window.addEventListener('keyup', (e) => {
@@ -4143,11 +4229,14 @@ class Game {
       const ok = await this.dataStore.loadFromGoogleSheet(url);
       if (ok) {
         this.showToast('✅ Google Sheet 題庫已載入並套用！');
+        const isDirectSheet = url.includes('docs.google.com/spreadsheets');
         document.getElementById('gsStatusBox').innerHTML = `
           <span style="color:var(--green); font-weight:800;">✅ 設定成功！</span><br>
           已即時載入 Google Sheet 題庫：<b>${this.dataStore.questionBank.length}</b> 題。<br>
           綁定學生：<b>${this.dataStore.studentName}</b> (${this.dataStore.currentStudentId})<br>
-          答題紀錄將即時寫入試算表 <code>Attempts</code> 分頁！
+          ${isDirectSheet 
+            ? '<span style="color:var(--gold); font-size:11px; font-weight:bold;">⚠️ 提醒：試算表直接網址為唯讀模式，作答紀錄僅保存在本機。若需自動寫入 Attempts 分頁與更新 ParentDashboard 家長報表，請在試算表中部署 Web App（以 /exec 結尾）！</span>' 
+            : '答題紀錄將即時寫入試算表 <code>Attempts</code> 分頁！'}
         `;
       } else {
         this.showToast('⚠️ 已儲存網址，但連線試算表逾時。');
@@ -4170,11 +4259,14 @@ class Game {
         const ok = await this.dataStore.loadFromGoogleSheet(url);
         if (ok) {
           localStorage.setItem('starfall_gs_url', url);
+          const isDirectSheet = url.includes('docs.google.com/spreadsheets');
           document.getElementById('gsStatusBox').innerHTML = `
             <span style="color:var(--green); font-weight:800;">✅ 連線診斷成功！</span><br>
             已對接試算表雲端題庫：<b>${this.dataStore.questionBank.length}</b> 題！<br>
             學生識別：<b>${this.dataStore.studentName}</b> (${this.dataStore.currentStudentId})<br>
-            作答資料與家長報表已啟用自動同步。
+            ${isDirectSheet 
+              ? '<span style="color:var(--gold); font-weight:bold;">⚠️ 溫馨提醒：您輸入的是 Google 試算表直接網址（唯讀模式）。<br>• 題庫讀取：<b>正常</b>（已成功下載題目）。<br>• 作答記錄與報表：<b>無法直接寫入</b>試算表！<br>👉 若需自動寫入 <code>Attempts</code> 並即時更新 <code>ParentDashboard</code> 家長總覽，請在試算表點選「擴充功能」>「Apps Script」完成部署，並填寫以 <code>/exec</code> 結尾的 Web App 網址。</span>' 
+              : '<span style="color:var(--green);">✅ 作答資料與家長報表已啟用雙向即時同步！</span>'}
           `;
           this.showToast(`✅ 成功連線！載入 ${this.dataStore.questionBank.length} 題試算表題目`);
         } else {
@@ -8678,7 +8770,7 @@ class Game {
     q.opts.forEach((optText, idx) => {
       const btn = document.createElement('button');
       btn.className = 'opt-btn';
-      btn.innerHTML = `<span class="opt-key">${keys[idx]}</span><span>${optText}</span>`;
+      btn.innerHTML = `<span class="opt-key">${idx + 1} (${keys[idx]})</span><span>${optText}</span>`;
       btn.onclick = () => this.handleAnswer(idx);
       optsContainer.appendChild(btn);
     });
@@ -8738,7 +8830,7 @@ class Game {
       this.dataStore.recordAttempt({
         question_id: q.question_id,
         question: q.question,
-        selected_option: 'ABCD'[selectedIdx],
+        selected_option: `${selectedIdx + 1} (${'ABCD'[selectedIdx]})`,
         correct: isCorrect,
         timestamp: new Date().toISOString(),
         stage: this.stage,
@@ -8761,10 +8853,11 @@ class Game {
     if (q.explanation_short) {
       const expBox = document.getElementById('quizExplain');
       expBox.style.display = 'block';
+      const ansLabel = `選項 ${q.ans + 1} (${'ABCD'[q.ans]})`;
       if (isRepeatedWrong) {
-        expBox.innerHTML = `<span style="color:#ff4766; font-weight:800; font-size:13px;">❌ 舊錯題重複答錯！【重度懲罰】：結算評級額外扣減 1 題！</span><br><b>正確解答：</b> 選項 ${'ABCD'[q.ans]}<br><b>解析：</b> ${q.explanation_short}`;
+        expBox.innerHTML = `<span style="color:#ff4766; font-weight:800; font-size:13px;">❌ 舊錯題重複答錯！【重度懲罰】：結算評級額外扣減 1 題！</span><br><b>正確解答：</b> ${ansLabel}<br><b>解析：</b> ${q.explanation_short}`;
       } else {
-        expBox.innerHTML = `<b>${isCorrect ? '答對了！' : '解析：'}</b> ${q.explanation_short}`;
+        expBox.innerHTML = `<b>${isCorrect ? '✨ 答對了！' : `❌ 答錯了！正確解答：${ansLabel}`}</b><br>${q.explanation_short ? `<b>解析：</b> ${q.explanation_short}` : ''}`;
       }
     }
 

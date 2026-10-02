@@ -16,7 +16,7 @@ console.log('--- 1. Testing apps-script/Code.gs Resilience & Non-Recursion ---')
 
 // 驗證 doGet / doPost 主動清理舊分頁
 assert(codeGs.includes('cleanLegacySheets_(ss)'), 'Code.gs 必須包含 cleanLegacySheets_(ss)');
-assert(codeGs.includes("version: '1.3.0'") || codeGs.includes("version: '1.4.0'"), 'API 版本必須為 1.3.0 或以上');
+assert(/version:\s*'1\.[3-9]\.[0-9]+'/.test(codeGs), 'API 版本必須為 1.3.0 或以上');
 console.log('  ✅ API 版本已升級為 1.3.0+，doGet 與 doPost 皆主動執行 cleanLegacySheets_ 巡檢');
 
 // 驗證 cleanLegacySheets_ 與 cleanAllExtraSheets_ 絕無無限遞迴
@@ -37,10 +37,14 @@ const parseQRowBody = codeGs.match(/function parseQuestionRow_\(row, idx\) \{([\
 assert(parseQRowBody, '必須能找到 parseQuestionRow_ 實作');
 const parseQuestionRow_ = new Function('row', 'idx', 'splitTags_', parseQRowBody[1] + '\n;return parseQuestionRow_(row, idx);');
 
+const normAnsMatch = codeGs.match(/function normalizeAnswerToIndex_\([\s\S]*?\n\}/);
+const normAnsDef = normAnsMatch ? normAnsMatch[0] : '';
+
 // 建立可執行版本的 parseQuestionRow_
 const testParse = (row, idx) => {
   // 將 parseQuestionRow_ 在沙盒中執行
   const fn = new Function('row', 'idx', 'splitTags_', `
+    ${normAnsDef}
     ${parseQRowBody[1]}
   `);
   return fn(row, idx, splitTags_);
@@ -96,10 +100,11 @@ console.log('  ✅ Apps Script: 純位置備援 (Col 0~7) 解析正確（答案 
 
 console.log('\n--- 2. Testing game.js Question Processing & Loading ---');
 
-// 抽取 game.js 中的 deduplicateAndBalanceBank
 const dedupeMatch = gameJs.match(/deduplicateAndBalanceBank\(questions\) \{([\s\S]*?)\n  \}\n\n  async loadFromGoogleSheet/);
 assert(dedupeMatch, '必須在 game.js 找到 deduplicateAndBalanceBank');
-const deduplicateAndBalanceBank = new Function('questions', dedupeMatch[1]);
+const normAnsGameMatch = gameJs.match(/function normalizeAnswerToIndex\([\s\S]*?\n\}/);
+const normAnsGameDef = normAnsGameMatch ? normAnsGameMatch[0] : '';
+const deduplicateAndBalanceBank = new Function('questions', normAnsGameDef + '\n' + dedupeMatch[1]);
 
 // 測試 game.js 對 8 欄中文格式之去重與載入
 const testQuestionsGame = [
@@ -153,7 +158,7 @@ console.log('  ✅ game.js deduplicateAndBalanceBank 完美支援 8 欄格式、
 // 測試 game.js parseCSV 支援 8 欄
 const parseCsvMatch = gameJs.match(/parseCSV\(text\) \{([\s\S]*?)\n  \}\n\n  isGradeMatch/);
 assert(parseCsvMatch, '必須在 game.js 找到 parseCSV');
-const parseCSV = new Function('text', parseCsvMatch[1]);
+const parseCSV = new Function('text', normAnsGameDef + '\n' + parseCsvMatch[1]);
 
 const csvContent8Col = `題號,題目,選項1,選項2,選項3,選項4,答案,答案說明
 Q101,台灣的第一高峰是哪座山？,玉山,雪山,大霸尖山,合歡山,1,玉山海拔3952公尺

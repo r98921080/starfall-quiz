@@ -10,7 +10,7 @@ const gameJs = fs.readFileSync('game.js', 'utf8');
 
 // --- 1. Checking Code.gs Static Structure ---
 console.log('--- 1. Testing Code.gs Static Configurations ---');
-assert(codeGs.includes("version: '1.4.0'"), 'API version must be 1.4.0');
+assert(/version:\s*'1\.4\.[0-9]+'/.test(codeGs), 'API version must be 1.4.x');
 assert(codeGs.includes("'時間', '學號', '姓名', '關卡', '題號', '學生選擇', '是否答對', '作答秒數'"), 'REQUIRED_HEADERS.Attempts must be 8 Chinese columns');
 assert(codeGs.includes("'題號', '題目', '選項1', '選項2', '選項3', '選項4', '答案', '答案說明'"), 'REQUIRED_HEADERS.Questions must be 8 Chinese columns');
 assert(codeGs.includes('simplifyAttemptsColumns_'), 'simplifyAttemptsColumns_ must be implemented');

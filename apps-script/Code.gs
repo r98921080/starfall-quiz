@@ -78,7 +78,7 @@ function doGet(e) {
     return jsonOutput_({
       ok: true,
       service: 'Starfall Quiz Learning API',
-      version: '1.4.0',
+      version: '1.4.4',
       active_sheets: ss.getSheets().map(function(s) { return s.getName(); }),
       actions: ['questions', 'students', 'student_progress', 'register_student', 'attempt', 'attempt_batch', 'settings', 'report', 'clean_questions', 'clean_sheets', 'simplify_questions', 'simplify_attempts', 'simplify_all']
     });
@@ -97,7 +97,7 @@ function doPost(e) {
     if (action === 'attempt_batch') return jsonOutput_(recordAttemptBatch_(payload));
     if (action === 'register_student') return jsonOutput_(registerStudent_(payload));
     if (action === 'refresh_reports') {
-      refreshReports();
+      refreshReports(ss);
       return jsonOutput_({ ok: true, message: '報表已更新。' });
     }
     if (action === 'clean_questions') {
@@ -189,7 +189,7 @@ function registerStudent_(payload) {
     };
   } else {
     // 極簡 3 分頁模式 (無獨立 Students 表)：由 Attempts 作答歷程直接推算學號與綁定
-    const aSheet = ss.getSheetByName(SHEETS.ATTEMPTS);
+    const aSheet = getAttemptsSheet_(ss);
     const attempts = aSheet ? sheetObjects_(aSheet) : [];
     const matched = attempts.find(function(a) {
       return String(a.student_name).trim() === name && (!grade || String(a.student_grade).trim() === grade);
@@ -282,6 +282,73 @@ function getQuestionsSheet_(ss) {
   return null;
 }
 
+/**
+ * 智慧答案解析器：極致相容 1~4、A~D、①~④、(1)~(4)、1.~4.、一~四 以及選項文字比對
+ */
+function normalizeAnswerToIndex_(rawAns, opts) {
+  if (rawAns === undefined || rawAns === null) return 0;
+  const s = String(rawAns).trim();
+  if (!s) return 0;
+
+  // 1. 全形字元轉半形
+  let fullToHalf = '';
+  for (let i = 0; i < s.length; i++) {
+    const code = s.charCodeAt(i);
+    if (code >= 0xFF01 && code <= 0xFF5E) {
+      fullToHalf += String.fromCharCode(code - 0xFEE0);
+    } else if (code === 0x3000) {
+      fullToHalf += ' ';
+    } else {
+      fullToHalf += s[i];
+    }
+  }
+  fullToHalf = fullToHalf.trim();
+
+  // 2. 抽取乾淨序號 (例如 "(1)", "1.", "1、", "[1]", "選項1", "Option 1", "A.", "(A)", "一")
+  const clean = fullToHalf.toUpperCase()
+    .replace(/^選項|^OPTION|^NO\.?|^第/i, '')
+    .replace(/[\s_\-（）()\[\]【】、.:：個題]/g, '');
+
+  if (clean === '1' || clean === 'A' || clean === '①' || clean === '❶' || clean === '⑴' || clean === '㈠' || clean === '一') return 0;
+  if (clean === '2' || clean === 'B' || clean === '②' || clean === '❷' || clean === '⑵' || clean === '㈡' || clean === '二') return 1;
+  if (clean === '3' || clean === 'C' || clean === '③' || clean === '❸' || clean === '⑶' || clean === '㈢' || clean === '三') return 2;
+  if (clean === '4' || clean === 'D' || clean === '④' || clean === '❹' || clean === '⑷' || clean === '㈣' || clean === '四') return 3;
+
+  // 3. 文字內容比對 (若答案欄填寫的是選項文字本身)
+  if (Array.isArray(opts) && opts.length > 0) {
+    const stripPrefix = function(str) {
+      return String(str || '')
+        .replace(/^(?:[(（\[【]?[1-4A-Da-d①②③④❶❷❸❹⑴⑵⑶⑷一二三四][)）\]】.:、\s-]+|\s+)/, '')
+        .trim();
+    };
+
+    const cleanRaw = stripPrefix(fullToHalf);
+
+    // 3a. 完全一致
+    const directIdx = opts.findIndex(function(o) {
+      const oStr = String(o || '').trim();
+      return oStr === s || oStr === fullToHalf;
+    });
+    if (directIdx !== -1) return directIdx;
+
+    // 3b. 去除前綴後的文字一致 (例如選項是 "1. 太陽"，答案填 "太陽"；或反之)
+    const strippedIdx = opts.findIndex(function(o) {
+      const cleanOpt = stripPrefix(o);
+      return cleanOpt && cleanRaw && cleanOpt === cleanRaw;
+    });
+    if (strippedIdx !== -1) return strippedIdx;
+
+    // 3c. 選項包含答案或答案包含選項
+    const includeIdx = opts.findIndex(function(o) {
+      const cleanOpt = stripPrefix(o);
+      return cleanOpt && cleanRaw && (cleanOpt.indexOf(cleanRaw) !== -1 || cleanRaw.indexOf(cleanOpt) !== -1);
+    });
+    if (includeIdx !== -1) return includeIdx;
+  }
+
+  return 0; // 預設第 1 個選項
+}
+
 function parseQuestionRow_(row, idx) {
   const getVal = function(candidates, colIdx) {
     // 1. 精確鍵名匹配
@@ -319,35 +386,23 @@ function parseQuestionRow_(row, idx) {
   const qid = getVal(['題號', 'question_id', 'id', '序號', '編號', 'No', 'QID'], 0) || ('Q-' + (idx + 1));
   const qText = getVal(['題目', 'question', '問題', '題幹', '內容'], 1);
 
-  const opt1 = getVal(['選項1', '選項 1', '選項一', 'option_1', 'option1', 'option_a', 'optiona', 'a', '選項A', '選項 A'], 2);
-  const opt2 = getVal(['選項2', '選項 2', '選項二', 'option_2', 'option2', 'option_b', 'optionb', 'b', '選項B', '選項 B'], 3);
-  const opt3 = getVal(['選項3', '選項 3', '選項三', 'option_3', 'option3', 'option_c', 'optionc', 'c', '選項C', '選項 C'], 4);
-  const opt4 = getVal(['選項4', '選項 4', '選項四', 'option_4', 'option4', 'option_d', 'optiond', 'd', '選項D', '選項 D'], 5);
+  const opt1 = getVal(['選項1', '選項 1', '選項一', '1', '一', '①', '❶', '(1)', '（1）', 'option_1', 'option1', 'option_a', 'optiona', 'a', '選項A', '選項 A'], 2);
+  const opt2 = getVal(['選項2', '選項 2', '選項二', '2', '二', '②', '❷', '(2)', '（2）', 'option_2', 'option2', 'option_b', 'optionb', 'b', '選項B', '選項 B'], 3);
+  const opt3 = getVal(['選項3', '選項 3', '選項三', '3', '三', '③', '❸', '(3)', '（3）', 'option_3', 'option3', 'option_c', 'optionc', 'c', '選項C', '選項 C'], 4);
+  const opt4 = getVal(['選項4', '選項 4', '選項四', '4', '四', '④', '❹', '(4)', '（4）', 'option_4', 'option4', 'option_d', 'optiond', 'd', '選項D', '選項 D'], 5);
   const opts = [opt1, opt2, opt3, opt4];
 
   const ansRaw = getVal(['答案', 'answer', 'ans', '正解', '解答', '正確答案'], 6);
   const expDetail = getVal(['答案說明', '說明', '解析', '詳解', '解題說明', 'explanation_detail', 'explanation', 'explanation_short'], 7);
 
-  // 標準化答案為 A/B/C/D
-  let ansLetter = 'A';
-  const cleanAns = ansRaw.trim().toUpperCase();
-  if (['A', 'B', 'C', 'D'].indexOf(cleanAns) !== -1) {
-    ansLetter = cleanAns;
-  } else if (cleanAns === '1' || cleanAns === '選項1' || cleanAns === '選項 1' || cleanAns === '選項一' || cleanAns === '一') {
-    ansLetter = 'A';
-  } else if (cleanAns === '2' || cleanAns === '選項2' || cleanAns === '選項 2' || cleanAns === '選項二' || cleanAns === '二') {
-    ansLetter = 'B';
-  } else if (cleanAns === '3' || cleanAns === '選項3' || cleanAns === '選項 3' || cleanAns === '選項三' || cleanAns === '三') {
-    ansLetter = 'C';
-  } else if (cleanAns === '4' || cleanAns === '選項4' || cleanAns === '選項 4' || cleanAns === '選項四' || cleanAns === '四') {
-    ansLetter = 'D';
-  } else {
-    // 比對是否與選項文字相同
-    const matchIdx = opts.findIndex(function(o) { return o && o.trim() === ansRaw.trim(); });
-    if (matchIdx !== -1) {
-      ansLetter = ['A', 'B', 'C', 'D'][matchIdx];
-    }
-  }
+  // 智慧雙向解析正確答案 (同時相容 1~4 與 A~D 以及 ①~④、(1)~(4) 等多種格式)
+  const ansIdx = normalizeAnswerToIndex_(ansRaw, opts);
+  const ansLetter = ['A', 'B', 'C', 'D'][ansIdx];
+  const ansNumber = String(ansIdx + 1);
+
+  // 根據原輸入樣式決定顯示答案 (若原為 A/B/C/D 則保留英文字母，其餘全數標準化為 1/2/3/4)
+  const origClean = String(ansRaw || '').trim().toUpperCase();
+  const ansDisplay = ['A', 'B', 'C', 'D'].indexOf(origClean) !== -1 ? origClean : ansNumber;
 
   const validOpts = opts.filter(Boolean);
 
@@ -360,8 +415,12 @@ function parseQuestionRow_(row, idx) {
     question_type: getVal(['題型', 'question_type']) || '單選題',
     difficulty: Number(getVal(['難度', 'difficulty'])) || 1,
     question: qText,
-    options: validOpts.length >= 2 ? opts : ['選項A', '選項B', '選項C', '選項D'],
-    answer: ansLetter,
+    options: validOpts.length >= 2 ? opts : ['選項1', '選項2', '選項3', '選項4'],
+    answer: ansLetter, // 相容舊版遊戲與 API
+    ans: ansIdx,       // 0, 1, 2, 3
+    answer_index: ansIdx,
+    answer_number: ansNumber, // '1', '2', '3', '4'
+    answer_display: ansDisplay,
     explanation_short: expDetail,
     explanation_detail: expDetail,
     memory_tip: getVal(['memory_tip', 'tip']) || '',
@@ -377,7 +436,7 @@ function parseQuestionRow_(row, idx) {
     '選項2': opt2,
     '選項3': opt3,
     '選項4': opt4,
-    '答案': ansLetter,
+    '答案': ansDisplay,
     '答案說明': expDetail
   };
 }
@@ -419,7 +478,7 @@ function findQuestion_(ss, questionId) {
 }
 
 function countAttempts_(ss, studentId, questionId) {
-  const sheet = ss.getSheetByName(SHEETS.ATTEMPTS);
+  const sheet = getAttemptsSheet_(ss);
   if (!sheet) return 0;
   return sheetObjects_(sheet).filter(function(row) {
     const sid = String(row['學號'] || row.student_id || '').trim();
@@ -450,7 +509,7 @@ function getStudents_(ss) {
   }
 
   // 極簡 3 分頁備援：若無 Students 表，直接從 Attempts 作答紀錄中自動匯聚不重複學生名冊！
-  const aSheet = ss.getSheetByName(SHEETS.ATTEMPTS);
+  const aSheet = getAttemptsSheet_(ss);
   const attempts = aSheet ? sheetObjects_(aSheet) : [];
   const map = {};
   attempts.forEach(function(a) {
@@ -474,7 +533,8 @@ function getStudentProgressData_(params) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const studentId = String((params && params.student_id) || '').trim();
   if (!studentId) return { ok: false, error: '缺少 student_id 參數' };
-  const attempts = sheetObjects_(ss.getSheetByName(SHEETS.ATTEMPTS))
+  const aSheet = getAttemptsSheet_(ss);
+  const attempts = (aSheet ? sheetObjects_(aSheet) : [])
     .filter(function(a) { return String(a['學號'] || a.student_id || '').trim() === studentId; });
 
   const progressMap = {};
@@ -529,11 +589,11 @@ function getSettings_() {
 function recordAttempt_(payload) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const attempt = normalizeAttempt_(payload, ss);
-  const sheet = ss.getSheetByName(SHEETS.ATTEMPTS);
+  const sheet = getOrCreateAttemptsSheet_(ss);
   const headers = getHeaders_(sheet);
   sheet.appendRow(headers.map(function(header) { return attempt[header] !== undefined ? attempt[header] : ''; }));
   updateQuestionProgress_(ss, attempt);
-  refreshReports();
+  refreshReports(ss);
   logActivity_('ATTEMPT', attempt.student_id + '｜' + attempt.question_id + '｜' + (attempt.correct ? '正確' : '錯誤'));
   return { ok: true, attempt: attempt };
 }
@@ -542,7 +602,7 @@ function recordAttemptBatch_(payload) {
   const attempts = Array.isArray(payload.attempts) ? payload.attempts : [];
   if (!attempts.length) throw new Error('attempts 不可為空。');
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(SHEETS.ATTEMPTS);
+  const sheet = getOrCreateAttemptsSheet_(ss);
   const headers = getHeaders_(sheet);
   const normalized = attempts.map(function(attempt) { return normalizeAttempt_(attempt, ss); });
   sheet.getRange(sheet.getLastRow() + 1, 1, normalized.length, headers.length)
@@ -550,7 +610,7 @@ function recordAttemptBatch_(payload) {
       return headers.map(function(header) { return attempt[header] !== undefined ? attempt[header] : ''; });
     }));
   normalized.forEach(function(attempt) { updateQuestionProgress_(ss, attempt); });
-  refreshReports();
+  refreshReports(ss);
   logActivity_('ATTEMPT_BATCH', '已寫入 ' + normalized.length + ' 筆作答紀錄。');
   return { ok: true, count: normalized.length };
 }
@@ -576,7 +636,9 @@ function normalizeAttempt_(payload, ss) {
     };
   }
   const selected = String(payload.selected_option || '').trim().toUpperCase();
-  const correct = payload.correct === true || String(payload.correct).toUpperCase() === 'TRUE' || selected === String(question.answer).toUpperCase();
+  const correct = (payload.correct !== undefined && payload.correct !== null)
+    ? toBool_(payload.correct)
+    : (normalizeAnswerToIndex_(selected) === normalizeAnswerToIndex_(question.answer));
   const sid = String(payload.student_id || 'S0001');
   const sName = String(payload.student_name || payload.display_name || sid);
   const resMs = Math.max(0, Number(payload.response_time_ms) || 0);
@@ -636,7 +698,8 @@ function refreshReports(ss) {
   if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
   ensureReportSheets_(ss);
   cleanLegacySheets_(ss);
-  const attempts = sheetObjects_(ss.getSheetByName(SHEETS.ATTEMPTS));
+  const aSheet = getOrCreateAttemptsSheet_(ss);
+  const attempts = aSheet ? sheetObjects_(aSheet) : [];
   const qSheet = getQuestionsSheet_(ss);
   const rawQuestions = qSheet ? sheetObjects_(qSheet) : [];
   const questions = rawQuestions.map(function(row, idx) {
@@ -867,7 +930,8 @@ function writeParentDashboard_(ss, attempts, questions, students) {
 function getReportData_(params) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const studentId = params && params.student_id ? String(params.student_id) : '';
-  const attempts = sheetObjects_(ss.getSheetByName(SHEETS.ATTEMPTS));
+  const aSheet = getAttemptsSheet_(ss);
+  const attempts = aSheet ? sheetObjects_(aSheet) : [];
   const filterAttempts = studentId ? attempts.filter(function(a) { return String(a.student_id) === studentId; }) : attempts;
   return {
     ok: true,
@@ -879,11 +943,11 @@ function getReportData_(params) {
 
 function createDemoAttempts() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const students = sheetObjects_(ss.getSheetByName(SHEETS.STUDENTS));
+  const studentsRes = getStudents_(ss);
+  const students = (studentsRes && studentsRes.students) || [];
   const questions = sheetObjects_(getQuestionsSheet_(ss)).filter(function(q) { return String(q.enabled).toUpperCase() !== 'FALSE'; });
-  if (!students.length) throw new Error('Students 至少需要一位啟用中的學生。');
   if (!questions.length) throw new Error('Questions 沒有啟用題目。');
-  const student = students[0];
+  const student = students.length ? students[0] : { student_id: 'S0001', display_name: '示範學生' };
   const selected = questions.slice(0, Math.min(12, questions.length));
   const batch = selected.map(function(q, index) {
     const correct = index % 3 !== 0;
@@ -909,7 +973,14 @@ function createDemoAttempts() {
 }
 
 function ensureSheetAndHeaders_(ss, sheetName, headers) {
-  let sheet = ss.getSheetByName(sheetName);
+  let sheet = null;
+  if (sheetName === SHEETS.QUESTIONS) {
+    sheet = getQuestionsSheet_(ss);
+  } else if (sheetName === SHEETS.ATTEMPTS) {
+    sheet = getAttemptsSheet_(ss);
+  } else {
+    sheet = ss.getSheetByName(sheetName);
+  }
   if (!sheet) sheet = ss.insertSheet(sheetName);
   const current = getHeaders_(sheet);
   if (!current.length || current.every(function(v) { return !v; })) {
@@ -918,12 +989,12 @@ function ensureSheetAndHeaders_(ss, sheetName, headers) {
     return sheet;
   }
   // 若為 Questions 工作表且已有標題列，絕不擅自追加額外欄位，完整尊重使用者 8 欄極簡配置
-  if (sheetName === SHEETS.QUESTIONS) {
+  if (sheetName === SHEETS.QUESTIONS || sheet.getName() === SHEETS.QUESTIONS) {
     sheet.setFrozenRows(1);
     return sheet;
   }
   // 若為 Attempts 工作表且已有標題列，亦不擅自追加額外欄位，完整尊重使用者 8 欄極簡配置
-  if (sheetName === SHEETS.ATTEMPTS) {
+  if (sheetName === SHEETS.ATTEMPTS || sheet.getName() === SHEETS.ATTEMPTS) {
     sheet.setFrozenRows(1);
     return sheet;
   }
@@ -1022,7 +1093,7 @@ function simplifyQuestionsColumns_(ss) {
       parsed.options[1] || '',
       parsed.options[2] || '',
       parsed.options[3] || '',
-      parsed.answer || 'A',
+      parsed.answer_display || parsed.answer_number || '1',
       parsed.explanation_detail || ''
     ]);
   });
@@ -1063,7 +1134,7 @@ function simplifyQuestionsColumns_(ss) {
 
 function getAttemptsSheet_(ss) {
   if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
-  const candidates = [SHEETS.ATTEMPTS, 'Attempts', 'Attempt', '作答紀錄', '作答記錄', '答題紀錄', '答題記錄', 'submissions', 'Submissions', 'attempts'];
+  const candidates = [SHEETS.ATTEMPTS, 'Attempts', 'Attempt', '作答紀錄', '作答記錄', '答題紀錄', '答題記錄', 'submissions', 'Submissions', 'attempts', '作答歷程'];
   for (let i = 0; i < candidates.length; i++) {
     const s = ss.getSheetByName(candidates[i]);
     if (s) return s;
@@ -1071,11 +1142,30 @@ function getAttemptsSheet_(ss) {
   const sheets = ss.getSheets();
   for (let i = 0; i < sheets.length; i++) {
     const n = sheets[i].getName().trim().toLowerCase();
-    if (n === 'attempts' || n === 'attempt' || n === '作答紀錄' || n === '作答記錄' || n === 'submissions') {
+    if (n === 'attempts' || n === 'attempt' || n === '作答紀錄' || n === '作答記錄' || n === 'submissions' || n === '答題紀錄' || n === '作答歷程') {
       return sheets[i];
     }
   }
+  // 內容特徵比對：尋找標題列含有「作答」或「學號」或「學生選擇」的分頁
+  for (let i = 0; i < sheets.length; i++) {
+    const s = sheets[i];
+    const sName = s.getName();
+    if (sName === SHEETS.PARENT_DASHBOARD || sName === SHEETS.QUESTIONS || sName === 'ParentDashboard' || sName === 'Questions') continue;
+    const headers = getHeaders_(s).map(function(h) { return String(h || '').trim().toLowerCase(); });
+    if (headers.indexOf('學號') !== -1 || headers.indexOf('學生選擇') !== -1 || headers.indexOf('是否答對') !== -1) {
+      return s;
+    }
+  }
   return null;
+}
+
+function getOrCreateAttemptsSheet_(ss) {
+  if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = getAttemptsSheet_(ss);
+  if (!sheet) {
+    sheet = ensureSheetAndHeaders_(ss, SHEETS.ATTEMPTS, REQUIRED_HEADERS.Attempts);
+  }
+  return sheet;
 }
 
 /**
@@ -1301,6 +1391,23 @@ function cleanLegacySheets_(ss) {
   legacyNames.forEach(function(name) {
     const s = ss.getSheetByName(name);
     if (s && ss.getSheets().length > 1) {
+      const sName = s.getName();
+      // 關鍵保護：三大核心表切勿刪除
+      if (sName === SHEETS.PARENT_DASHBOARD || sName === SHEETS.QUESTIONS || sName === SHEETS.ATTEMPTS) return;
+      // 若該分頁其實是題庫唯一來源，且目前無 Questions 分頁，則自動更名而非刪除
+      if (s === getQuestionsSheet_(ss) && !ss.getSheetByName(SHEETS.QUESTIONS)) {
+        try { s.setName(SHEETS.QUESTIONS); } catch (e) {}
+        return;
+      }
+      // 若該分頁其實是作答紀錄唯一來源，且目前無 Attempts 分頁，則自動更名而非刪除
+      if (s === getAttemptsSheet_(ss) && !ss.getSheetByName(SHEETS.ATTEMPTS)) {
+        try { s.setName(SHEETS.ATTEMPTS); } catch (e) {}
+        return;
+      }
+      // 若為預設工作表且內含資料，若題庫或作答紀錄尚未建立，予以保留保護
+      if ((sName === 'Sheet1' || sName === '工作表1') && s.getLastRow() > 1 && !ss.getSheetByName(SHEETS.QUESTIONS)) {
+        return;
+      }
       try {
         ss.deleteSheet(s);
         deleted.push(name);
@@ -1358,7 +1465,11 @@ function sheetObjects_(sheet) {
       rowStr.indexOf('question') !== -1 ||
       rowStr.indexOf('題號') !== -1 ||
       rowStr.indexOf('選項') !== -1 ||
-      rowStr.indexOf('答案') !== -1
+      rowStr.indexOf('答案') !== -1 ||
+      rowStr.indexOf('學號') !== -1 ||
+      rowStr.indexOf('student') !== -1 ||
+      rowStr.indexOf('學生') !== -1 ||
+      rowStr.indexOf('時間') !== -1
     ) {
       headerRowIdx = r;
       break;
@@ -1455,7 +1566,9 @@ function splitTags_(value) {
 }
 
 function toBool_(value) {
-  return value === true || String(value).toUpperCase() === 'TRUE';
+  if (value === true || value === 1) return true;
+  const str = String(value || '').trim().toUpperCase();
+  return str === 'TRUE' || str === '1' || str === 'YES' || str === '是' || str === 'V' || str === 'O' || str === 'CORRECT';
 }
 
 function coerceValue_(value) {
@@ -1545,7 +1658,7 @@ function cleanDuplicateQuestions_() {
     if (!row || !row[qIdx]) return;
     const qid = qidIdx !== -1 ? String(row[qidIdx] || '').trim() : '';
     const qFp = getFp(row[qIdx]);
-    const ansVal = ansIdx !== -1 ? String(row[ansIdx] || '').trim().toUpperCase() : '';
+    const ansVal = ansIdx !== -1 ? normalizeAnswerToIndex_(row[ansIdx]) : 0;
     const contentKey = qFp + ':::' + ansVal;
 
     // 若 ID 重複或題幹與答案完全相同，只保留第一筆
