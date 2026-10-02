@@ -27,8 +27,8 @@ expectedAttemptsHeaders.forEach(h => {
 });
 
 // Cache busters
-assert(indexHtml.includes('game.js?v=b46'), 'index.html must use game.js?v=b46');
-assert(starfallHtml.includes('game.js?v=b46'), 'starfall-quiz.html must use game.js?v=b46');
+assert(/game\.js\?v=b(4[6-9]|[5-9]\d)/.test(indexHtml), 'index.html must use game.js?v=b46 or newer');
+assert(/game\.js\?v=b(4[6-9]|[5-9]\d)/.test(starfallHtml), 'starfall-quiz.html must use game.js?v=b46 or newer');
 console.log('  ✅ Static signatures, 10 standard column headers and cache busters verified!');
 
 // =========================================================================

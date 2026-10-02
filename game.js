@@ -3621,6 +3621,7 @@ class Game {
     this.runConsecutiveCorrectStreak = 0;
     this.quizTimer = 0;
     this.quizTimerMax = 15;
+    this._waitingQuizNext = false;
     this.waveTimer = 0;
 
     // 星空
@@ -3879,18 +3880,26 @@ class Game {
       if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
         this.togglePause();
       }
-      if (this.state === 'quiz' && this.currentQuiz) {
-        let chosenIdx = -1;
-        if (e.key === '1' || e.key === 'a' || e.key === 'A') chosenIdx = 0;
-        else if (e.key === '2' || e.key === 'b' || e.key === 'B') chosenIdx = 1;
-        else if (e.key === '3' || e.key === 'c' || e.key === 'C') chosenIdx = 2;
-        else if (e.key === '4' || e.key === 'd' || e.key === 'D') chosenIdx = 3;
-
-        if (chosenIdx !== -1 && this.currentQuiz.opts && chosenIdx < this.currentQuiz.opts.length) {
-          const btns = document.querySelectorAll('.opt-btn');
-          if (btns[chosenIdx] && !btns[chosenIdx].disabled) {
+      if (this.state === 'quiz') {
+        if (this._waitingQuizNext) {
+          if (e.key === 'Enter' || e.key === ' ' || e.code === 'Space') {
             e.preventDefault();
-            this.handleAnswer(chosenIdx);
+            this.advanceQuizQuestion();
+            return;
+          }
+        } else if (this.currentQuiz) {
+          let chosenIdx = -1;
+          if (e.key === '1' || e.key === 'a' || e.key === 'A') chosenIdx = 0;
+          else if (e.key === '2' || e.key === 'b' || e.key === 'B') chosenIdx = 1;
+          else if (e.key === '3' || e.key === 'c' || e.key === 'C') chosenIdx = 2;
+          else if (e.key === '4' || e.key === 'd' || e.key === 'D') chosenIdx = 3;
+
+          if (chosenIdx !== -1 && this.currentQuiz.opts && chosenIdx < this.currentQuiz.opts.length) {
+            const btns = document.querySelectorAll('.opt-btn');
+            if (btns[chosenIdx] && !btns[chosenIdx].disabled) {
+              e.preventDefault();
+              this.handleAnswer(chosenIdx);
+            }
           }
         }
       }
@@ -4137,6 +4146,10 @@ class Game {
     });
     setClick('closeLabBtn', () => this.closeLab());
     setClick('skipUpgradeBtn', () => this.closeUpgradeScreen());
+    setClick('quizNextBtn', (e) => {
+      if (e && e.preventDefault) e.preventDefault();
+      this.advanceQuizQuestion();
+    });
 
     // 初始武裝整備機庫事件
     setClick('openHangarBtn', () => this.openHangarModal());
@@ -8748,6 +8761,7 @@ class Game {
   // ============================================================
   startQuizPhase() {
     this.state = 'quiz';
+    this._waitingQuizNext = false;
     this.resetPlayerStatusEffects();
     this.quizQueue = this.dataStore.pickAdaptiveQuestions(5, this.stage || 1);
     this.quizCorrectCount = 0;
@@ -8759,6 +8773,10 @@ class Game {
       this.endQuizPhase();
       return;
     }
+
+    this._waitingQuizNext = false;
+    const nextBtn = document.getElementById('quizNextBtn');
+    if (nextBtn) nextBtn.style.display = 'none';
 
     this.currentQuiz = this.quizQueue.shift();
     const q = this.currentQuiz;
@@ -8798,7 +8816,7 @@ class Game {
       btn.className = 'opt-btn';
       // 介面極簡化：不顯示 ABCD、1234 或 1(A)，直接顯示乾淨選項文字，並自動剝離原始文字中的序號前綴
       const cleanText = String(optText || '')
-        .replace(/^(?:[(（\[【]?[1-4A-Da-d①②③④❶❷❸❹⑴⑵⑶⑷一二三四][)）\]】.:、\s-]+|\s+)/, '')
+        .replace(/^(?:[(（\[【]?[1-4A-Da-d①②③④❶❷❸❹⑴⑵⑶⑷一二三四][)）\]】.:、：\s-]+|\s+)/, '')
         .trim();
       btn.innerHTML = `<span>${cleanText || optText}</span>`;
       btn.onclick = () => this.handleAnswer(idx);
@@ -8813,7 +8831,7 @@ class Game {
   }
 
   handleAnswer(selectedIdx) {
-    if (this.state !== 'quiz' || !this.currentQuiz) return;
+    if (this.state !== 'quiz' || !this.currentQuiz || this._waitingQuizNext) return;
     const q = this.currentQuiz;
     const isCorrect = selectedIdx === q.ans;
     const btns = document.querySelectorAll('.opt-btn');
@@ -8895,27 +8913,72 @@ class Game {
       });
     }
 
-    if (q.explanation_short) {
-      const expBox = document.getElementById('quizExplain');
+    const expBox = document.getElementById('quizExplain');
+    const nextBtn = document.getElementById('quizNextBtn');
+
+    if (isCorrect) {
+      this._waitingQuizNext = false;
+      if (nextBtn) nextBtn.style.display = 'none';
+
+      if (q.explanation_short) {
+        expBox.style.display = 'block';
+        const rawAnsOpt = (q.opts && q.opts[q.ans] !== undefined) ? q.opts[q.ans] : '';
+        const cleanAnsText = String(rawAnsOpt)
+          .replace(/^(?:[(（\[【]?[1-4A-Da-d①②③④❶❷❸❹⑴⑵⑶⑷一二三四][)）\]】.:、：\s-]+|\s+)/, '')
+          .trim() || rawAnsOpt;
+        const ansLabel = cleanAnsText ? `【${q.ans + 1}：${cleanAnsText}】` : `【選項 ${q.ans + 1}】`;
+        expBox.innerHTML = `<b>✨ 答對了！正確解答：${ansLabel}</b><br><b>解析：</b> ${q.explanation_short}`;
+      }
+
+      setTimeout(() => {
+        if (!this._waitingQuizNext && this.state === 'quiz') {
+          this.showNextQuestion();
+        }
+      }, 1200);
+    } else {
+      // 答錯了：停止自動倒數跳題，展示解析說明並呈現「下一題」按鈕，讓玩家看清楚答案說明後自行點擊進入下一題
+      this._waitingQuizNext = true;
       expBox.style.display = 'block';
-      const rawAnsOpt = q.opts && q.opts[q.ans] ? q.opts[q.ans] : '';
+      const rawAnsOpt = (q.opts && q.opts[q.ans] !== undefined) ? q.opts[q.ans] : '';
       const cleanAnsText = String(rawAnsOpt)
-        .replace(/^(?:[(（\[【]?[1-4A-Da-d①②③④❶❷❸❹⑴⑵⑶⑷一二三四][)）\]】.:、\s-]+|\s+)/, '')
+        .replace(/^(?:[(（\[【]?[1-4A-Da-d①②③④❶❷❸❹⑴⑵⑶⑷一二三四][)）\]】.:、：\s-]+|\s+)/, '')
         .trim() || rawAnsOpt;
-      const ansLabel = cleanAnsText ? `【${cleanAnsText}】` : `選項 ${q.ans + 1}`;
+      const ansLabel = cleanAnsText ? `【${q.ans + 1}：${cleanAnsText}】` : `【選項 ${q.ans + 1}】`;
+
+      let explainHtml = '';
       if (isRepeatedWrong) {
-        expBox.innerHTML = `<span style="color:#ff4766; font-weight:800; font-size:13px;">❌ 舊錯題重複答錯！【重度懲罰】：結算評級額外扣減 1 題！</span><br><b>正確解答：</b> ${ansLabel}<br><b>解析：</b> ${q.explanation_short}`;
+        explainHtml += `<span style="color:#ff4766; font-weight:800; font-size:13px;">❌ 舊錯題重複答錯！【重度懲罰】：結算評級額外扣減 1 題！</span><br>`;
       } else {
-        expBox.innerHTML = `<b>${isCorrect ? '✨ 答對了！' : `❌ 答錯了！正確解答：${ansLabel}`}</b><br>${q.explanation_short ? `<b>解析：</b> ${q.explanation_short}` : ''}`;
+        explainHtml += `<span style="color:#ff6b81; font-weight:800; font-size:13px;">❌ 答錯了！</span><br>`;
+      }
+      explainHtml += `<b>正確解答：</b> <span style="color:var(--cyan-bright); font-weight:800;">${ansLabel}</span>`;
+      if (q.explanation_short) {
+        explainHtml += `<br><b>解析說明：</b> ${q.explanation_short}`;
+      }
+      if (q.memory_tip) {
+        explainHtml += `<br><span style="color:var(--gold); font-size:11px;">💡 記憶要訣：${q.memory_tip}</span>`;
+      }
+      expBox.innerHTML = explainHtml;
+
+      if (nextBtn) {
+        nextBtn.style.display = 'inline-flex';
+        try { nextBtn.focus(); } catch (err) {}
       }
     }
+  }
 
-    setTimeout(() => {
-      this.showNextQuestion();
-    }, isRepeatedWrong ? 1800 : 1200);
+  advanceQuizQuestion() {
+    if (!this._waitingQuizNext) return;
+    this._waitingQuizNext = false;
+    const nextBtn = document.getElementById('quizNextBtn');
+    if (nextBtn) nextBtn.style.display = 'none';
+    this.showNextQuestion();
   }
 
   endQuizPhase() {
+    this._waitingQuizNext = false;
+    const nextBtn = document.getElementById('quizNextBtn');
+    if (nextBtn) nextBtn.style.display = 'none';
     document.getElementById('quizScreen').classList.add('hidden');
     if (this.dataStore) {
       this.dataStore.syncOfflineQueue();

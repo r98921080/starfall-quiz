@@ -530,6 +530,50 @@ canvas#gameCanvas {
   pointer-events: none;
 }
 
+/* 首頁畫面自由捲動容器 (BUILD-046: 武器過多或畫面過長時保證可滑動以開始遊戲) */
+#startScreen {
+  justify-content: flex-start;
+  align-items: center;
+  overflow-y: auto;
+  overflow-x: hidden;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  padding: 24px 16px 48px;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--cyan) rgba(10, 16, 30, 0.6);
+}
+
+#startScreen::-webkit-scrollbar {
+  width: 6px;
+}
+#startScreen::-webkit-scrollbar-track {
+  background: rgba(8, 12, 22, 0.6);
+  border-radius: 4px;
+}
+#startScreen::-webkit-scrollbar-thumb {
+  background: var(--cyan);
+  border-radius: 4px;
+  box-shadow: 0 0 6px rgba(51, 224, 224, 0.4);
+}
+
+/* 存檔武器列表滑動保護 */
+#saveWeaponsList {
+  max-height: 120px;
+  overflow-y: auto;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold) rgba(10, 16, 30, 0.6);
+}
+#saveWeaponsList::-webkit-scrollbar {
+  width: 4px;
+}
+#saveWeaponsList::-webkit-scrollbar-thumb {
+  background: var(--gold);
+  border-radius: 2px;
+}
+
 /* 按鈕風格 (>= 44x44px) */
 .btn {
   min-height: 48px;
@@ -599,17 +643,36 @@ canvas#gameCanvas {
 }
 
 /* 答題卡 (Quiz Modal) */
+#quizScreen {
+  overflow-y: auto;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
 #quizCard {
   width: min(94%, 420px);
+  max-height: 94vh;
+  overflow-y: auto;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
   background: var(--bg-card);
   border: 1px solid var(--border-cyan);
   border-radius: 16px;
-  padding: 20px;
+  padding: 18px;
   display: flex;
   flex-direction: column;
   gap: 12px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), var(--border-glow);
   animation: cardPopup 0.28s cubic-bezier(0.18, 1, 0.32, 1);
+  scrollbar-width: thin;
+  scrollbar-color: var(--cyan) rgba(10, 16, 30, 0.6);
+}
+#quizCard::-webkit-scrollbar {
+  width: 5px;
+}
+#quizCard::-webkit-scrollbar-thumb {
+  background: var(--cyan);
+  border-radius: 3px;
 }
 @keyframes cardPopup {
   from { opacity: 0; transform: translateY(20px) scale(0.96); }
@@ -716,14 +779,47 @@ canvas#gameCanvas {
   transform-origin: left;
 }
 .quiz-explain {
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-muted);
-  background: rgba(10, 16, 28, 0.7);
-  border: 1px dashed rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
-  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-main);
+  background: rgba(10, 16, 28, 0.85);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 10px;
+  padding: 10px 14px;
   display: none;
+  max-height: 180px;
+  overflow-y: auto;
+  word-break: break-word;
+  scrollbar-width: thin;
+  scrollbar-color: var(--cyan) rgba(10, 16, 30, 0.6);
+}
+
+#quizNextBtn {
+  display: none;
+  width: 100%;
+  margin-top: 6px;
+  min-height: 46px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: #041019;
+  background: linear-gradient(135deg, var(--cyan-bright), var(--cyan-dim));
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 0 16px rgba(51, 224, 224, 0.4);
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+#quizNextBtn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 22px rgba(51, 224, 224, 0.6);
+}
+#quizNextBtn:active {
+  transform: scale(0.98);
 }
 
 /* 升級與整備卡片 (Upgrade Cards) — 寬版完整資訊排版 */

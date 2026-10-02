@@ -171,7 +171,7 @@
         </div>
         <div style="margin-top:4px;">
           <div style="font-size:11px; color:var(--text-muted); margin-bottom:4px;">已持有武裝與階級：</div>
-          <div id="saveWeaponsList" style="display:flex; flex-wrap:wrap; gap:4px;">
+          <div id="saveWeaponsList" style="display:flex; flex-wrap:wrap; gap:4px; max-height:120px; overflow-y:auto; touch-action:pan-y; padding:2px;">
             <!-- 動態填入武器膠囊標籤 -->
           </div>
         </div>
@@ -324,6 +324,9 @@
         </div>
 
         <div class="quiz-explain" id="quizExplain"></div>
+        <button id="quizNextBtn" class="btn" style="display:none; width:100%; margin-top:8px; min-height:46px; font-size:15px; font-weight:800; letter-spacing:1px; background:linear-gradient(135deg, var(--cyan-bright), var(--cyan-dim)); box-shadow:0 0 16px rgba(51, 224, 224, 0.4);">
+          下一題 ➔
+        </button>
       </div>
     </div>
 
@@ -549,7 +552,7 @@
 </div>
 
 <!-- 腳本引入 -->
-<script src="starfall-game-api-config.js?v=b46"></script>
-<script src="game.js?v=b46"></script>
+<script src="starfall-game-api-config.js?v=b47"></script>
+<script src="game.js?v=b47"></script>
 </body>
 </html>
