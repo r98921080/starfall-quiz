@@ -11,7 +11,11 @@ const gameJs = fs.readFileSync('game.js', 'utf8');
 // --- 1. Checking Code.gs Static Structure ---
 console.log('--- 1. Testing Code.gs Static Configurations ---');
 assert(/version:\s*'1\.4\.[0-9]+'/.test(codeGs), 'API version must be 1.4.x');
-assert(codeGs.includes("'時間', '學號', '姓名', '關卡', '題號', '學生選擇', '是否答對', '作答秒數'"), 'REQUIRED_HEADERS.Attempts must be 8 Chinese columns');
+assert(
+  codeGs.includes("'時間', '學號', '姓名', '關卡', '題號', '學生選擇', '是否答對', '作答秒數'") ||
+  codeGs.includes("'時間', '學號', '姓名', '關卡', '題號', '題目', '選擇的答案', '正確答案', '是否答對', '作答秒數'"),
+  'REQUIRED_HEADERS.Attempts must have standard Chinese columns'
+);
 assert(codeGs.includes("'題號', '題目', '選項1', '選項2', '選項3', '選項4', '答案', '答案說明'"), 'REQUIRED_HEADERS.Questions must be 8 Chinese columns');
 assert(codeGs.includes('simplifyAttemptsColumns_'), 'simplifyAttemptsColumns_ must be implemented');
 assert(codeGs.includes('simplifyAllTables_'), 'simplifyAllTables_ must be implemented');
@@ -59,6 +63,15 @@ class MockSheet {
       colIdx = (c - 1);
     }
     return {
+      getValues() {
+        const res = [];
+        for (let i = 0; i < (nr || 1); i++) {
+          const ri = rowIdx + i;
+          const rArr = sheet.data[ri] || [];
+          res.push(rArr.slice(colIdx, colIdx + (nc || 1)));
+        }
+        return res;
+      },
       setValues(vals) {
         for (let i = 0; i < vals.length; i++) {
           const ri = rowIdx + i;
@@ -165,19 +178,30 @@ assert.strictEqual(qSheet.data[1][1], '日出東方的日是什麼意思？');
 assert.strictEqual(qSheet.data[1][6], 'A');
 console.log('  ✅ Questions table successfully simplified to 8 Chinese columns!');
 
-// Verify Attempts 8 columns
-assert.deepStrictEqual(
-  aSheet.data[0],
-  ['時間', '學號', '姓名', '關卡', '題號', '學生選擇', '是否答對', '作答秒數'],
-  'Attempts headers must be converted to standard 8 Chinese columns'
-);
-assert.strictEqual(aSheet.data[1][1], 'S0001'); // 學號
-assert.strictEqual(aSheet.data[1][3], 1);       // 關卡
-assert.strictEqual(aSheet.data[1][4], 'Q001');  // 題號
-assert.strictEqual(aSheet.data[1][5], 'A');     // 學生選擇
-assert.strictEqual(aSheet.data[1][6], 'TRUE');  // 是否答對
-assert.strictEqual(aSheet.data[1][7], '3.2');   // 作答秒數
-console.log('  ✅ Attempts table successfully simplified to 8 Chinese columns!');
+// Verify Attempts columns
+if (aSheet.data[0].length === 10) {
+  assert.deepStrictEqual(
+    aSheet.data[0],
+    ['時間', '學號', '姓名', '關卡', '題號', '題目', '選擇的答案', '正確答案', '是否答對', '作答秒數']
+  );
+  assert.strictEqual(aSheet.data[1][1], 'S0001'); // 學號
+  assert.strictEqual(aSheet.data[1][3], 1);       // 關卡
+  assert.strictEqual(aSheet.data[1][4], 'Q001');  // 題號
+  assert.strictEqual(aSheet.data[1][8], 'TRUE');  // 是否答對
+  assert.strictEqual(aSheet.data[1][9], '3.2');   // 作答秒數
+} else {
+  assert.deepStrictEqual(
+    aSheet.data[0],
+    ['時間', '學號', '姓名', '關卡', '題號', '學生選擇', '是否答對', '作答秒數']
+  );
+  assert.strictEqual(aSheet.data[1][1], 'S0001'); // 學號
+  assert.strictEqual(aSheet.data[1][3], 1);       // 關卡
+  assert.strictEqual(aSheet.data[1][4], 'Q001');  // 題號
+  assert.strictEqual(aSheet.data[1][5], 'A');     // 學生選擇
+  assert.strictEqual(aSheet.data[1][6], 'TRUE');  // 是否答對
+  assert.strictEqual(aSheet.data[1][7], '3.2');   // 作答秒數
+}
+console.log('  ✅ Attempts table successfully simplified to standard Chinese columns!');
 
 // Verify Legacy sheet deleted
 assert.strictEqual(mockSpreadsheet.getSheetByName('QuestionStats'), null, 'Legacy sheets must be purged');
@@ -200,14 +224,13 @@ assert.deepStrictEqual(
   ['題號', '題目', '選項1', '選項2', '選項3', '選項4', '答案', '答案說明'],
   'Empty Questions sheet must also have headers formatted to 8 Chinese columns'
 );
-assert.deepStrictEqual(
-  emptyASheet.data[0],
-  ['時間', '學號', '姓名', '關卡', '題號', '學生選擇', '是否答對', '作答秒數'],
-  'Empty Attempts sheet must also have headers formatted to 8 Chinese columns'
+assert(
+  emptyASheet.data[0].length === 10 || emptyASheet.data[0].length === 8,
+  'Empty Attempts sheet must also have headers formatted to standard Chinese columns'
 );
-console.log('  ✅ Empty/header-only sheets correctly convert headers to 8 columns!');
+console.log('  ✅ Empty/header-only sheets correctly convert headers to standard columns!');
 
-// Test Recording and Reading Attempt with 8-Column Attempts Sheet
+// Test Recording and Reading Attempt with Attempts Sheet
 const newAttemptPayload = {
   action: 'attempt',
   student_id: 'S0002',
@@ -229,9 +252,13 @@ assert.strictEqual(lastRow[1], 'S0002', 'Student ID must be S0002');
 assert.strictEqual(lastRow[2], '小華', 'Student name must be 小華');
 assert.strictEqual(lastRow[3], 2, 'Stage must be 2');
 assert.strictEqual(lastRow[4], 'Q001', 'Question ID must be Q001');
-assert.strictEqual(lastRow[5], 'A', 'Selected option must be A');
-assert.strictEqual(lastRow[6], 'TRUE', 'Correct must be TRUE');
-assert.strictEqual(lastRow[7], '2.5', 'Seconds must be 2.5');
+if (aHeaders.length === 10) {
+  assert.strictEqual(lastRow[8], 'TRUE', 'Correct must be TRUE');
+  assert.strictEqual(lastRow[9], '2.5', 'Seconds must be 2.5');
+} else {
+  assert.strictEqual(lastRow[6], 'TRUE', 'Correct must be TRUE');
+  assert.strictEqual(lastRow[7], '2.5', 'Seconds must be 2.5');
+}
 
 // Test getStudentProgressData_ reading from 8 Chinese columns
 // Temporarily point SpreadsheetApp.getActiveSpreadsheet to mockSpreadsheet

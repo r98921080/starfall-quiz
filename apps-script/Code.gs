@@ -5,22 +5,22 @@ const SHEETS = {
   STUDENTS: 'Students' // 相容舊版，若不存在會自動從 Attempts 整合學生名冊
 };
 
-// 極簡 3 分頁架構：僅保留 Questions (題庫 8 欄) 與 Attempts (作答紀錄 8 欄)，其餘報表全由 ParentDashboard 呈現
+// 極簡 3 分頁架構：僅保留 Questions (題庫 8 欄) 與 Attempts (作答紀錄 10 欄)，其餘報表全由 ParentDashboard 呈現
 const REQUIRED_HEADERS = {
   Questions: [
     '題號', '題目', '選項1', '選項2', '選項3', '選項4', '答案', '答案說明'
   ],
   Attempts: [
-    '時間', '學號', '姓名', '關卡', '題號', '學生選擇', '是否答對', '作答秒數'
+    '時間', '學號', '姓名', '關卡', '題號', '題目', '選擇的答案', '正確答案', '是否答對', '作答秒數'
   ]
 };
 
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('🌟 星墜答問')
-    .addItem('🚀 一鍵極簡化全部表格 (Questions 8欄 + Attempts 8欄 + 清理多餘分頁)', 'simplifyAllTables')
+    .addItem('🚀 一鍵極簡化全部表格 (Questions 8欄 + Attempts 10欄 + 清理多餘分頁)', 'simplifyAllTables')
     .addItem('🔄 一鍵簡化題庫為 8 欄 (Questions)', 'simplifyQuestionsColumns')
-    .addItem('📝 一鍵簡化作答紀錄為 8 欄 (Attempts)', 'simplifyAttemptsColumns')
+    .addItem('📝 一鍵簡化作答紀錄為 10 欄 (Attempts)', 'simplifyAttemptsColumns')
     .addItem('🧹 一鍵清理多餘分頁 (只留 3 個核心分頁)', 'cleanAllExtraSheets')
     .addItem('📊 立即更新家長報表 (ParentDashboard)', 'refreshReports')
     .addItem('✨ 題庫智慧去重清洗', 'cleanDuplicateQuestions')
@@ -32,7 +32,7 @@ function setupStarfall() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const res = simplifyAllTables_(ss);
   logActivity_('SETUP', '初始化完成，極簡家長總覽資料表與報表已建立。');
-  SpreadsheetApp.getUi().alert('初始化完成', '已檢查資料表並將工作表極簡化為 3 個核心分頁：\n1. 【ParentDashboard】家長學習總覽\n2. 【Questions】題目庫 (8 欄極簡模式，共 ' + res.questions_count + ' 題)\n3. 【Attempts】即時作答紀錄 (8 欄極簡模式，共 ' + res.attempts_count + ' 筆紀錄)', SpreadsheetApp.getUi().ButtonSet.OK);
+  SpreadsheetApp.getUi().alert('初始化完成', '已檢查資料表並將工作表極簡化為 3 個核心分頁：\n1. 【ParentDashboard】家長學習總覽\n2. 【Questions】題目庫 (8 欄極簡模式，共 ' + res.questions_count + ' 題)\n3. 【Attempts】即時作答紀錄 (10 欄完整記錄模式，包含題目與正確答案，共 ' + res.attempts_count + ' 筆紀錄)', SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function doGet(e) {
@@ -78,7 +78,7 @@ function doGet(e) {
     return jsonOutput_({
       ok: true,
       service: 'Starfall Quiz Learning API',
-      version: '1.4.4',
+      version: '1.4.5',
       active_sheets: ss.getSheets().map(function(s) { return s.getName(); }),
       actions: ['questions', 'students', 'student_progress', 'register_student', 'attempt', 'attempt_batch', 'settings', 'report', 'clean_questions', 'clean_sheets', 'simplify_questions', 'simplify_attempts', 'simplify_all']
     });
@@ -347,6 +347,18 @@ function normalizeAnswerToIndex_(rawAns, opts) {
   }
 
   return 0; // 預設第 1 個選項
+}
+
+/**
+ * 格式化選項為「序號：選項文字」格式（例如「1：緣木求魚」、「3：目無全牛」）
+ */
+function formatOptionWithIndex_(idx, optText) {
+  if (typeof idx !== 'number' || idx < 0) return String(optText || '').trim();
+  const num = idx + 1;
+  const clean = String(optText || '')
+    .replace(/^(?:[(（\[【]?[1-4A-Da-d①②③④❶❷❸❹⑴⑵⑶⑷一二三四][)）\]】.:、：\s-]+|\s+)/, '')
+    .trim();
+  return clean ? (num + '：' + clean) : String(num);
 }
 
 function parseQuestionRow_(row, idx) {
@@ -626,6 +638,8 @@ function normalizeAttempt_(payload, ss) {
   if (!question) {
     question = {
       question_id: payload.question_id,
+      question: payload.question || '',
+      options: ['選項1', '選項2', '選項3', '選項4'],
       difficulty: Number(payload.difficulty_at_time) || 1,
       subject: payload.subject || '國語文',
       unit: payload.unit || '',
@@ -635,10 +649,44 @@ function normalizeAttempt_(payload, ss) {
       concept_tags: payload.concept_tags || ''
     };
   }
-  const selected = String(payload.selected_option || '').trim().toUpperCase();
+
+  const qText = String(payload.question || (question && question.question) || '').trim();
+  const rawSel = String(payload.selected_option || '').trim();
+
+  // 1. 學生選擇格式化（例如 3：目無全牛）
+  let selectedFull = rawSel;
+  if (question && question.options && question.options.length) {
+    if (rawSel.indexOf('：') === -1 && rawSel.indexOf(':') === -1) {
+      const selIdx = normalizeAnswerToIndex_(rawSel, question.options);
+      selectedFull = formatOptionWithIndex_(selIdx, question.options[selIdx]);
+    } else {
+      const parts = rawSel.split(/[:：]/);
+      const selIdx = normalizeAnswerToIndex_(parts[0], question.options);
+      const optTxt = parts.slice(1).join('：').trim() || (question.options[selIdx] || '');
+      selectedFull = formatOptionWithIndex_(selIdx, optTxt);
+    }
+  }
+
+  // 2. 正確答案格式化（例如 1：緣木求魚）
+  let rawCor = String(payload.correct_answer || '').trim();
+  let correctFull = rawCor;
+  if (!correctFull && question && question.options && question.options.length) {
+    const corIdx = question.ans !== undefined ? question.ans : normalizeAnswerToIndex_(question.answer, question.options);
+    correctFull = formatOptionWithIndex_(corIdx, question.options[corIdx]);
+  } else if (correctFull && question && question.options && question.options.length && correctFull.indexOf('：') === -1 && correctFull.indexOf(':') === -1) {
+    const corIdx = normalizeAnswerToIndex_(correctFull, question.options);
+    correctFull = formatOptionWithIndex_(corIdx, question.options[corIdx]);
+  } else if (correctFull && question && question.options && question.options.length) {
+    const parts = correctFull.split(/[:：]/);
+    const corIdx = normalizeAnswerToIndex_(parts[0], question.options);
+    const optTxt = parts.slice(1).join('：').trim() || (question.options[corIdx] || '');
+    correctFull = formatOptionWithIndex_(corIdx, optTxt);
+  }
+
   const correct = (payload.correct !== undefined && payload.correct !== null)
     ? toBool_(payload.correct)
-    : (normalizeAnswerToIndex_(selected) === normalizeAnswerToIndex_(question.answer));
+    : (normalizeAnswerToIndex_(rawSel, question.options) === normalizeAnswerToIndex_(question.answer, question.options));
+
   const sid = String(payload.student_id || 'S0001');
   const sName = String(payload.student_name || payload.display_name || sid);
   const resMs = Math.max(0, Number(payload.response_time_ms) || 0);
@@ -662,7 +710,9 @@ function normalizeAttempt_(payload, ss) {
     stage: stageNum,
     boss_name: payload.boss_name || '',
     question_id: qid,
-    selected_option: selected,
+    question: qText,
+    selected_option: selectedFull,
+    correct_answer: correctFull,
     correct: correct,
     response_time_ms: resMs,
     attempt_index: Number(payload.attempt_index) || priorAttempts + 1,
@@ -678,15 +728,19 @@ function normalizeAttempt_(payload, ss) {
     weapon_quality: payload.weapon_quality || 'normal',
     sync_status: payload.student_name ? ('已同步 (' + payload.student_name + ')') : '已同步',
 
-    // 繁體中文 8 欄標準鍵
+    // 繁體中文 10 欄標準鍵（兼顧舊標題別名）
     '時間': timeStr,
     '學號': sid,
     '姓名': sName,
     '年級': payload.student_grade || '三年級',
     '關卡': stageNum,
     '題號': qid,
-    '學生選擇': selected,
-    '選擇': selected,
+    '題目': qText,
+    '選擇的答案': selectedFull,
+    '學生選擇': selectedFull,
+    '選擇': selectedFull,
+    '正確答案': correctFull,
+    '答案': correctFull,
     '是否答對': correct ? 'TRUE' : 'FALSE',
     '答對': correct ? 'TRUE' : 'FALSE',
     '作答秒數': (resMs / 1000).toFixed(1),
@@ -1159,17 +1213,37 @@ function getAttemptsSheet_(ss) {
   return null;
 }
 
+function ensureAttemptsHeaders_(sheet, ss) {
+  if (!sheet || sheet.getLastRow() < 1) return;
+  const headers = getHeaders_(sheet);
+  if (headers.indexOf('題目') === -1 || (headers.indexOf('正確答案') === -1 && headers.indexOf('答案') === -1)) {
+    if (sheet.getLastRow() <= 1) {
+      sheet.getRange(1, 1, 1, REQUIRED_HEADERS.Attempts.length).setValues([REQUIRED_HEADERS.Attempts]);
+      sheet.setFrozenRows(1);
+      sheet.autoResizeColumns(1, REQUIRED_HEADERS.Attempts.length);
+    } else {
+      try {
+        simplifyAttemptsColumns_(ss);
+      } catch (e) {
+        console.warn('Auto upgrade attempts headers error:', e);
+      }
+    }
+  }
+}
+
 function getOrCreateAttemptsSheet_(ss) {
   if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = getAttemptsSheet_(ss);
   if (!sheet) {
     sheet = ensureSheetAndHeaders_(ss, SHEETS.ATTEMPTS, REQUIRED_HEADERS.Attempts);
+  } else {
+    ensureAttemptsHeaders_(sheet, ss);
   }
   return sheet;
 }
 
 /**
- * 試算表選單專用：一鍵將作答紀錄簡化為 8 欄極簡模式
+ * 試算表選單專用：一鍵將作答紀錄更新為 10 欄完整模式（包含題目、選擇答案與正確答案）
  */
 function simplifyAttemptsColumns() {
   let ui = null;
@@ -1177,10 +1251,11 @@ function simplifyAttemptsColumns() {
 
   if (ui) {
     const resp = ui.alert(
-      '確認簡化作答紀錄欄位為 8 欄',
-      '此操作將會把【Attempts】作答紀錄工作表轉換為極簡 8 欄：\n' +
-      '【時間】｜【學號】｜【姓名】｜【關卡】｜【題號】｜【學生選擇】｜【是否答對】｜【作答秒數】\n\n' +
-      '所有學生的作答歷史紀錄都會 100% 完整保留！\n確定要開始執行簡化轉換嗎？',
+      '確認更新作答紀錄欄位 (包含題目與正確答案)',
+      '此操作將會把【Attempts】作答紀錄工作表整理為 10 欄標準格式：\n' +
+      '【時間】｜【學號】｜【姓名】｜【關卡】｜【題號】｜【題目】｜【選擇的答案】｜【正確答案】｜【是否答對】｜【作答秒數】\n\n' +
+      '• 系統將自動比對題庫，為所有紀錄補齊「題目」、「選擇的答案 (如 3：目無全牛)」與「正確答案 (如 1：緣木求魚)」。\n' +
+      '• 所有學生的作答歷史紀錄都會 100% 完整保留！\n確定要開始執行更新轉換嗎？',
       ui.ButtonSet.YES_NO
     );
     if (resp !== ui.Button.YES && String(resp).toUpperCase() !== 'YES') return;
@@ -1191,9 +1266,9 @@ function simplifyAttemptsColumns() {
     if (ui) {
       ui.alert(
         '轉換完成！',
-        '作答紀錄已成功簡化為 8 欄極簡格式！\n' +
+        '作答紀錄已成功更新為 10 欄完整記錄格式！\n' +
         '• 成功處理作答數：' + res.count + ' 筆\n' +
-        '• 目前欄位：時間、學號、姓名、關卡、題號、學生選擇、是否答對、作答秒數',
+        '• 目前欄位：時間、學號、姓名、關卡、題號、題目、選擇的答案、正確答案、是否答對、作答秒數',
         ui.ButtonSet.OK
       );
     }
@@ -1209,7 +1284,7 @@ function simplifyAttemptsColumns() {
 function simplifyAttemptsColumns_(ss) {
   if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = getAttemptsSheet_(ss);
-  const targetHeaders = ['時間', '學號', '姓名', '關卡', '題號', '學生選擇', '是否答對', '作答秒數'];
+  const targetHeaders = REQUIRED_HEADERS.Attempts;
 
   if (!sheet) {
     sheet = ss.insertSheet(SHEETS.ATTEMPTS);
@@ -1222,6 +1297,16 @@ function simplifyAttemptsColumns_(ss) {
       .setFontWeight('bold')
       .setHorizontalAlignment('center');
     return { ok: true, count: 0 };
+  }
+
+  // 預先加載題庫映射表，以便為既有紀錄自動補齊題目與正確答案
+  const qSheet = getQuestionsSheet_(ss);
+  const qMap = {};
+  if (qSheet) {
+    sheetObjects_(qSheet).forEach(function(r, i) {
+      const q = parseQuestionRow_(r, i);
+      if (q && q.question_id) qMap[String(q.question_id).trim()] = q;
+    });
   }
 
   const rows = sheetObjects_(sheet);
@@ -1267,7 +1352,38 @@ function simplifyAttemptsColumns_(ss) {
     const sName = String(row['姓名'] || row.student_name || row.display_name || sid).trim();
     const stg = Number(row['關卡'] || row.stage) || 1;
     const qid = String(row['題號'] || row.question_id || '').trim();
-    const sel = String(row['學生選擇'] || row['選擇'] || row.selected_option || '').trim().toUpperCase();
+    const qObj = qMap[qid] || null;
+    const qText = String(row['題目'] || (qObj && qObj.question) || row.question || '').trim();
+
+    // 格式化 選擇的答案（例如 3：目無全牛）
+    let selVal = String(row['選擇的答案'] || row['學生選擇'] || row['選擇'] || row.selected_option || '').trim();
+    if (qObj && qObj.options && qObj.options.length) {
+      if (selVal.indexOf('：') === -1 && selVal.indexOf(':') === -1) {
+        const selIdx = normalizeAnswerToIndex_(selVal, qObj.options);
+        selVal = formatOptionWithIndex_(selIdx, qObj.options[selIdx]);
+      } else {
+        const parts = selVal.split(/[:：]/);
+        const selIdx = normalizeAnswerToIndex_(parts[0], qObj.options);
+        const optTxt = parts.slice(1).join('：').trim() || (qObj.options[selIdx] || '');
+        selVal = formatOptionWithIndex_(selIdx, optTxt);
+      }
+    }
+
+    // 格式化 正確答案（例如 1：緣木求魚）
+    let corVal = String(row['正確答案'] || row['答案'] || row.correct_answer || '').trim();
+    if (!corVal && qObj && qObj.options && qObj.options.length) {
+      const corIdx = qObj.ans !== undefined ? qObj.ans : normalizeAnswerToIndex_(qObj.answer, qObj.options);
+      corVal = formatOptionWithIndex_(corIdx, qObj.options[corIdx]);
+    } else if (corVal && qObj && qObj.options && qObj.options.length && corVal.indexOf('：') === -1 && corVal.indexOf(':') === -1) {
+      const corIdx = normalizeAnswerToIndex_(corVal, qObj.options);
+      corVal = formatOptionWithIndex_(corIdx, qObj.options[corIdx]);
+    } else if (corVal && qObj && qObj.options && qObj.options.length) {
+      const parts = corVal.split(/[:：]/);
+      const corIdx = normalizeAnswerToIndex_(parts[0], qObj.options);
+      const optTxt = parts.slice(1).join('：').trim() || (qObj.options[corIdx] || '');
+      corVal = formatOptionWithIndex_(corIdx, optTxt);
+    }
+
     const correctVal = row['是否答對'] !== undefined ? row['是否答對'] : (row['答對'] !== undefined ? row['答對'] : row.correct);
     const isCorrect = toBool_(correctVal);
 
@@ -1284,7 +1400,9 @@ function simplifyAttemptsColumns_(ss) {
       sName,
       stg,
       qid,
-      sel,
+      qText,
+      selVal,
+      corVal,
       isCorrect ? 'TRUE' : 'FALSE',
       secVal
     ];
@@ -1294,7 +1412,7 @@ function simplifyAttemptsColumns_(ss) {
   sheet.clearContents();
   sheet.clearFormats();
 
-  // 2. 調整欄位數為 8 欄（刪除第 9~21 欄多餘欄位）
+  // 2. 調整欄位數為 10 欄（刪除第 11 欄起多餘欄位）
   if (sheet.getMaxColumns() < targetHeaders.length) {
     sheet.insertColumnsAfter(sheet.getMaxColumns(), targetHeaders.length - sheet.getMaxColumns());
   } else if (sheet.getMaxColumns() > targetHeaders.length) {
@@ -1313,6 +1431,7 @@ function simplifyAttemptsColumns_(ss) {
   if (newRows.length > 0) {
     sheet.getRange(2, 1, newRows.length, targetHeaders.length).setValues(newRows);
   }
+
   sheet.setFrozenRows(1);
   sheet.autoResizeColumns(1, targetHeaders.length);
   sheet.getRange(1, 1, 1, targetHeaders.length)
@@ -1325,7 +1444,7 @@ function simplifyAttemptsColumns_(ss) {
 }
 
 /**
- * 試算表選單專用：一鍵極簡化全部表格 (Questions 8欄 + Attempts 8欄 + 清理多餘分頁)
+ * 試算表選單專用：一鍵極簡化全部表格 (Questions 8欄 + Attempts 10欄 + 清理多餘分頁)
  */
 function simplifyAllTables() {
   let ui = null;
@@ -1337,7 +1456,7 @@ function simplifyAllTables() {
       '此操作將會把整個試算表極簡化為 3 大核心分頁：\n' +
       '1. 【ParentDashboard】家長學習總覽（自動統計）\n' +
       '2. 【Questions】題庫：極簡 8 欄 (題號、題目、選項1~4、答案、說明)\n' +
-      '3. 【Attempts】作答紀錄：極簡 8 欄 (時間、學號、姓名、關卡、題號、學生選擇、是否答對、作答秒數)\n\n' +
+      '3. 【Attempts】作答紀錄：10 欄完整模式 (時間、學號、姓名、關卡、題號、題目、選擇的答案、正確答案、是否答對、作答秒數)\n\n' +
       '所有既有題目與作答歷史都會 100% 完整保留！\n確定要開始執行嗎？',
       ui.ButtonSet.YES_NO
     );
@@ -1351,7 +1470,7 @@ function simplifyAllTables() {
         '極簡化全部表格完成！',
         '試算表已成功完成極簡化：\n' +
         '• 題庫 (Questions)：已整理為 8 欄，共 ' + res.questions_count + ' 題\n' +
-        '• 作答紀錄 (Attempts)：已整理為 8 欄，共 ' + res.attempts_count + ' 筆紀錄\n' +
+        '• 作答紀錄 (Attempts)：已整理為 10 欄完整記錄，共 ' + res.attempts_count + ' 筆紀錄\n' +
         '• 家長總覽 (ParentDashboard)：已同步更新最新統計報表！\n' +
         '• 多餘分頁：已全數清理完畢！',
         ui.ButtonSet.OK

@@ -2330,7 +2330,31 @@ class DataStore {
 
     // 跨局題幹指紋更新 (Mastered vs Mistake，杜絕不同 ID 但同題幹之重複題)
     // 依據規則：新題答對 (wrong === 0) 或錯題累積正確率超過 50% 視為掌握 (Mastered)，避免出現在後續輪次中！
-    const qText = attempt.question || (this.questionBank && (this.questionBank.find(q => q.question_id === qid) || {}).question) || '';
+    const qObj = this.questionBank && this.questionBank.find(q => q.question_id === qid);
+    const qText = String(attempt.question || (qObj && qObj.question) || '').trim();
+
+    // 格式化正確解答（包含選項名稱，如「1：緣木求魚」）
+    let corAns = String(attempt.correct_answer || '').trim();
+    if (!corAns && qObj && qObj.opts && qObj.opts.length) {
+      const cleanOptText = (txt) => String(txt || '').replace(/^(?:[(（\[【]?[1-4A-Da-d①②③④❶❷❸❹⑴⑵⑶⑷一二三四][)）\]】.:、：\s-]+|\s+)/, '').trim();
+      const corIdx = qObj.ans !== undefined ? qObj.ans : 0;
+      const cleanCor = cleanOptText(qObj.opts[corIdx]);
+      corAns = cleanCor ? `${corIdx + 1}：${cleanCor}` : `${corIdx + 1}`;
+    }
+
+    // 格式化選擇解答（包含選項名稱，如「3：目無全牛」）
+    let selAns = String(attempt.selected_option || '').trim();
+    if (selAns && !selAns.includes('：') && !selAns.includes(':') && qObj && qObj.opts && qObj.opts.length) {
+      const cleanOptText = (txt) => String(txt || '').replace(/^(?:[(（\[【]?[1-4A-Da-d①②③④❶❷❸❹⑴⑵⑶⑷一二三四][)）\]】.:、：\s-]+|\s+)/, '').trim();
+      const selIdx = normalizeAnswerToIndex(selAns, qObj.opts);
+      const cleanSel = cleanOptText(qObj.opts[selIdx]);
+      selAns = cleanSel ? `${selIdx + 1}：${cleanSel}` : `${selIdx + 1}`;
+    }
+
+    attempt.question = qText;
+    attempt.correct_answer = corAns;
+    attempt.selected_option = selAns;
+
     const fp = this.getQuestionFingerprint(qText);
     const accuracy = p.attempts > 0 ? ((p.attempts - (p.wrong || 0)) / p.attempts) : 0;
     const isMastered = (p.wrong === 0) || (accuracy > 0.5);
@@ -2343,7 +2367,6 @@ class DataStore {
         this.saveFingerprintsToStorage();
       } else {
         this.masteredFingerprints.delete(fp);
-        const qObj = this.questionBank && this.questionBank.find(q => q.question_id === qid);
         this.mistakeMap[fp] = qObj ? { ...qObj } : { question_id: qid, question: qText, grade: attempt.student_grade };
         this.saveFingerprintsToStorage();
       }
@@ -2389,7 +2412,9 @@ class DataStore {
           student_name: attempt.student_name,
           student_grade: attempt.student_grade,
           question_id: qid,
-          selected_option: attempt.selected_option || '',
+          question: qText,
+          selected_option: attempt.selected_option || selAns || '',
+          correct_answer: attempt.correct_answer || corAns || '',
           correct: !!attempt.correct,
           stage: Number(attempt.stage || 1),
           boss_name: attempt.boss_name || '',
@@ -2432,7 +2457,9 @@ class DataStore {
               student_name: attempt.student_name,
               student_grade: attempt.student_grade,
               question_id: qid,
-              selected_option: attempt.selected_option || '',
+              question: qText,
+              selected_option: attempt.selected_option || selAns || '',
+              correct_answer: attempt.correct_answer || corAns || '',
               correct: attempt.correct ? 'true' : 'false',
               stage: String(attempt.stage || 1),
               boss_name: attempt.boss_name || '',
@@ -8830,10 +8857,25 @@ class Game {
     }
 
     if (this.dataStore) {
+      // 依使用者需求，格式化作答與解答為「序號：選項文字」（例如 1：緣木求魚、3：目無全牛）
+      const cleanOptText = (txt) => {
+        return String(txt || '')
+          .replace(/^(?:[(（\[【]?[1-4A-Da-d①②③④❶❷❸❹⑴⑵⑶⑷一二三四][)）\]】.:、：\s-]+|\s+)/, '')
+          .trim();
+      };
+      const selOptRaw = (q.opts && q.opts[selectedIdx] !== undefined) ? q.opts[selectedIdx] : '';
+      const cleanSel = cleanOptText(selOptRaw);
+      const selectedOptionFormatted = cleanSel ? `${selectedIdx + 1}：${cleanSel}` : `${selectedIdx + 1}`;
+
+      const corOptRaw = (q.opts && q.opts[q.ans] !== undefined) ? q.opts[q.ans] : '';
+      const cleanCor = cleanOptText(corOptRaw);
+      const correctAnswerFormatted = cleanCor ? `${q.ans + 1}：${cleanCor}` : `${q.ans + 1}`;
+
       this.dataStore.recordAttempt({
         question_id: q.question_id,
         question: q.question,
-        selected_option: `${selectedIdx + 1} (${'ABCD'[selectedIdx]})`,
+        selected_option: selectedOptionFormatted,
+        correct_answer: correctAnswerFormatted,
         correct: isCorrect,
         timestamp: new Date().toISOString(),
         stage: this.stage,
