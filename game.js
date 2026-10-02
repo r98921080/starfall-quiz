@@ -4188,6 +4188,70 @@ class Game {
         `;
       }
     };
+
+    const simplifyBtn = document.getElementById('gsSimplifyBtn');
+    if (simplifyBtn) {
+      simplifyBtn.onclick = async () => {
+        const url = document.getElementById('gsUrlInput').value.trim();
+        if (!url || !url.startsWith('http')) {
+          this.showToast('❌ 請先輸入有效的 Apps Script Web App 網址');
+          return;
+        }
+        document.getElementById('gsStatusBox').innerHTML = '<span style="color:var(--gold);">⏳ 正在遠端轉換題庫為 8 欄極簡模式中，請稍候...</span>';
+        try {
+          const reqUrl = `${url}${url.includes('?') ? '&' : '?'}action=simplify_questions`;
+          const res = await fetch(reqUrl);
+          const data = await res.json();
+          if (data && data.ok) {
+            this.showToast('✅ 題庫已成功轉換為 8 欄極簡模式！');
+            // 立即重新加載題庫
+            await this.dataStore.loadFromGoogleSheet(url);
+            document.getElementById('gsStatusBox').innerHTML = `
+              <span style="color:var(--green); font-weight:800;">✅ 題庫轉化 8 欄成功！</span><br>
+              處理題數：<b>${(data.result && data.result.count) || this.dataStore.questionBank.length}</b> 題。<br>
+              欄位已精簡為：題號、題目、選項1、選項2、選項3、選項4、答案、答案說明。<br>
+              已即時同步載入遊戲題庫！
+            `;
+          } else {
+            document.getElementById('gsStatusBox').innerHTML = `<span style="color:var(--red);">❌ 轉換失敗：${(data && data.error) || '未知錯誤'}</span>`;
+          }
+        } catch (err) {
+          document.getElementById('gsStatusBox').innerHTML = `<span style="color:var(--red);">❌ 遠端指令失敗：${err.message}</span>`;
+        }
+      };
+    }
+
+    const cleanSheetsBtn = document.getElementById('gsCleanSheetsBtn');
+    if (cleanSheetsBtn) {
+      cleanSheetsBtn.onclick = async () => {
+        const url = document.getElementById('gsUrlInput').value.trim();
+        if (!url || !url.startsWith('http')) {
+          this.showToast('❌ 請先輸入有效的 Apps Script Web App 網址');
+          return;
+        }
+        document.getElementById('gsStatusBox').innerHTML = '<span style="color:var(--gold);">⏳ 正在遠端清理多餘工作表，請稍候...</span>';
+        try {
+          const reqUrl = `${url}${url.includes('?') ? '&' : '?'}action=clean_sheets`;
+          const res = await fetch(reqUrl);
+          const data = await res.json();
+          if (data && data.ok) {
+            const delList = (data.result && data.result.deleted && data.result.deleted.length > 0)
+              ? `已刪除多餘分頁：${data.result.deleted.join('、')}`
+              : '目前已是極簡 3 分頁狀態，無多餘分頁。';
+            this.showToast('✅ 試算表極簡化完成！');
+            document.getElementById('gsStatusBox').innerHTML = `
+              <span style="color:var(--green); font-weight:800;">✅ 試算表極簡化完成！</span><br>
+              ${delList}<br>
+              保留核心三大分頁：<code>ParentDashboard</code>、<code>Questions</code>、<code>Attempts</code>。
+            `;
+          } else {
+            document.getElementById('gsStatusBox').innerHTML = `<span style="color:var(--red);">❌ 清理失敗：${(data && data.error) || '未知錯誤'}</span>`;
+          }
+        } catch (err) {
+          document.getElementById('gsStatusBox').innerHTML = `<span style="color:var(--red);">❌ 遠端指令失敗：${err.message}</span>`;
+        }
+      };
+    }
   }
 
   // ============================================================

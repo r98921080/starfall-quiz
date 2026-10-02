@@ -173,6 +173,64 @@ const matchA = testUrlA.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
 assert(matchA && matchA[1] === '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms');
 console.log('  ✅ Google 試算表網址能精準辨識並轉換為 CSV 直連位址！');
 
+console.log('\n--- 3. Testing Smart Header Row Detection & UI Remote Buttons ---');
+
+// 驗證 sheetObjects_ 的智慧標題列識別
+const sheetObjectsMatch = codeGs.match(/function sheetObjects_\(sheet\) \{([\s\S]*?)\n\}\n\nfunction getHeaders_/);
+assert(sheetObjectsMatch, '必須在 Code.gs 找到 sheetObjects_');
+const sheetObjects_ = new Function('sheet', sheetObjectsMatch[1]);
+
+// 模擬試算表 A：第 1 列是廣告橫幅，第 2 列才是標題
+const fakeSheetA = {
+  getLastRow: () => 4,
+  getDataRange: () => ({
+    getValues: () => [
+      ['三年級國語題庫精選 3000 題（請勿任意更動標題）', '', '', '', '', '', '', ''],
+      ['題號', '題目', '選項1', '選項2', '選項3', '選項4', '答案', '答案說明'],
+      ['Q01', '床前明月光下一句？', '疑是地上霜', '舉頭望明月', '低頭思故鄉', '春眠不覺曉', '1', '李白《靜夜思》'],
+      ['Q02', '太陽是恆星還是行星？', '恆星', '行星', '衛星', '彗星', '1', '太陽是太陽系的中心恆星']
+    ]
+  })
+};
+const objsA = sheetObjects_(fakeSheetA);
+assert.strictEqual(objsA.length, 2, '應自動略過橫幅列，正確讀取 2 列題目資料');
+assert.strictEqual(objsA[0]['題目'], '床前明月光下一句？');
+console.log('  ✅ sheetObjects_ 成功自動識別第 2 列標題並略過第 1 列橫幅！');
+
+// 模擬試算表 B：完全無標題，直接貼上 8 欄資料
+const fakeSheetB = {
+  getLastRow: () => 2,
+  getDataRange: () => ({
+    getValues: () => [
+      ['Q01', '一隻青蛙幾條腿？', '1', '2', '3', '4', '4', '成蛙四條腿'],
+      ['Q02', '三角形內角和？', '90度', '180度', '270度', '360度', '2', '平面三角形內角和180度']
+    ]
+  })
+};
+const objsB = sheetObjects_(fakeSheetB);
+assert.strictEqual(objsB.length, 2, '無標題模式應完整保留 2 列題目資料');
+assert.strictEqual(objsB[0]['題目'], '一隻青蛙幾條腿？');
+console.log('  ✅ sheetObjects_ 無標題直接貼上模式自動合成 8 欄標題成功！');
+
+// 驗證 index.html 包含遠端一鍵轉化按鈕
+const indexHtmlPath = path.join(__dirname, '../index.html');
+const indexHtml = fs.readFileSync(indexHtmlPath, 'utf8');
+assert(indexHtml.includes('id="gsSimplifyBtn"'), 'index.html 必須包含 gsSimplifyBtn 按鈕');
+assert(indexHtml.includes('id="gsCleanSheetsBtn"'), 'index.html 必須包含 gsCleanSheetsBtn 按鈕');
+console.log('  ✅ index.html 已提供「遠端一鍵轉化題庫為 8 欄」與「遠端極簡化為 3 分頁」按鈕！');
+
+// 驗證 game.js 綁定 gsSimplifyBtn 事件
+assert(gameJs.includes("document.getElementById('gsSimplifyBtn')"), 'game.js 必須綁定 gsSimplifyBtn');
+assert(gameJs.includes("action=simplify_questions"), 'game.js 必須發送 action=simplify_questions');
+assert(gameJs.includes("action=clean_sheets"), 'game.js 必須發送 action=clean_sheets');
+console.log('  ✅ game.js 遠端 8 欄轉換與分頁清理按鈕事件綁定正確！');
+
+// 驗證 simplifyQuestionsColumns_ 不再有 ui.ButtonSet.YES bug
+const liveCodeGs = fs.readFileSync(codeGsPath, 'utf8');
+assert(!/resp\s*!==\s*ui\.ButtonSet\.YES\b/.test(liveCodeGs), 'Code.gs 絕不能有 resp !== ui.ButtonSet.YES bug');
+assert(liveCodeGs.includes('ui.Button.YES'), 'Code.gs 必須使用 ui.Button.YES');
+console.log('  ✅ Apps Script 試算表選單確認按鈕修復完成（ui.Button.YES）！');
+
 console.log('\n========================================');
 console.log('🎉 ALL BUILD-042 VERIFICATION TESTS PASSED!');
 console.log('========================================');

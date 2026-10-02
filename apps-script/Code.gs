@@ -887,64 +887,101 @@ function ensureReportSheets_(ss) {
  * 試算表選單專用：一鍵將題庫簡化為 8 欄極簡模式
  */
 function simplifyQuestionsColumns() {
-  const ui = SpreadsheetApp.getUi();
-  const resp = ui.alert(
-    '確認簡化題庫欄位為 8 欄',
-    '此操作將會把【Questions】工作表轉換為極簡 8 欄：\n' +
-    '【題號】｜【題目】｜【選項1】｜【選項2】｜【選項3】｜【選項4】｜【答案】｜【答案說明】\n\n' +
-    '所有題目的內容、選項、答案與說明都會 100% 完整保留！\n確定要開始執行簡化轉換嗎？',
-    ui.ButtonSet.YES_NO
-  );
-  if (resp !== ui.ButtonSet.YES) return;
+  let ui = null;
+  try {
+    ui = SpreadsheetApp.getUi();
+  } catch (e) {
+    ui = null;
+  }
+
+  if (ui) {
+    const resp = ui.alert(
+      '確認簡化題庫欄位為 8 欄',
+      '此操作將會把【Questions】工作表轉換為極簡 8 欄：\n' +
+      '【題號】｜【題目】｜【選項1】｜【選項2】｜【選項3】｜【選項4】｜【答案】｜【答案說明】\n\n' +
+      '所有題目的內容、選項、答案與說明都會 100% 完整保留！\n確定要開始執行簡化轉換嗎？',
+      ui.ButtonSet.YES_NO
+    );
+    if (resp !== ui.Button.YES && String(resp).toUpperCase() !== 'YES') return;
+  }
 
   try {
     const res = simplifyQuestionsColumns_();
-    ui.alert(
-      '轉換完成！',
-      '題庫已成功簡化為 8 欄極簡格式！\n' +
-      '• 成功處理題數：' + res.count + ' 題\n' +
-      '• 目前欄位：題號、題目、選項1、選項2、選項3、選項4、答案、答案說明',
-      ui.ButtonSet.OK
-    );
+    if (ui) {
+      ui.alert(
+        '轉換完成！',
+        '題庫已成功簡化為 8 欄極簡格式！\n' +
+        '• 成功處理題數：' + res.count + ' 題\n' +
+        '• 目前欄位：題號、題目、選項1、選項2、選項3、選項4、答案、答案說明',
+        ui.ButtonSet.OK
+      );
+    }
   } catch (err) {
-    ui.alert('轉換失敗', '錯誤原因：' + String(err.message || err), ui.ButtonSet.OK);
+    if (ui) {
+      ui.alert('轉換失敗', '錯誤原因：' + String(err.message || err), ui.ButtonSet.OK);
+    } else {
+      throw err;
+    }
   }
 }
 
 function simplifyQuestionsColumns_(ss) {
   if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = getQuestionsSheet_(ss);
-  if (!sheet) throw new Error('找不到 Questions 工作表');
+  if (!sheet) throw new Error('找不到 Questions 或題庫工作表，請確認分頁名稱包含 Questions 或題庫。');
 
   const rows = sheetObjects_(sheet);
   if (rows.length === 0) return { ok: true, count: 0 };
 
   const targetHeaders = ['題號', '題目', '選項1', '選項2', '選項3', '選項4', '答案', '答案說明'];
-  const newRows = rows.map(function(row, idx) {
+  const newRows = [];
+  rows.forEach(function(row, idx) {
     const parsed = parseQuestionRow_(row, idx);
-    return [
-      parsed.question_id,
+    if (!parsed.question || String(parsed.question).trim().length === 0) return;
+    newRows.push([
+      parsed.question_id || ('Q-' + (idx + 1)),
       parsed.question,
       parsed.options[0] || '',
       parsed.options[1] || '',
       parsed.options[2] || '',
       parsed.options[3] || '',
-      parsed.answer,
+      parsed.answer || 'A',
       parsed.explanation_detail || ''
-    ];
+    ]);
   });
 
-  sheet.clear();
-  sheet.getRange(1, 1, 1, targetHeaders.length).setValues([targetHeaders]);
-  if (newRows.length > 0) {
-    sheet.getRange(2, 1, newRows.length, targetHeaders.length).setValues(newRows);
+  if (newRows.length === 0) {
+    throw new Error('未讀取到有效的題目資料（題目內容皆為空白），請確認工作表中是否已有題目。');
   }
+
+  // 1. 清除舊資料與格式
+  sheet.clearContents();
+  sheet.clearFormats();
+
+  // 2. 自動調整欄位數為 8 欄（刪除多餘的第 9~23 欄空欄位）
+  if (sheet.getMaxColumns() < targetHeaders.length) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), targetHeaders.length - sheet.getMaxColumns());
+  } else if (sheet.getMaxColumns() > targetHeaders.length) {
+    try {
+      sheet.deleteColumns(targetHeaders.length + 1, sheet.getMaxColumns() - targetHeaders.length);
+    } catch (e) {}
+  }
+
+  // 3. 自動確保有足夠列數
+  if (sheet.getMaxRows() < newRows.length + 1) {
+    sheet.insertRowsAfter(sheet.getMaxRows(), (newRows.length + 1) - sheet.getMaxRows());
+  }
+
+  // 4. 寫入標題與資料
+  sheet.getRange(1, 1, 1, targetHeaders.length).setValues([targetHeaders]);
+  sheet.getRange(2, 1, newRows.length, targetHeaders.length).setValues(newRows);
   sheet.setFrozenRows(1);
   sheet.autoResizeColumns(1, targetHeaders.length);
   sheet.getRange(1, 1, 1, targetHeaders.length)
     .setBackground('#1e293b')
     .setFontColor('#38bdf8')
-    .setFontWeight('bold');
+    .setFontWeight('bold')
+    .setHorizontalAlignment('center');
 
   return { ok: true, count: newRows.length };
 }
@@ -1002,10 +1039,53 @@ function cleanAllExtraSheets_(ss) {
 }
 
 function sheetObjects_(sheet) {
-  if (!sheet || sheet.getLastRow() < 2) return [];
+  if (!sheet || sheet.getLastRow() < 1) return [];
   const values = sheet.getDataRange().getValues();
-  const headers = values.shift().map(function(v) { return String(v).trim(); });
-  return values.filter(function(row) {
+  if (!values.length) return [];
+
+  // 1. 智慧尋找真正的標題列 (檢查前 3 列)
+  let headerRowIdx = -1;
+  for (let r = 0; r < Math.min(3, values.length); r++) {
+    const rowStr = values[r].map(function(c) {
+      return String(c || '').trim().toLowerCase().replace(/[\s_\-（）()、]/g, '');
+    }).join(' ');
+    if (
+      rowStr.indexOf('題目') !== -1 ||
+      rowStr.indexOf('question') !== -1 ||
+      rowStr.indexOf('題號') !== -1 ||
+      rowStr.indexOf('選項') !== -1 ||
+      rowStr.indexOf('答案') !== -1
+    ) {
+      headerRowIdx = r;
+      break;
+    }
+  }
+
+  let headers = [];
+  let dataRows = [];
+
+  if (headerRowIdx !== -1) {
+    headers = values[headerRowIdx].map(function(v) { return String(v).trim(); });
+    dataRows = values.slice(headerRowIdx + 1);
+  } else {
+    // 檢查第 1 列是否看似為題幹（長度較長或含有問號、且第 7 欄為單一答案碼）
+    const isFirstRowData = values[0].length >= 7 && (
+      String(values[0][1] || '').length > 4 ||
+      /[\?？]/.test(String(values[0][1] || ''))
+    );
+    if (isFirstRowData) {
+      headers = ['題號', '題目', '選項1', '選項2', '選項3', '選項4', '答案', '答案說明'];
+      dataRows = values;
+    } else if (values.length > 1 && values[0].some(function(c) { return typeof c === 'string' && c.trim().length > 0; })) {
+      headers = values[0].map(function(v) { return String(v).trim(); });
+      dataRows = values.slice(1);
+    } else {
+      headers = ['題號', '題目', '選項1', '選項2', '選項3', '選項4', '答案', '答案說明'];
+      dataRows = values;
+    }
+  }
+
+  return dataRows.filter(function(row) {
     return row.some(function(cell) { return cell !== '' && cell !== null && cell !== undefined; });
   }).map(function(row) {
     const obj = { _raw: row, _headers: headers };
