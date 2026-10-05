@@ -3870,6 +3870,42 @@ class Game {
       const rect = c.getBoundingClientRect();
       lastTouchX = e.clientX - rect.left;
       lastTouchY = e.clientY - rect.top;
+
+      // 連續點擊戰機機身 3 下觸發【核爆緊急避險】(玩家指定：畫面無按鈕，快速連擊機身自動釋放)
+      const distToPlayer = Math.hypot(lastTouchX - this.player.x, lastTouchY - this.player.y);
+      const shipTapRadius = Math.max(58, (this.player.visualWidth || 64) * 0.95);
+      const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+
+      if (distToPlayer <= shipTapRadius) {
+        if (!this._shipTapTimes) this._shipTapTimes = [];
+        this._shipTapTimes.push(now);
+        // 連擊窗口：限制 750ms 內連續 3 次點擊
+        this._shipTapTimes = this._shipTapTimes.filter(t => now - t <= 750);
+        if (this._shipTapTimes.length >= 3) {
+          this._shipTapTimes = [];
+          // 連點三下觸發核爆：打斷靈丸蓄力並觸發大招
+          if (this.spiritCharge) {
+            this.spiritCharge.isCharging = false;
+            this.spiritCharge.chargeTime = 0;
+            const sz = document.getElementById('spiritChargeZone');
+            if (sz) sz.classList.remove('charging');
+          }
+          this.triggerPlayerBomb();
+          if (e.cancelable && e.pointerType === 'touch') e.preventDefault();
+          return;
+        } else {
+          // 連點 1 或 2 下時，產生機身火花粒子回饋
+          if (this.particles) {
+            for (let i = 0; i < 4; i++) {
+              this.particles.push(new Particle(this.player.x, this.player.y, (Math.random() - 0.5) * 80, (Math.random() - 0.5) * 80, '#ef4444', 2.5, 0.22));
+            }
+          }
+        }
+      } else {
+        // 點擊遠離機身處，清空連點記錄避免誤觸
+        this._shipTapTimes = [];
+      }
+
       if (e.pointerType === 'mouse') {
         this.player.targetX = Math.max(24, Math.min(this.W - 24, lastTouchX));
         this.player.targetY = Math.max(30, Math.min(this.H - 36, lastTouchY));
@@ -4699,6 +4735,14 @@ class Game {
     // 扣除 1 顆核爆並啟動防連點誤觸冷卻 (4秒)
     this.player.bombs--;
     this.player.bombCooldown = this.player.bombCooldownMax || 4.0;
+
+    // 立即中斷並清空靈丸蓄力狀態
+    if (this.spiritCharge) {
+      this.spiritCharge.isCharging = false;
+      this.spiritCharge.chargeTime = 0;
+      const sz = document.getElementById('spiritChargeZone');
+      if (sz) sz.classList.remove('charging');
+    }
 
     // 1. 立即清空全場敵彈、雷射預警與熔岩陷阱
     this.cancelAllEnemyBullets('💥【核爆緊急避險】全屏清彈！神盾無敵 2.5 秒！');

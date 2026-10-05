@@ -15,7 +15,7 @@
   <link rel="preload" as="image" href="assets/enemies/enemy_gunner.png">
   <link rel="preload" as="image" href="assets/enemies/enemy.png">
   <link rel="preload" as="image" href="assets/backgrounds/bg_stage_1.jpg">
-  <link rel="stylesheet" href="style.css?v=b45">
+  <link rel="stylesheet" href="style.css?v=b51">
 </head>
 <body>
 <div id="appWrap">
@@ -44,7 +44,7 @@
           <span class="hud-label">知識壓力</span>
           <span class="hud-val" id="hudPressure" style="color:var(--cyan); font-size:12px;">Lv.0 (平穩)</span>
         </div>
-        <div class="hud-panel" id="hudBombPanel">
+        <div class="hud-panel" id="hudBombPanel" title="核爆緊急避險：連擊機身 3 下或按 B / X 釋放">
           <span class="hud-label">BOMB 大招</span>
           <span class="hud-val" id="hudBombVal" style="color:#ef4444; font-size:12px; font-weight:800;">💥 x2</span>
         </div>
@@ -113,8 +113,8 @@
       </div>
     </div>
 
-    <!-- 核爆緊急避險（Bomb / 保命大招）按鈕 (手機/平板/觸控與桌面通用) -->
-    <div id="playerBombBtn" class="player-bomb-btn" role="button" aria-label="核爆緊急避險" title="核爆緊急避險 (快捷鍵 B)">
+    <!-- 核爆緊急避險（Bomb / 保命大招）保留 DOM 元件以供狀態同步，樣式設定 display:none (改為連擊機身 3 下自動施放) -->
+    <div id="playerBombBtn" class="player-bomb-btn" role="button" aria-label="核爆緊急避險" title="核爆緊急避險 (連擊機身 3 下或按 B / X)">
       <div class="bomb-btn-glow"></div>
       <div class="bomb-icon">💥</div>
       <div class="bomb-title">BOMB</div>
@@ -565,7 +565,7 @@
 </div>
 
 <!-- 腳本引入 -->
-<script src="starfall-game-api-config.js?v=b50"></script>
-<script src="game.js?v=b50"></script>
+<script src="starfall-game-api-config.js?v=b51"></script>
+<script src="game.js?v=b51"></script>
 </body>
 </html>
