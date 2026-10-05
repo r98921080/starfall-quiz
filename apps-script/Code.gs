@@ -22,6 +22,7 @@ function onOpen() {
     .addItem('🔄 一鍵簡化題庫為 8 欄 (Questions)', 'simplifyQuestionsColumns')
     .addItem('📝 一鍵簡化作答紀錄為 10 欄 (Attempts)', 'simplifyAttemptsColumns')
     .addItem('🧹 一鍵清理多餘分頁 (只留 3 個核心分頁)', 'cleanAllExtraSheets')
+    .addItem('🗑️ 清理舊版無用作答紀錄 (Attempts)', 'cleanLegacyAttempts')
     .addItem('📊 立即更新家長報表 (ParentDashboard)', 'refreshReports')
     .addItem('✨ 題庫智慧去重清洗', 'cleanDuplicateQuestions')
     .addItem('⚙️ 初始化與檢查資料表', 'setupStarfall')
@@ -63,6 +64,10 @@ function doGet(e) {
       const result = cleanAllExtraSheets_();
       return jsonOutput_({ ok: true, message: '工作表極簡化完成', result: result });
     }
+    if (action === 'clean_legacy_attempts') {
+      const result = cleanLegacyAttempts_(ss);
+      return jsonOutput_({ ok: true, message: '舊版作答紀錄清理完成', result: result });
+    }
     if (action === 'simplify_questions') {
       const result = simplifyQuestionsColumns_();
       return jsonOutput_({ ok: true, message: '題庫簡化完成', result: result });
@@ -78,9 +83,9 @@ function doGet(e) {
     return jsonOutput_({
       ok: true,
       service: 'Starfall Quiz Learning API',
-      version: '1.4.5',
+      version: '1.4.6',
       active_sheets: ss.getSheets().map(function(s) { return s.getName(); }),
-      actions: ['questions', 'students', 'student_progress', 'register_student', 'attempt', 'attempt_batch', 'settings', 'report', 'clean_questions', 'clean_sheets', 'simplify_questions', 'simplify_attempts', 'simplify_all']
+      actions: ['questions', 'students', 'student_progress', 'register_student', 'attempt', 'attempt_batch', 'settings', 'report', 'clean_questions', 'clean_sheets', 'clean_legacy_attempts', 'simplify_questions', 'simplify_attempts', 'simplify_all']
     });
   } catch (err) {
     return jsonOutput_({ ok: false, error: String(err.message || err) });
@@ -107,6 +112,10 @@ function doPost(e) {
     if (action === 'clean_sheets') {
       const result = cleanAllExtraSheets_();
       return jsonOutput_({ ok: true, message: '工作表極簡化完成', result: result });
+    }
+    if (action === 'clean_legacy_attempts') {
+      const result = cleanLegacyAttempts_(ss);
+      return jsonOutput_({ ok: true, message: '舊版作答紀錄清理完成', result: result });
     }
     if (action === 'simplify_questions') {
       const result = simplifyQuestionsColumns_();
@@ -601,6 +610,9 @@ function getSettings_() {
 function recordAttempt_(payload) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const attempt = normalizeAttempt_(payload, ss);
+  if (!attempt) {
+    return { ok: false, ignored: true, message: '此作答屬舊版或不存在之題目，已自動過濾不寫入試算表。' };
+  }
   const sheet = getOrCreateAttemptsSheet_(ss);
   const headers = getHeaders_(sheet);
   sheet.appendRow(headers.map(function(header) { return attempt[header] !== undefined ? attempt[header] : ''; }));
@@ -616,7 +628,10 @@ function recordAttemptBatch_(payload) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = getOrCreateAttemptsSheet_(ss);
   const headers = getHeaders_(sheet);
-  const normalized = attempts.map(function(attempt) { return normalizeAttempt_(attempt, ss); });
+  const normalized = attempts.map(function(attempt) { return normalizeAttempt_(attempt, ss); }).filter(Boolean);
+  if (!normalized.length) {
+    return { ok: true, count: 0, message: '所有作答均為舊版或無效題目，已全數過濾忽略。' };
+  }
   sheet.getRange(sheet.getLastRow() + 1, 1, normalized.length, headers.length)
     .setValues(normalized.map(function(attempt) {
       return headers.map(function(header) { return attempt[header] !== undefined ? attempt[header] : ''; });
@@ -631,24 +646,18 @@ function normalizeAttempt_(payload, ss) {
   if (!payload.student_id) throw new Error('缺少 student_id。');
   if (!payload.question_id) throw new Error('缺少 question_id。');
 
+  const qidStr = String(payload.question_id || '').trim();
+  const isLegacy = /^([Gg][1-6]|[Jj][7-9])-/.test(qidStr);
+  let question = findQuestion_(ss, payload.question_id);
+
+  // 嚴格杜絕舊版題目與無用資訊：若為舊版代碼或題庫中不存在之題目，直接拒絕入庫，保護試算表乾淨純粹
+  if (isLegacy || !question) {
+    console.warn('忽略舊版/非當前題庫題目作答：', qidStr);
+    return null;
+  }
+
   // 自動補登學生至 Students 表（避免作答紀錄遺漏學生學籍）
   ensureStudentExists_(ss, payload.student_id, payload.student_name || payload.display_name, payload.student_grade || payload.grade);
-
-  let question = findQuestion_(ss, payload.question_id);
-  if (!question) {
-    question = {
-      question_id: payload.question_id,
-      question: payload.question || '',
-      options: ['選項1', '選項2', '選項3', '選項4'],
-      difficulty: Number(payload.difficulty_at_time) || 1,
-      subject: payload.subject || '國語文',
-      unit: payload.unit || '',
-      skill: payload.skill || '',
-      answer: payload.selected_option || 'A',
-      target_words: payload.target_words || '',
-      concept_tags: payload.concept_tags || ''
-    };
-  }
 
   const qText = String(payload.question || (question && question.question) || '').trim();
   const rawSel = String(payload.selected_option || '').trim();
@@ -792,6 +801,11 @@ function writeParentDashboard_(ss, attempts, questions, students) {
   });
 
   attempts.forEach(function(a) {
+    const qid = String(a['題號'] || a.question_id || '').trim();
+    const isLegacy = /^([Gg][1-6]|[Jj][7-9])-/.test(qid);
+    // 嚴格排除舊版無效題目，確保 ParentDashboard 只統計與顯示當前有效題目
+    if (isLegacy || !qMap[qid]) return;
+
     const sid = String(a['學號'] || a.student_id || '').trim();
     if (!sid) return;
     const sName = String(a['姓名'] || a.student_name || sid).trim();
@@ -819,8 +833,6 @@ function writeParentDashboard_(ss, attempts, questions, students) {
     if (aTime > sObj.last_active) {
       sObj.last_active = aTime;
     }
-
-    const qid = String(a['題號'] || a.question_id || '').trim();
     if (!sObj.qProgress[qid]) {
       const qData = qMap[qid] || {};
       sObj.qProgress[qid] = {
@@ -1281,6 +1293,50 @@ function simplifyAttemptsColumns() {
   }
 }
 
+/**
+ * 試算表選單專用：一鍵清理 Attempts 中所有舊版與無效題目紀錄
+ */
+function cleanLegacyAttempts() {
+  let ui = null;
+  try { ui = SpreadsheetApp.getUi(); } catch (e) { ui = null; }
+
+  if (ui) {
+    const resp = ui.alert(
+      '確認清理舊版無效作答紀錄',
+      '此操作將會：\n1. 比對【Questions】題庫清單\n2. 徹底刪除【Attempts】中所有舊版代碼（如 G1-, G2-, G3-, J9-）或題庫中不存在之無效紀錄\n3. 同步重整【ParentDashboard】家長總覽報表\n\n確定要開始執行清理嗎？',
+      ui.ButtonSet.YES_NO
+    );
+    if (resp !== ui.Button.YES && String(resp).toUpperCase() !== 'YES') return;
+  }
+
+  try {
+    const res = cleanLegacyAttempts_();
+    if (ui) {
+      ui.alert(
+        '清理完成！',
+        '舊版作答紀錄清理作業已成功執行：\n' +
+        '• 已刪除舊版無效紀錄：' + res.deletedCount + ' 筆\n' +
+        '• 目前保留有效紀錄：' + res.remainingCount + ' 筆\n' +
+        '• 家長總覽報表已同步刷新！',
+        ui.ButtonSet.OK
+      );
+    }
+  } catch (err) {
+    if (ui) {
+      ui.alert('清理失敗', '錯誤原因：' + String(err.message || err), ui.ButtonSet.OK);
+    } else {
+      throw err;
+    }
+  }
+}
+
+function cleanLegacyAttempts_(ss) {
+  if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
+  const res = simplifyAttemptsColumns_(ss);
+  refreshReports(ss);
+  return { deletedCount: res.deletedCount || 0, remainingCount: res.count };
+}
+
 function simplifyAttemptsColumns_(ss) {
   if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = getAttemptsSheet_(ss);
@@ -1296,7 +1352,7 @@ function simplifyAttemptsColumns_(ss) {
       .setFontColor('#38bdf8')
       .setFontWeight('bold')
       .setHorizontalAlignment('center');
-    return { ok: true, count: 0 };
+    return { ok: true, count: 0, deletedCount: 0 };
   }
 
   // 預先加載題庫映射表，以便為既有紀錄自動補齊題目與正確答案
@@ -1328,10 +1384,22 @@ function simplifyAttemptsColumns_(ss) {
       .setFontColor('#38bdf8')
       .setFontWeight('bold')
       .setHorizontalAlignment('center');
-    return { ok: true, count: 0 };
+    return { ok: true, count: 0, deletedCount: 0 };
   }
 
-  const newRows = rows.map(function(row, idx) {
+  const newRows = [];
+  let deletedLegacyCount = 0;
+  rows.forEach(function(row, idx) {
+    const qid = String(row['題號'] || row.question_id || '').trim();
+    const isLegacy = /^([Gg][1-6]|[Jj][7-9])-/.test(qid);
+    const qObj = qMap[qid] || null;
+
+    // 嚴格過濾：若該紀錄為舊版代碼或題庫中不存在之題目，直接捨棄，不再產生無用資訊！
+    if (isLegacy || !qObj) {
+      deletedLegacyCount++;
+      return;
+    }
+
     let timeVal = row['時間'] || row.timestamp || '';
     if (timeVal instanceof Date) {
       try {
@@ -1351,8 +1419,6 @@ function simplifyAttemptsColumns_(ss) {
     const sid = String(row['學號'] || row.student_id || ('S' + String(idx + 1).padStart(4, '0'))).trim();
     const sName = String(row['姓名'] || row.student_name || row.display_name || sid).trim();
     const stg = Number(row['關卡'] || row.stage) || 1;
-    const qid = String(row['題號'] || row.question_id || '').trim();
-    const qObj = qMap[qid] || null;
     const qText = String(row['題目'] || (qObj && qObj.question) || row.question || '').trim();
 
     // 格式化 選擇的答案（例如 3：目無全牛）
@@ -1394,7 +1460,7 @@ function simplifyAttemptsColumns_(ss) {
       secVal = (Number(row.response_time_ms) / 1000).toFixed(1);
     }
 
-    return [
+    newRows.push([
       timeVal || new Date().toISOString(),
       sid,
       sName,
@@ -1405,7 +1471,7 @@ function simplifyAttemptsColumns_(ss) {
       corVal,
       isCorrect ? 'TRUE' : 'FALSE',
       secVal
-    ];
+    ]);
   });
 
   // 1. 清除舊資料與格式

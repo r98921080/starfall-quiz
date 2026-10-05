@@ -11,8 +11,7 @@ const indexHtml = fs.readFileSync('index.html', 'utf8');
 // =========================================================================
 // 1. Static Configuration & Regex Checks
 // =========================================================================
-console.log('--- 1. Testing Static Configurations & Function Declarations ---');
-assert(codeGs.includes("version: '1.4.4'") || codeGs.includes("version: '1.4.5'"), 'API version in Code.gs must be 1.4.4+');
+assert(/version: '1\.4\.[456]'/.test(codeGs), 'API version in Code.gs must be 1.4.4+');
 assert(codeGs.includes('function normalizeAnswerToIndex_'), 'Code.gs must implement normalizeAnswerToIndex_');
 assert(gameJs.includes('function normalizeAnswerToIndex'), 'game.js must implement normalizeAnswerToIndex');
 assert(codeGs.includes('getOrCreateAttemptsSheet_'), 'Code.gs must implement getOrCreateAttemptsSheet_');

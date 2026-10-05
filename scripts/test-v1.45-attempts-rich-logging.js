@@ -13,7 +13,7 @@ const starfallHtml = fs.readFileSync('starfall-quiz.html', 'utf8');
 // 1. Static Configuration & Regex Checks
 // =========================================================================
 console.log('--- 1. Testing Static Configurations & Function Declarations ---');
-assert(codeGs.includes("version: '1.4.5'"), 'API version in Code.gs must be 1.4.5');
+assert(/version: '1\.4\.[56]'/.test(codeGs), 'API version in Code.gs must be 1.4.5+');
 assert(codeGs.includes('formatOptionWithIndex_'), 'Code.gs must implement formatOptionWithIndex_');
 assert(codeGs.includes('ensureAttemptsHeaders_'), 'Code.gs must implement ensureAttemptsHeaders_');
 assert(codeGs.includes('simplifyAttemptsColumns_'), 'Code.gs must implement simplifyAttemptsColumns_');

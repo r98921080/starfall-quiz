@@ -1852,7 +1852,15 @@ class DataStore {
     this.weaponData = null;
     try {
       const q = localStorage.getItem('starfall_offline_attempt_queue_v1');
-      this.offlineQueue = q ? JSON.parse(q) : [];
+      const rawQueue = q ? JSON.parse(q) : [];
+      // 徹底淨化離線隊列：移除所有舊版/非當前題庫代碼之題目 (如 G1-*, G2-*, J9-*)
+      this.offlineQueue = Array.isArray(rawQueue) ? rawQueue.filter(item => {
+        const qid = String((item && item.question_id) || '').trim();
+        return qid && !/^([Gg][1-6]|[Jj][7-9])-/.test(qid);
+      }) : [];
+      if (rawQueue.length !== this.offlineQueue.length) {
+        localStorage.setItem('starfall_offline_attempt_queue_v1', JSON.stringify(this.offlineQueue));
+      }
     } catch (e) {
       this.offlineQueue = [];
     }
@@ -1908,7 +1916,21 @@ class DataStore {
       }
       const savedMistakes = localStorage.getItem('starfall_mistake_fingerprints_v2');
       if (savedMistakes) {
-        this.mistakeMap = JSON.parse(savedMistakes) || {};
+        const rawMap = JSON.parse(savedMistakes) || {};
+        this.mistakeMap = {};
+        let mistakeDirty = false;
+        for (const fp in rawMap) {
+          const item = rawMap[fp];
+          const qid = String((item && item.question_id) || '').trim();
+          if (qid && !/^([Gg][1-6]|[Jj][7-9])-/.test(qid)) {
+            this.mistakeMap[fp] = item;
+          } else {
+            mistakeDirty = true;
+          }
+        }
+        if (mistakeDirty) {
+          this.saveFingerprintsToStorage();
+        }
       }
     } catch (e) {
       console.warn('Failed loading fingerprint storage:', e);
@@ -1938,7 +1960,22 @@ class DataStore {
       this.allStudentProgress[sid] = {};
       try {
         const saved = localStorage.getItem(`starfall_progress_${sid}`);
-        if (saved) this.allStudentProgress[sid] = JSON.parse(saved);
+        if (saved) {
+          const raw = JSON.parse(saved);
+          const cleaned = {};
+          let dirty = false;
+          for (const k in raw) {
+            if (/^([Gg][1-6]|[Jj][7-9])-/.test(k)) {
+              dirty = true;
+            } else {
+              cleaned[k] = raw[k];
+            }
+          }
+          this.allStudentProgress[sid] = cleaned;
+          if (dirty) {
+            localStorage.setItem(`starfall_progress_${sid}`, JSON.stringify(cleaned));
+          }
+        }
       } catch (e) {}
     }
     return this.allStudentProgress[sid];
@@ -2287,9 +2324,11 @@ class DataStore {
         req.onsuccess = () => {
           if (req.result) {
             req.result.forEach(item => {
+              const qid = String(item.question_id || '').trim();
+              if (/^([Gg][1-6]|[Jj][7-9])-/.test(qid)) return;
               const sid = item.student_id || 'S0001';
               if (!this.allStudentProgress[sid]) this.allStudentProgress[sid] = {};
-              this.allStudentProgress[sid][item.question_id] = item;
+              this.allStudentProgress[sid][qid] = item;
             });
           }
         };
@@ -2301,6 +2340,11 @@ class DataStore {
 
   async recordAttempt(attempt) {
     const qid = attempt.question_id;
+    const qidStr = String(qid || '').trim();
+    if (!qidStr || /^([Gg][1-6]|[Jj][7-9])-/.test(qidStr)) {
+      console.warn(`[DataStore] 忽略舊版/無效題目作答記錄: ${qidStr}`);
+      return;
+    }
     const sid = attempt.student_id || this.currentStudentId || 'S0001';
     attempt.student_id = sid;
     attempt.student_name = attempt.student_name || this.studentName || '學員';
@@ -2416,6 +2460,7 @@ class DataStore {
           selected_option: attempt.selected_option || selAns || '',
           correct_answer: attempt.correct_answer || corAns || '',
           correct: !!attempt.correct,
+          response_time_ms: Math.round(attempt.response_time_ms || 0),
           stage: Number(attempt.stage || 1),
           boss_name: attempt.boss_name || '',
           is_review: !!attempt.is_review,
@@ -2461,6 +2506,7 @@ class DataStore {
               selected_option: attempt.selected_option || selAns || '',
               correct_answer: attempt.correct_answer || corAns || '',
               correct: attempt.correct ? 'true' : 'false',
+              response_time_ms: String(Math.round(attempt.response_time_ms || 0)),
               stage: String(attempt.stage || 1),
               boss_name: attempt.boss_name || '',
               is_review: attempt.is_review ? 'true' : 'false',
@@ -2493,6 +2539,19 @@ class DataStore {
   async syncOfflineQueue() {
     const apiUrl = localStorage.getItem('starfall_gs_url') || (window.STARFALL_CONFIG && window.STARFALL_CONFIG.apiBaseUrl);
     if (!apiUrl || apiUrl.includes('PASTE_YOUR') || apiUrl.includes('docs.google.com/spreadsheets')) return;
+
+    // 清理舊版無效題
+    const rawLen = this.offlineQueue.length;
+    this.offlineQueue = this.offlineQueue.filter(item => {
+      const qid = String((item && item.question_id) || '').trim();
+      return qid && !/^([Gg][1-6]|[Jj][7-9])-/.test(qid);
+    });
+    if (this.offlineQueue.length !== rawLen) {
+      try {
+        localStorage.setItem('starfall_offline_attempt_queue_v1', JSON.stringify(this.offlineQueue));
+      } catch (e) {}
+    }
+
     if (this.offlineQueue.length === 0 || this._isSyncing) return;
     this._isSyncing = true;
     try {
@@ -2554,8 +2613,11 @@ class DataStore {
                 student_name: item.student_name,
                 student_grade: item.student_grade,
                 question_id: item.question_id,
+                question: item.question || '',
                 selected_option: item.selected_option || '',
+                correct_answer: item.correct_answer || '',
                 correct: !!item.correct,
+                response_time_ms: Math.round(item.response_time_ms || 0),
                 stage: Number(item.stage || 1),
                 boss_name: item.boss_name || '',
                 is_review: !!item.is_review,
@@ -2574,8 +2636,8 @@ class DataStore {
               const dataSingle = await resSingle.json().catch(() => null);
               if (dataSingle && dataSingle.ok) {
                 succeededIndices.push(i);
-              } else if (dataSingle && dataSingle.error && dataSingle.error.includes('找不到 question_id')) {
-                console.warn(`[Google Sheet] ⚠️ 題目 ${item.question_id} 於遠端試算表未建立，移出隊列以免阻塞後續紀錄。`);
+              } else if (dataSingle && (dataSingle.ignored || (dataSingle.error && dataSingle.error.includes('找不到 question_id')))) {
+                console.warn(`[Google Sheet] ⚠️ 題目 ${item.question_id} 於遠端試算表未建立或已忽略，移出隊列以免阻塞後續紀錄。`);
                 succeededIndices.push(i);
               }
             }
@@ -2916,6 +2978,8 @@ class DataStore {
     for (let i = 1; i < lines.length; i++) {
       const r = lines[i];
       if (qIdx === -1 || !r[qIdx] || !String(r[qIdx]).trim()) continue;
+      const rawQid = (qidIdx !== -1 && r[qidIdx] && String(r[qidIdx]).trim()) || `Q-${i}`;
+      if (/^([Gg][1-6]|[Jj][7-9])-/.test(rawQid)) continue;
       const opts = [
         aIdx !== -1 ? r[aIdx] : '',
         bIdx !== -1 ? r[bIdx] : '',
@@ -3121,14 +3185,19 @@ class DataStore {
     const sid = this.currentStudentId || 'S0001';
     const sidProgress = this.getStudentProgressMap(sid);
 
-    // 完整開放全題庫跨年級可用池
-    const pool = [...this.questionBank];
+    // 完整開放全題庫跨年級可用池，並徹底過濾排除舊版非成語題目
+    const pool = (this.questionBank || []).filter(q => {
+      const qid = String((q && q.question_id) || '').trim();
+      return qid && !/^([Gg][1-6]|[Jj][7-9])-/.test(qid);
+    });
 
     if (!this.sessionUsedQuestionIds) this.sessionUsedQuestionIds = new Set();
     if (!this.sessionUsedFingerprints) this.sessionUsedFingerprints = new Set();
 
     // 本輪尚未作答之可用題目池（嚴格排除本局同一 run 已抽過的題目 ID 與題幹+選項指紋，徹底零重複）
     const isUnused = (q) => {
+      const qid = String((q && q.question_id) || '').trim();
+      if (!qid || /^([Gg][1-6]|[Jj][7-9])-/.test(qid)) return false;
       if (this.sessionUsedQuestionIds.has(q.question_id)) return false;
       const fp = this.getQuestionFingerprint(q);
       if (fp && this.sessionUsedFingerprints.has(fp)) return false;
@@ -8828,10 +8897,12 @@ class Game {
     expBox.textContent = '';
 
     this.quizTimer = this.quizTimerMax;
+    this.quizQuestionStartTime = Date.now();
   }
 
   handleAnswer(selectedIdx) {
     if (this.state !== 'quiz' || !this.currentQuiz || this._waitingQuizNext) return;
+    const responseTime = Math.max(0, Math.round(Date.now() - (this.quizQuestionStartTime || Date.now())));
     const q = this.currentQuiz;
     const isCorrect = selectedIdx === q.ans;
     const btns = document.querySelectorAll('.opt-btn');
@@ -8896,6 +8967,7 @@ class Game {
         correct_answer: correctAnswerFormatted,
         correct: isCorrect,
         timestamp: new Date().toISOString(),
+        response_time_ms: responseTime,
         stage: this.stage,
         boss_name: this.currentBoss ? this.currentBoss.name : 'MiniBoss',
         is_review: !!q.isReview,
