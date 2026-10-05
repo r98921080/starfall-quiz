@@ -101,8 +101,8 @@ console.log('--- 測試 4: index.html & starfall-quiz.html 快取標記 ---');
 const indexHtml = fs.readFileSync(path.join(repoRoot, 'index.html'), 'utf8');
 const starfallHtml = fs.readFileSync(path.join(repoRoot, 'starfall-quiz.html'), 'utf8');
 
-assert.ok(indexHtml.includes('game.js?v=b49'), 'index.html 必須使用 ?v=b49');
-assert.ok(starfallHtml.includes('game.js?v=b49'), 'starfall-quiz.html 必須使用 ?v=b49');
-console.log('✅ 測試 4 通過: HTML 版本標籤已升級至 ?v=b49！\n');
+assert.ok(/game\.js\?v=b(49|5\d)/.test(indexHtml), 'index.html 必須使用 ?v=b49 或更高級版號');
+assert.ok(/game\.js\?v=b(49|5\d)/.test(starfallHtml), 'starfall-quiz.html 必須使用 ?v=b49 或更高級版號');
+console.log('✅ 測試 4 通過: HTML 版本標籤已升級至 ?v=b49 或更高級！\n');
 
 console.log('🎉 所有測試均順利通過！BUILD-047 驗證完成！');

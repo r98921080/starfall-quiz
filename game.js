@@ -2729,6 +2729,7 @@ class DataStore {
       }
 
       const qid = String(q['題號'] !== undefined ? q['題號'] : getField(['題號', 'question_id', 'id', '序號', '編號'], `Q-GS-${idx + 1}`)).trim();
+      if (/^([Gg][1-6]|[Jj][7-9])-/.test(qid)) return;
       const questionText = String(q['題目'] !== undefined ? q['題目'] : getField(['題目', 'question', '問題', '題幹', '內容'], '')).trim();
       if (!questionText) return; // 略過無題幹之空白行
 
@@ -3580,8 +3581,15 @@ class Game {
       subWeaponTimer: 0,
       supportTimer: 0,
       bulletSlowFactor: 1.0, // 0題答對生存特化：減慢敵方子彈速度
-      moveSpeedMultiplier: 1.0 // 0題答對生存特化：提升戰機移速
+      moveSpeedMultiplier: 1.0, // 0題答對生存特化：提升戰機移速
+      bombs: 2, // 核爆緊急避險初始庫存 2 顆
+      maxBombs: 3, // 核爆攜帶上限 3 顆
+      bombCooldown: 0, // 核爆防連點冷卻時間 (秒)
+      bombCooldownMax: 4.0 // 每次釋放核爆後防誤觸冷卻 4 秒
     };
+
+    // 玩家核爆避險衝擊波集合
+    this.bombShockwaves = [];
 
     // 靈丸蓄力狀態
     this.spiritCharge = {
@@ -3945,6 +3953,10 @@ class Game {
         if ((e.key === ' ' || e.code === 'Space') && !this.spiritCharge.isCharging) {
           this.startSpiritCharge();
         }
+        if (e.key === 'b' || e.key === 'B' || e.key === 'x' || e.key === 'X') {
+          e.preventDefault();
+          this.triggerPlayerBomb();
+        }
       }
       if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
         this.togglePause();
@@ -4003,6 +4015,16 @@ class Game {
       spiritZone.addEventListener('pointerleave', (e) => {
         e.preventDefault(); e.stopPropagation();
         this.releaseSpiritCharge();
+      });
+    }
+
+    // 核爆緊急避險按鈕 (playerBombBtn) 觸控與點擊 (手機/平板/滑鼠)
+    const bombBtn = document.getElementById('playerBombBtn');
+    if (bombBtn) {
+      bombBtn.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.triggerPlayerBomb();
       });
     }
 
@@ -4652,6 +4674,113 @@ class Game {
       this.ebullets = [];
     }
     if (toastMsg) this.showToast(toastMsg);
+  }
+
+  // ============================================================
+  // 核爆緊急避險（Bomb / 保命大招）核心邏輯
+  // ============================================================
+  triggerPlayerBomb() {
+    if (this.state !== 'playing') return;
+    if (!this.player) return;
+
+    // 檢查冷卻中
+    if (this.player.bombCooldown > 0) {
+      this.showToast(`⏳ 核爆冷卻中，尚需 ${this.player.bombCooldown.toFixed(1)} 秒！`);
+      return;
+    }
+
+    // 檢查庫存
+    if (!this.player.bombs || this.player.bombs <= 0) {
+      this.showToast('⚠️ 核爆避險次數已耗盡！通過關卡或答題全對可獲得補給！');
+      if (this.sound) this.sound.playLaser(400);
+      return;
+    }
+
+    // 扣除 1 顆核爆並啟動防連點誤觸冷卻 (4秒)
+    this.player.bombs--;
+    this.player.bombCooldown = this.player.bombCooldownMax || 4.0;
+
+    // 1. 立即清空全場敵彈、雷射預警與熔岩陷阱
+    this.cancelAllEnemyBullets('💥【核爆緊急避險】全屏清彈！神盾無敵 2.5 秒！');
+    if (this.hazardTelegraphs) this.hazardTelegraphs = [];
+    if (this.lavaPools) this.lavaPools = [];
+
+    // 2. 賦予玩家 2.5 秒絕對無敵神盾
+    this.player.invulnTime = Math.max(this.player.invulnTime || 0, 2.5);
+
+    // 3. 全螢幕震撼影音特效 (白光閃爍、重度震動、音效震顫)
+    this.screenFlashAlpha = 1.0;
+    this.shake(22, 0.6);
+    if (this.sound) {
+      this.sound.playBossDeath(0.9);
+      this.sound.vibrate([120, 80, 250]);
+    }
+
+    // 4. 對全場雜兵造成毀滅性 750 點傷害，對 Boss 造成 600 點重創傷害
+    if (this.enemies && this.enemies.length > 0) {
+      this.enemies.forEach(e => {
+        if (!e.dead && !e.dying) {
+          e.hp -= 750;
+          for (let i = 0; i < 4; i++) {
+            this.particles.push(new Particle(e.x, e.y, (Math.random() - 0.5) * 160, (Math.random() - 0.5) * 160, '#ef4444', 3.5, 0.45));
+          }
+        }
+      });
+    }
+    if (this.currentBoss && !this.currentBoss.dead && !this.currentBoss.dying) {
+      this.currentBoss.hp = Math.max(0, this.currentBoss.hp - 600);
+      for (let i = 0; i < 16; i++) {
+        this.particles.push(new Particle(this.currentBoss.x, this.currentBoss.y, (Math.random() - 0.5) * 240, (Math.random() - 0.5) * 240, '#f59e0b', 5, 0.55));
+      }
+    }
+
+    // 5. 產生核爆外擴能量巨環衝擊波
+    if (!this.bombShockwaves) this.bombShockwaves = [];
+    this.bombShockwaves.push({
+      x: this.player.x,
+      y: this.player.y,
+      r: 15,
+      maxR: Math.max(this.W, this.H) * 1.15,
+      alpha: 1.0
+    });
+
+    // 6. 即時更新按鈕與面板狀態
+    this.updateBombUI();
+  }
+
+  // 更新核爆按鈕 (手機板按鈕/桌面按鈕) 與頂部 HUD 狀態
+  updateBombUI() {
+    const btn = document.getElementById('playerBombBtn');
+    const badge = document.getElementById('playerBombBadge');
+    const mask = document.getElementById('playerBombCooldownOverlay');
+    const hudVal = document.getElementById('hudBombVal');
+    const bombs = (this.player && this.player.bombs !== undefined) ? this.player.bombs : 0;
+    const cd = (this.player && this.player.bombCooldown > 0) ? this.player.bombCooldown : 0;
+
+    if (badge) badge.textContent = String(bombs);
+    if (hudVal) hudVal.textContent = `💥 x${bombs}`;
+
+    if (btn) {
+      if (this.state !== 'playing') {
+        btn.classList.add('hidden');
+      } else {
+        btn.classList.remove('hidden');
+      }
+
+      if (bombs <= 0) {
+        btn.classList.add('depleted');
+        btn.classList.remove('cooling-down');
+        if (mask) mask.textContent = '0';
+      } else if (cd > 0) {
+        btn.classList.remove('depleted');
+        btn.classList.add('cooling-down');
+        if (mask) mask.textContent = `${cd.toFixed(1)}s`;
+      } else {
+        btn.classList.remove('depleted');
+        btn.classList.remove('cooling-down');
+        if (mask) mask.textContent = '';
+      }
+    }
   }
 
   // 靈丸擊中目標爆發之純白外擴衝擊波與星芒粒子 (幽遊白書經典視覺)
@@ -6310,6 +6439,13 @@ class Game {
     this.bossDeathSequence = null;
     this.screenFlashAlpha = 0;
     this.waveTimer = 0;
+
+    // 核爆避險重置
+    this.player.bombs = 2;
+    this.player.maxBombs = 3;
+    this.player.bombCooldown = 0;
+    this.bombShockwaves = [];
+    this.updateBombUI();
 
     // 武裝庫初始化：所有武器重置為 0 階，並啟用玩者自選之首發武器 (限定 B/C 級主動武器，Rank 1)
     const validCandidates = STARFALL_WEAPONS_CATALOG.filter(w => !w.isPassive && (w.tier === 'B' || w.tier === 'C'));
@@ -8832,6 +8968,10 @@ class Game {
     this.state = 'quiz';
     this._waitingQuizNext = false;
     this.resetPlayerStatusEffects();
+    // 關卡突破獎勵：補給 1 顆核爆保命大招 (上限 3 顆)
+    this.player.bombs = Math.min(this.player.maxBombs || 3, (this.player.bombs || 0) + 1);
+    this.showToast(`💣 關卡突破補給：【核爆緊急避險】+1！(庫存: ${this.player.bombs}/${this.player.maxBombs || 3})`);
+    this.updateBombUI();
     this.quizQueue = this.dataStore.pickAdaptiveQuestions(5, this.stage || 1);
     this.quizCorrectCount = 0;
     this.showNextQuestion();
@@ -9061,6 +9201,12 @@ class Game {
     document.getElementById('quizScreen').classList.add('hidden');
     if (this.dataStore) {
       this.dataStore.syncOfflineQueue();
+    }
+    // 滿分答題獎勵：5 題全對額外獲得 1 顆核爆！
+    if (this.quizCorrectCount === 5) {
+      this.player.bombs = Math.min(this.player.maxBombs || 3, (this.player.bombs || 0) + 1);
+      this.showToast(`✨ 滿分答對 5 題！學力超凡，額外特贈【核爆緊急避險】+1 顆！(庫存: ${this.player.bombs}/${this.player.maxBombs || 3})`);
+      this.updateBombUI();
     }
     this.openUpgradeScreen();
   }
@@ -9572,6 +9718,7 @@ class Game {
     this.state = 'playing';
     // 進入新波次或新關卡時，徹底清除上一關留存之任何負面減速/硬直狀態
     this.resetPlayerStatusEffects();
+    this.updateBombUI();
 
     // 情況 0：陣亡「補給再挑戰」接關復活 (保留在當前關卡與波次，滿血清彈幕復原)
     if (this.isResupplyContinue) {
@@ -9657,6 +9804,7 @@ class Game {
   onGameVictory() {
     this.deletePlayerRunSave();
     this.state = 'gameover';
+    this.updateBombUI();
     document.getElementById('gameOverTitle').textContent = '神話登頂！全十二關通關！';
     document.getElementById('endScore').textContent = this.score;
     document.getElementById('endStage').textContent = '第 12 關 (全破)';
@@ -9686,6 +9834,7 @@ class Game {
 
   onGameOver() {
     this.state = 'gameover';
+    this.updateBombUI();
     document.getElementById('gameOverTitle').textContent = '戰機裝甲瓦解';
     document.getElementById('endScore').textContent = this.score;
     document.getElementById('endStage').textContent = `第 ${this.stage} 關`;
@@ -9835,8 +9984,18 @@ class Game {
     }
 
     p.x = Math.max(24, Math.min(this.W - 24, p.x));
-    p.y = Math.max(30, Math.min(this.H - 36, p.y));
     if (p.invulnTime > 0) p.invulnTime -= dt;
+    if (p.bombCooldown && p.bombCooldown > 0) {
+      p.bombCooldown = Math.max(0, p.bombCooldown - dt);
+      this.updateBombUI();
+    }
+    if (this.bombShockwaves && this.bombShockwaves.length > 0) {
+      this.bombShockwaves.forEach(sw => {
+        sw.r += dt * 1050;
+        sw.alpha = Math.max(0, 1.0 - (sw.r / sw.maxR));
+      });
+      this.bombShockwaves = this.bombShockwaves.filter(sw => sw.alpha > 0);
+    }
 
     this.updateSpiritCharge(dt);
     this.fireWeapons(dt);
@@ -13241,6 +13400,21 @@ class Game {
       ctx.arc(0, 0, p.grazeRadius, 0, Math.PI * 2);
       ctx.stroke();
     }
+
+    // 玩家無敵狀態金色神盾力場
+    if (p.invulnTime > 0) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(0, 0, 36, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(245, 188, 56, ${0.6 + 0.4 * Math.sin(this.time * 16)})`;
+      ctx.lineWidth = 3;
+      ctx.shadowColor = '#fbbf24';
+      ctx.shadowBlur = 14;
+      ctx.stroke();
+      ctx.fillStyle = `rgba(251, 191, 36, ${0.12 + 0.08 * Math.sin(this.time * 16)})`;
+      ctx.fill();
+      ctx.restore();
+    }
     ctx.restore();
 
     // 9.5 靈丸全螢幕按壓蓄力光環 (On-Canvas Spirit Charge Aura)
@@ -13298,6 +13472,27 @@ class Game {
     this.particles.forEach(pt => pt.draw(ctx));
     if (this.showDamageNumbers) {
       this.damageNumbers.forEach(dn => dn.draw(ctx));
+    }
+
+    // 10.5 核爆外擴能量巨環衝擊波 (Bomb Shockwaves)
+    if (this.bombShockwaves && this.bombShockwaves.length > 0) {
+      this.bombShockwaves.forEach(sw => {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(sw.x, sw.y, sw.r, 0, Math.PI * 2);
+        ctx.lineWidth = Math.max(1, 10 * sw.alpha);
+        ctx.strokeStyle = `rgba(239, 68, 68, ${sw.alpha * 0.85})`;
+        ctx.shadowColor = '#ef4444';
+        ctx.shadowBlur = 24 * sw.alpha;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(sw.x, sw.y, Math.max(1, sw.r * 0.93), 0, Math.PI * 2);
+        ctx.lineWidth = Math.max(1, 5 * sw.alpha);
+        ctx.strokeStyle = `rgba(255, 255, 255, ${sw.alpha * 0.95})`;
+        ctx.stroke();
+        ctx.restore();
+      });
     }
 
     // 11. 全螢幕超新星大破滅強光白光濾鏡 (Nuclear White Flash Overlay)

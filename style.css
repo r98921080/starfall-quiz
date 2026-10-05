@@ -2203,5 +2203,164 @@ canvas#gameCanvas {
   box-shadow: 0 0 16px rgba(239, 68, 68, 0.55);
 }
 
+/* ============================================================
+   核爆緊急避險（Bomb / 保命大招）按鈕樣式
+   ============================================================ */
+.player-bomb-btn {
+  position: absolute;
+  bottom: 22px;
+  right: 18px;
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ef4444 0%, #991b1b 55%, #450a0a 100%);
+  border: 2.5px solid #fca5a5;
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.7), 0 4px 12px rgba(0, 0, 0, 0.6), inset 0 0 12px rgba(255, 255, 255, 0.35);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 25;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease, opacity 0.25s ease, filter 0.25s ease;
+  pointer-events: auto;
+}
+
+.player-bomb-btn:hover {
+  transform: scale(1.06);
+  box-shadow: 0 0 26px rgba(239, 68, 68, 0.95), 0 6px 16px rgba(0, 0, 0, 0.7), inset 0 0 16px rgba(255, 255, 255, 0.5);
+}
+
+.player-bomb-btn:active {
+  transform: scale(0.92);
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.5), inset 0 0 8px rgba(0, 0, 0, 0.5);
+}
+
+.player-bomb-btn .bomb-btn-glow {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(239, 68, 68, 0.4);
+  animation: bombPulse 1.8s infinite ease-in-out;
+  pointer-events: none;
+}
+
+@keyframes bombPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.35;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.85;
+    border-color: rgba(254, 202, 202, 0.8);
+  }
+}
+
+.player-bomb-btn .bomb-icon {
+  font-size: 22px;
+  line-height: 1;
+  filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.5));
+  margin-top: -2px;
+  pointer-events: none;
+}
+
+.player-bomb-btn .bomb-title {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: #ffffff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 6px rgba(239, 68, 68, 0.8);
+  margin-top: 2px;
+  pointer-events: none;
+}
+
+.player-bomb-btn .bomb-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 11px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  background: linear-gradient(135deg, #fbbf24, #d97706);
+  color: #111827;
+  font-size: 12px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.85);
+  pointer-events: none;
+}
+
+/* 冷卻中遮罩 */
+.player-bomb-btn .bomb-cooldown-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: #fef08a;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.player-bomb-btn.cooling-down .bomb-cooldown-overlay {
+  opacity: 1;
+}
+
+.player-bomb-btn.cooling-down {
+  pointer-events: none;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
+}
+
+/* 彈藥耗盡狀態 */
+.player-bomb-btn.depleted {
+  background: radial-gradient(circle at 35% 35%, #475569 0%, #1e293b 70%, #0f172a 100%);
+  border-color: #64748b;
+  box-shadow: 0 0 6px rgba(100, 116, 139, 0.3);
+  opacity: 0.55;
+  filter: grayscale(60%);
+}
+
+.player-bomb-btn.depleted .bomb-badge {
+  background: #64748b;
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.player-bomb-btn.depleted .bomb-btn-glow {
+  display: none;
+}
+
+/* 非遊戲狀態隱藏（如問答、整備、開始選單、結算） */
+.player-bomb-btn.hidden {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: scale(0.7) !important;
+}
+
+/* 行動裝置尺寸微調 */
+@media (max-width: 600px) {
+  .player-bomb-btn {
+    bottom: 20px;
+    right: 16px;
+    width: 62px;
+    height: 62px;
+  }
+}
+
 
 

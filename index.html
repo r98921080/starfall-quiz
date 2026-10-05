@@ -44,6 +44,10 @@
           <span class="hud-label">知識壓力</span>
           <span class="hud-val" id="hudPressure" style="color:var(--cyan); font-size:12px;">Lv.0 (平穩)</span>
         </div>
+        <div class="hud-panel" id="hudBombPanel">
+          <span class="hud-label">BOMB 大招</span>
+          <span class="hud-val" id="hudBombVal" style="color:#ef4444; font-size:12px; font-weight:800;">💥 x2</span>
+        </div>
       </div>
 
       <div class="hud-group" style="align-items:flex-end;">
@@ -107,6 +111,15 @@
         <div class="boss-defeat-name" id="bossDefeatName">【迦樓羅・裂空王】</div>
         <div class="boss-defeat-quote" id="bossDefeatQuote">「你竟然刮傷了我美麗的羽毛...難道是龍族派你來的嗎？！」</div>
       </div>
+    </div>
+
+    <!-- 核爆緊急避險（Bomb / 保命大招）按鈕 (手機/平板/觸控與桌面通用) -->
+    <div id="playerBombBtn" class="player-bomb-btn" role="button" aria-label="核爆緊急避險" title="核爆緊急避險 (快捷鍵 B)">
+      <div class="bomb-btn-glow"></div>
+      <div class="bomb-icon">💥</div>
+      <div class="bomb-title">BOMB</div>
+      <div class="bomb-badge" id="playerBombBadge">2</div>
+      <div class="bomb-cooldown-overlay" id="playerBombCooldownOverlay"></div>
     </div>
 
     <!-- 獨立靈丸集氣區 (右下方) -->
@@ -552,7 +565,7 @@
 </div>
 
 <!-- 腳本引入 -->
-<script src="starfall-game-api-config.js?v=b48"></script>
-<script src="game.js?v=b49"></script>
+<script src="starfall-game-api-config.js?v=b50"></script>
+<script src="game.js?v=b50"></script>
 </body>
 </html>
