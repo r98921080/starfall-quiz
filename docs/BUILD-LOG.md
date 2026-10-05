@@ -1227,9 +1227,58 @@
 - `scripts/test-v1.25-cloud-dedup-and-sync.js`：BUILD-025 專用自動化測試套件。
 
 ### 測試方式
-1. 執行 `node scripts/test-v1.25-cloud-dedup-and-sync.js`：4 大測試項目 100% PASS 通過。
-2. 執行 `node scripts/test-cloud-dedup.js`：驗證即時連線 Google Sheet 3,000 題，自動成功去重至 157 題，且 A/B/C/D 分佈為 [40, 39, 39, 39] 完美均衡。
-3. 執行 `node test-v1.24-comprehensive-enhancements.js`：舊有六大功能回歸驗證通過。
+---
+
+## 2026-10-05 14:40 — BUILD-050：真融合進階突破（Lv.1~5 階級成長）、素材星核銘文轉化與槽位釋放、戰術火控整備與彗星靈丸美術重構
+
+### 核心問題解析與解決
+1. **真融合武器升級與擴展 (`STARFALL_FUSIONS` & `data/fusion-data.json`)**：
+   - 融合武器不再是一次性終點，而是支援 Lv.1 ~ Lv.5 MAX 終極超限突破：
+     - Lv.1：雙武裝覺醒融合。
+     - Lv.2：充能突破，傷害 +35%、發射冷卻 -15%。
+     - Lv.3：彈幕擴散，彈道數量翻倍、領域半徑大幅擴增。
+     - Lv.4：異常連鎖，附帶全場連鎖電漿、高溫融甲與強效減速。
+     - Lv.5 MAX：終極神域覺醒，引發全屏時空碎裂消彈與神威反擊。
+   - 擴展融合武裝庫至 12 款完整真融合：
+     - 彗星靈丸、虹晶天幕、蜂群獵手、軌道壁壘、熔核轟擊、凝時裁決、九天雷動、兩儀玄冰界、破曉烈陽穿雲、輪迴虛空冥鐮、萬象折光天劫、奈米蝕甲蜂群。
+2. **素材武器處理機制（槽位釋放 + 星核銘文保存）**：
+   - 當兩款主動武器融合時，副素材從主動裝備槽移除（`equippedActiveWeapons.filter(...)`），**為玩家在 7~12 關騰出 1 個新主動武器槽**，徹底避免裝備鎖死。
+   - 融合消耗之素材武器並非消失，而是昇華轉化為**永久星核銘文（Star-Core Inscriptions）**，每項銘文提供常駐全武器 +15% 傷害加成與共鳴特化。
+3. **軍械庫火控開關、索敵策略與 HUD 裝備條**：
+   - **槽位火控開關**：整備抽屜中每個主動槽位新增【⚡ 運作 / ⏸ 停火】切換按鈕，可手動暫停特定武器射擊。
+   - **索敵導引策略**：即時檢視窗新增【最近目標優先 / 首領菁英特攻 / 密集敵群覆蓋】三種全軍共用導引模式。
+   - **神話融合核心矩陣**：新增 `#pauseFusionMatrix` 面板，即時顯示所有已覺醒融合與星核銘文清單。
+   - **戰鬥頂部 HUD 裝備條**：戰鬥畫面頂端新增 `#hudLoadoutStrip`，即時呈現目前作戰槽位與真融合發光徽章。
+4. **彗星靈丸（Comet Spirit Bullet）超神話美術重構**：
+   - 徹底移除舊版單調的黃色實心圓與 180 度白弧線。
+   - 升級為 AAA 級超神話宇宙星核彗星：
+     - **超音速前導激波**：青藍色與純白雙層激波（Bow Shock Wave），帶有高斯泛光。
+     - **高能雙層彗星離子噴流尾翼**：外層烈陽真火動態羽浪（波形搖曳）+ 內層極速青藍靈氣光柱。
+     - **雙向反轉超能吸積盤**：外層烈陽順時針吸積盤（帶 3 顆聚能星芒）+ 內層玄青逆時針超速傾角吸積盤。
+     - **多重電漿核層**：純白奇異點 ➔ 耀金 ➔ 琥珀 ➔ 烈焰緋紅 ➔ 幽紫漸層。
+     - **微型閃電爆裂弧**：核心動態迸發多道高壓電漿雷弧。
+     - **機身星核聚能光環**：按壓蓄力時，戰機周圍升起 8 向日冕射線與雙層金陽渦輪旋轉環。
+
+### 異動檔案
+- `data/fusion-data.json`：擴展為 12 款真融合，具備 resonance 與 trueFusion 完整參數。
+- `style.css`：新增槽位火控按鈕、真融合矩陣、銘文標籤、索敵模式面板與 HUD 裝備條樣式。
+- `index.html` & `starfall-quiz.html`：新增 `#hudLoadoutStrip` 與 `#pauseFusionMatrix`，快取更新為 `?v=b52`。
+- `game.js`：
+  - `STARFALL_FUSIONS`：更新 12 款神話融合定義。
+  - `fusions`, `inscriptions`, `targetMode`, `solarTrails` 狀態初始化、存檔與讀檔。
+  - `applyUpgrade`：實裝 Lv.1~5 融合突破卡、素材星核銘文轉化與副素材槽位釋放。
+  - `releaseSpiritCharge` & 各武器發射管線：實裝融合階級倍率、星核銘文增幅與 Max 階特效。
+  - `update(dt)`：實裝索敵模式策略導向、烈陽光軌燃燒判定與彗星離子尾微粒。
+  - `draw(ctx)`：重構超神話彗星靈丸、烈陽穿雲光軌與機身日冕蓄力光環。
+  - `renderPauseArmory` & `renderArmoryInspector`：實裝火控切換、索敵策略與融合矩陣。
+  - `updateLoadoutHUD`：實裝戰鬥 HUD 裝備條更新。
+- `scripts/test-v1.50-fusion-system-and-art-overhaul.js`：8 大驗證套件（100% 通過）。
+
+### 測試方式
+1. 執行 `node scripts/test-v1.50-fusion-system-and-art-overhaul.js`：8 大測試項目全數 PASS 通過。
+2. 執行 `node scripts/test-v1.49-triple-tap-bomb.js`：機身三連擊 Bomb 避險驗證 PASS。
+3. 執行 `node scripts/test-v1.48-mobile-bomb-button-and-eradicate-legacy.js`：舊題杜絕驗證 PASS。
+
 
 
 

@@ -2363,5 +2363,175 @@ canvas#gameCanvas {
   }
 }
 
+/* ============================================================
+   神話軍械庫整備抽屜微調與火控、索敵、真融合核心樣式
+   ============================================================ */
+/* 槽位火控開關 */
+.slot-compact-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.slot-compact-toggle {
+  background: rgba(56, 189, 248, 0.2);
+  border: 1px solid rgba(56, 189, 248, 0.6);
+  color: #38bdf8;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.slot-compact-toggle:hover {
+  background: rgba(56, 189, 248, 0.4);
+  color: #ffffff;
+}
+.slot-compact-toggle.paused {
+  background: rgba(148, 163, 184, 0.2);
+  border-color: #64748b;
+  color: #94a3b8;
+}
+.armory-slot-compact.disabled {
+  opacity: 0.6;
+  border-color: #64748b;
+  background: rgba(30, 41, 59, 0.6);
+}
+
+/* 真融合核心槽位與星核銘文展示卡 */
+.armory-fusion-matrix {
+  margin-top: 10px;
+  margin-bottom: 12px;
+  background: linear-gradient(135deg, rgba(245, 188, 56, 0.12), rgba(239, 68, 68, 0.08));
+  border: 1.5px solid rgba(245, 188, 56, 0.5);
+  border-radius: 8px;
+  padding: 8px 10px;
+  box-shadow: 0 0 14px rgba(245, 188, 56, 0.15);
+}
+.fusion-matrix-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 900;
+  color: var(--gold-bright, #facc15);
+  margin-bottom: 6px;
+}
+.fusion-badge-gold {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #000;
+  font-size: 9px;
+  font-weight: 900;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.fusion-active-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fusion-active-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(245, 188, 56, 0.3);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+.fusion-item-name {
+  font-weight: 800;
+  color: #ffffff;
+}
+.fusion-item-rank {
+  font-weight: 900;
+  color: var(--gold-bright, #facc15);
+}
+.armory-inscriptions-box {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.inscription-pill {
+  background: rgba(103, 255, 255, 0.12);
+  border: 1px solid rgba(103, 255, 255, 0.4);
+  color: #a5f3fc;
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* 戰術檢視面板：火控索敵模式選擇器 */
+.inspector-targeting-panel {
+  margin-top: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 6px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.targeting-label {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #93c5fd;
+}
+.targeting-buttons {
+  display: flex;
+  gap: 4px;
+}
+.target-btn {
+  flex: 1;
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  color: #cbd5e1;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+.target-btn:hover {
+  background: rgba(56, 189, 248, 0.25);
+  color: #ffffff;
+}
+.target-btn.active {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.35), rgba(14, 165, 233, 0.2));
+  border-color: #38bdf8;
+  color: #38bdf8;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+}
+
+/* 戰鬥頂部 HUD 迷你武器裝備條 (Combat HUD Loadout Strip) */
+.hud-loadout-strip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 2px 6px;
+  background: rgba(14, 22, 38, 0.7);
+  border: 1px solid rgba(51, 224, 224, 0.25);
+  border-radius: 6px;
+  min-height: 22px;
+}
+.hud-loadout-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  object-fit: contain;
+  background: rgba(0, 0, 0, 0.5);
+}
+.hud-loadout-icon.fusion-badge {
+  border-color: #fbbf24;
+  box-shadow: 0 0 6px rgba(251, 191, 36, 0.7);
+}
+
 
 

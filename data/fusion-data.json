@@ -103,6 +103,114 @@
         "bossWarningExtension": 1.5,
         "critChanceBonus": 0.3
       }
+    },
+    {
+      "id": "thunderstorm_calamity",
+      "name": "九天雷動",
+      "ingredients": ["chain_lightning", "sonic_cannon"],
+      "minRank": 3,
+      "slotType": "main",
+      "description": "音波重砲震盪全場引導天劫鏈弧，引爆覆蓋全屏之球形雷暴，造成群體持續電擊與 1 秒磁暴麻痺！",
+      "resonance": {
+        "name": "雷震共鳴",
+        "effect": "音波重砲附帶連鎖雷擊與全場麻痺"
+      },
+      "trueFusion": {
+        "shockwaveRadius": 180,
+        "chainJumpCount": 8,
+        "stunSec": 1.0,
+        "dpsMultiplier": 1.7
+      }
+    },
+    {
+      "id": "taiji_frost_realm",
+      "name": "兩儀玄冰界",
+      "ingredients": ["taiji_array", "cryo_spire"],
+      "minRank": 3,
+      "slotType": "main",
+      "description": "陰陽太極陣盤凝結萬載玄冰晶刃，形成環形絕對零度結界，踏入之敵彈立即凍結碎滅，全場敵機減速 70%！",
+      "resonance": {
+        "name": "冰魄共鳴",
+        "effect": "太極陣盤形成消彈結界並大減敵速"
+      },
+      "trueFusion": {
+        "realmRadius": 150,
+        "freezeBullet": true,
+        "slowMultiplier": 0.3,
+        "shatterDamage": 260
+      }
+    },
+    {
+      "id": "solar_piercing_nova",
+      "name": "破曉烈陽穿雲",
+      "ingredients": ["kinetic_dart", "solar_flare"],
+      "minRank": 3,
+      "slotType": "main",
+      "description": "超空泡穿甲鏢融合破曉耀斑核融，貫穿敵陣時沿途留下極致灼燒的等離子融甲火徑，熔蝕全場護甲！",
+      "resonance": {
+        "name": "熔穿共鳴",
+        "effect": "穿甲鏢留存耀斑軌道持續熔蝕裝甲"
+      },
+      "trueFusion": {
+        "fireTrailSec": 4.5,
+        "armorMeltMultiplier": 1.5,
+        "trailDps": 220,
+        "pierceCount": 99
+      }
+    },
+    {
+      "id": "nether_chrono_scythe",
+      "name": "輪迴虛空冥鐮",
+      "ingredients": ["chronos_scythe", "singularity_core"],
+      "minRank": 3,
+      "slotType": "main",
+      "description": "神鐮撕裂時空召喚吸扯一切的虛空黑洞裂隙，黑洞坍縮時爆發連續 24 段次元狂斬！",
+      "resonance": {
+        "name": "冥引共鳴",
+        "effect": "神鐮揮斬召喚時空黑洞狂斬敵群"
+      },
+      "trueFusion": {
+        "blackHolePull": true,
+        "slashCount": 24,
+        "vacuumBullets": true,
+        "collapseDamage": 850
+      }
+    },
+    {
+      "id": "plasma_storm_aegis",
+      "name": "萬象折光天劫",
+      "ingredients": ["plasma_blade", "aegis_reflector"],
+      "minRank": 3,
+      "slotType": "main",
+      "description": "旋轉裂變等離子刃覆蓋神聖折光稜鏡，將接觸到的敵方彈幕偏折為高能追蹤飛刃反噬 Boss！",
+      "resonance": {
+        "name": "折刃共鳴",
+        "effect": "等離子刃偏折敵彈轉化追蹤飛刃反擊"
+      },
+      "trueFusion": {
+        "reflectBullet": true,
+        "bladeCount": 6,
+        "reflectDmgMult": 2.2,
+        "shieldRefraction": true
+      }
+    },
+    {
+      "id": "nanite_swarm_overlord",
+      "name": "奈米蝕甲蜂群",
+      "ingredients": ["homing_missile", "nano_swarm"],
+      "minRank": 3,
+      "slotType": "support",
+      "description": "巡弋導彈命中後裂變為百隻自律奈米機械蟲，附著在敵機裝甲上持續啃噬，使敵人承受傷害永久提升 40%！",
+      "resonance": {
+        "name": "蝕甲共鳴",
+        "effect": "巡弋飛彈附帶奈米蟲群永久增傷 40%"
+      },
+      "trueFusion": {
+        "naniteBiteSec": 6.0,
+        "debuffDmgBonus": 0.4,
+        "corrosionSpread": true,
+        "missileCluster": 12
+      }
     }
   ]
 }

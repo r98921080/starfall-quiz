@@ -15,7 +15,7 @@
   <link rel="preload" as="image" href="assets/enemies/enemy_gunner.png">
   <link rel="preload" as="image" href="assets/enemies/enemy.png">
   <link rel="preload" as="image" href="assets/backgrounds/bg_stage_1.jpg">
-  <link rel="stylesheet" href="style.css?v=b51">
+  <link rel="stylesheet" href="style.css?v=b52">
 </head>
 <body>
 <div id="appWrap">
@@ -47,6 +47,10 @@
         <div class="hud-panel" id="hudBombPanel" title="核爆緊急避險：連擊機身 3 下或按 B / X 釋放">
           <span class="hud-label">BOMB 大招</span>
           <span class="hud-val" id="hudBombVal" style="color:#ef4444; font-size:12px; font-weight:800;">💥 x2</span>
+        </div>
+        <div class="hud-panel" id="hudLoadoutPanel" style="align-items:flex-start;">
+          <span class="hud-label">ARMORY LOADOUT</span>
+          <div id="hudLoadoutStrip" class="hud-loadout-strip" title="作戰裝備槽：按 P 鍵可調配軍械"></div>
         </div>
       </div>
 
@@ -277,6 +281,9 @@
           <div class="active-slots-compact-grid" id="pauseActiveSlotsGrid">
             <!-- 動態生成 3 個緊湊雙行主動槽位 -->
           </div>
+
+          <!-- 真融合神話核心與星核銘文展示矩陣 -->
+          <div id="pauseFusionMatrix" class="armory-fusion-matrix" style="display:none;"></div>
 
           <!-- 武器庫存分區圖示網格與即時檢視窗容器 -->
           <div class="armory-interactive-layout">
@@ -565,7 +572,7 @@
 </div>
 
 <!-- 腳本引入 -->
-<script src="starfall-game-api-config.js?v=b51"></script>
-<script src="game.js?v=b51"></script>
+<script src="starfall-game-api-config.js?v=b52"></script>
+<script src="game.js?v=b52"></script>
 </body>
 </html>
