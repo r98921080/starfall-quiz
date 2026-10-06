@@ -5037,8 +5037,11 @@ class Game {
 
     // 8. 虹光折射星核 (prism_wingman: 被動僚機)
     const pw = this.arsenal.prism_wingman;
-    if (pw && pw.rank > 0) {
+    if (pw && pw.rank > 0 && !pw.disabled) {
       this.updatePrismWingman(pw.rank, dt);
+    } else {
+      this.activePrisms = [];
+      this.prismCachedTargets = {};
     }
 
     // 9. 熾陽熔岩噴射核 (grenade_launcher: 主動)
@@ -5063,8 +5066,10 @@ class Game {
 
     // 11. 埃癸斯神盾力場 (quantum_shield: 被動)
     const qs = this.arsenal.quantum_shield;
-    if (qs && qs.rank > 0) {
+    if (qs && qs.rank > 0 && !qs.disabled) {
       this.updateAegisShields(qs.rank, qs.quality, dt);
+    } else {
+      this.orbitals = [];
     }
 
     // 12. 五行太極陣盤 (taiji_array: 主動)
@@ -5792,9 +5797,16 @@ class Game {
   // 統一傷害入口 damageBoss() (徹底修復 Boss 無法消滅與護盾 Bug)
   // ============================================================
   damageBoss(boss, damage, type = 'normal', source = 'bullet') {
-    if (!boss || boss.dead) return;
+    if (!boss || boss.dead || boss.dying) return;
+    if (boss.isTransforming) {
+      if (this.sound && this.sound.playIronDeflection) {
+        this.sound.playIronDeflection();
+      }
+      boss.shieldHitPulse = 1.0;
+      return;
+    }
     if (boss.invulnerable) {
-      if (source === 'spirit' && type === 'spirit' && (this.lastEmpFired || damage > 500)) {
+      if (boss.desperationActive && source === 'spirit' && type === 'spirit' && (this.lastEmpFired || damage > 500)) {
         boss.invulnerable = false;
         boss.desperationActive = false;
         boss.stunTimer = 3.0;
@@ -5875,6 +5887,22 @@ class Game {
       return; // 傷害由金羽神盾吸收，不扣減本體血量
     }
 
+    // 階段鎖血保護閥門 (Phase Health Gate)：保證高爆發傷害（如彗星靈丸、神鐮、核彈）絕不直接貫穿秒殺尚未變身之魔王
+    let minHpForPhase = 0;
+    if (boss.phases >= 3) {
+      if (boss.phase === 1) {
+        minHpForPhase = Math.round(boss.maxHp * 0.66);
+      } else if (boss.phase === 2) {
+        minHpForPhase = Math.round(boss.maxHp * 0.33);
+      }
+    } else if (boss.phases > 1 && boss.phase === 1) {
+      minHpForPhase = Math.round(boss.maxHp * 0.50);
+    }
+
+    if (minHpForPhase > 0) {
+      finalDmg = Math.min(finalDmg, Math.max(0, boss.hp - minHpForPhase));
+    }
+
     boss.hp -= finalDmg;
     boss.hitFlash = 0.08;
     this.totalDamageDealt += finalDmg;
@@ -5927,20 +5955,20 @@ class Game {
     // BUILD-032: 即時同步 Boss HP 血條
     this.syncBossHpBar(boss);
 
-    // 階段轉換判定 (第 10 關具備 3 個階段，其餘 Boss 具備 2 個階段)
+    // 階段轉換判定 (第 12 關具備 3 個階段，其餘 Boss 具備 2 個階段)
     if (boss.phases >= 3) {
       if (boss.hp <= boss.maxHp * 0.66 && boss.phase === 1) {
         this.triggerBossPhase2(boss);
       } else if (boss.hp <= boss.maxHp * 0.33 && boss.phase === 2) {
         this.triggerBossPhase3(boss);
-      } else if (boss.hp <= 0 && !boss.dying) {
+      } else if (boss.hp <= 0 && boss.phase >= boss.phases && !boss.dying) {
         this.syncBossHpBar(boss, true);
         this.startBossDefeatCinematic(boss);
       }
     } else {
       if (boss.hp <= boss.maxHp * 0.5 && boss.phase === 1 && boss.phases > 1) {
         this.triggerBossPhase2(boss);
-      } else if (boss.hp <= 0 && !boss.dying) {
+      } else if (boss.hp <= 0 && (boss.phase >= boss.phases || boss.phases <= 1) && !boss.dying) {
         this.syncBossHpBar(boss, true);
         this.startBossDefeatCinematic(boss);
       }
@@ -6001,14 +6029,19 @@ class Game {
         boss.weaknessCounters.chakram = 0;
         boss.weaknessCooldown = 10.0;
         boss.stunTimer = 3.0;
-        boss.hp = Math.max(0, boss.hp - boss.maxHp * 0.08);
+        const minHp4 = (boss.phases > 1 && boss.phase === 1) ? Math.round(boss.maxHp * 0.5) : 0;
+        boss.hp = Math.max(minHp4, boss.hp - boss.maxHp * 0.08);
         this.syncBossHpBar(boss);
         this.sound.playSecretCounterTrigger();
         this.shake(10, 0.4);
         this.showToast('✨【神話暗線剋制】青玉金屬刃切斷雷鼓連鎖導電線！電容短路重創 8% 生命並癱瘓 3 秒！');
-        if (boss.hp <= 0 && !boss.dying) {
-          this.syncBossHpBar(boss, true);
-          this.startBossDefeatCinematic(boss);
+        if (boss.hp <= minHp4 && !boss.dying) {
+          if (boss.phases > 1 && boss.phase < boss.phases) {
+            this.triggerBossPhase2(boss);
+          } else {
+            this.syncBossHpBar(boss, true);
+            this.startBossDefeatCinematic(boss);
+          }
         }
       }
     }
@@ -6043,16 +6076,21 @@ class Game {
         boss.weaknessCounters.grenade = 0;
         boss.weaknessCooldown = 14.0;
         boss.stunTimer = 2.5;
-        boss.hp = Math.max(0, boss.hp - boss.maxHp * 0.10);
+        const minHp6 = (boss.phases > 1 && boss.phase === 1) ? Math.round(boss.maxHp * 0.5) : 0;
+        boss.hp = Math.max(minHp6, boss.hp - boss.maxHp * 0.10);
         this.syncBossHpBar(boss);
         this.bossMinions = [];
         this.ebullets = [];
         this.sound.playSecretCounterTrigger();
         this.shake(14, 0.5);
         this.showToast('✨【神話暗線剋制】饕餮吞食高爆熔岩核引發腹腔內爆！重創 10% 生命且傀儡全滅！');
-        if (boss.hp <= 0 && !boss.dying) {
-          this.syncBossHpBar(boss, true);
-          this.startBossDefeatCinematic(boss);
+        if (boss.hp <= minHp6 && !boss.dying) {
+          if (boss.phases > 1 && boss.phase < boss.phases) {
+            this.triggerBossPhase2(boss);
+          } else {
+            this.syncBossHpBar(boss, true);
+            this.startBossDefeatCinematic(boss);
+          }
         }
       }
     }
@@ -6064,14 +6102,19 @@ class Game {
         boss.weaknessCounters.taiji = 0;
         boss.weaknessCooldown = 15.0;
         boss.shieldType = 'none';
-        boss.hp = Math.max(0, boss.hp - boss.maxHp * 0.06);
+        const minHp8 = (boss.phases > 1 && boss.phase === 1) ? Math.round(boss.maxHp * 0.5) : 0;
+        boss.hp = Math.max(minHp8, boss.hp - boss.maxHp * 0.06);
         this.syncBossHpBar(boss);
         this.sound.playSecretCounterTrigger();
         this.shake(9, 0.35);
         this.showToast('✨【神話暗線剋制】五行太極陰陽生剋破陣！雅典娜埃癸斯神盾崩解碎裂！');
-        if (boss.hp <= 0 && !boss.dying) {
-          this.syncBossHpBar(boss, true);
-          this.startBossDefeatCinematic(boss);
+        if (boss.hp <= minHp8 && !boss.dying) {
+          if (boss.phases > 1 && boss.phase < boss.phases) {
+            this.triggerBossPhase2(boss);
+          } else {
+            this.syncBossHpBar(boss, true);
+            this.startBossDefeatCinematic(boss);
+          }
         }
       }
     }
@@ -6105,9 +6148,14 @@ class Game {
   }
 
   triggerBossPhase2(boss) {
+    if (!boss || boss.dead || boss.dying) return;
+    if (boss.phase >= 2) return;
     boss.phase = 2;
+    boss.isTransforming = true;
     boss.invulnerable = true;
-    boss.invulnTimer = 2.0; // 變身短暫無敵 2 秒，會在 updateBoss 中遞減解鎖！
+    boss.invulnTimer = 2.5; // 變身短暫神聖無敵 2.5 秒，會在 updateBoss 中遞減解鎖！
+    boss.hp = Math.round(boss.maxHp * 0.5); // 鎖定並確保第二階段擁有充沛 50% HP
+    this.syncBossHpBar(boss);
     this.ebullets = [];
     this.sound.playWarningAlert();
     this.sound.speak(`${boss.name}：第二型態展開！`);
@@ -6130,9 +6178,14 @@ class Game {
   }
 
   triggerBossPhase3(boss) {
+    if (!boss || boss.dead || boss.dying) return;
+    if (boss.phase >= 3) return;
     boss.phase = 3;
+    boss.isTransforming = true;
     boss.invulnerable = true;
-    boss.invulnTimer = 2.5; // 變身短暫無敵 2.5 秒
+    boss.invulnTimer = 2.5; // 變身短暫神聖無敵 2.5 秒
+    boss.hp = Math.round(boss.maxHp * 0.33); // 鎖定並確保第三階段擁有充沛 33% HP
+    this.syncBossHpBar(boss);
     this.ebullets = [];
     this.sound.playWarningAlert();
     this.sound.playBossEntranceSiren();
@@ -6222,6 +6275,15 @@ class Game {
 
   startBossDefeatCinematic(boss) {
     if (!boss || boss.dying) return;
+    if (boss.phases > 1 && boss.phase < boss.phases) {
+      // 絕對防禦保護：若魔王尚有後續階段未展開，絕不可直接判定死亡結算，安全導向型態轉換！
+      if (boss.phases >= 3 && boss.phase === 2) {
+        this.triggerBossPhase3(boss);
+      } else {
+        this.triggerBossPhase2(boss);
+      }
+      return;
+    }
     boss.dying = true;
     boss.invulnerable = true;
     boss.hp = 0;
@@ -6468,6 +6530,11 @@ class Game {
     this.ebullets = [];
     this.hazardTelegraphs = [];
     this.lavaPools = [];
+    this.solarTrails = [];
+    this.activePrisms = [];
+    this.prismCachedTargets = {};
+    this.orbitals = [];
+    this.laserBeams = [];
     this.currentBoss = null;
     this.bossDeathSequence = null;
     this.screenFlashAlpha = 0;
@@ -6613,6 +6680,11 @@ class Game {
     this.ebullets = [];
     this.hazardTelegraphs = [];
     this.lavaPools = [];
+    this.solarTrails = [];
+    this.activePrisms = [];
+    this.prismCachedTargets = {};
+    this.orbitals = [];
+    this.laserBeams = [];
     this.currentBoss = null;
     this.bossDeathSequence = null;
     this.screenFlashAlpha = 0;
@@ -7045,6 +7117,7 @@ class Game {
       if (b.invulnTimer <= 0) {
         b.invulnerable = false;
         b.invulnTimer = 0;
+        b.isTransforming = false;
       }
     }
 
@@ -8082,11 +8155,16 @@ class Game {
                 game.player.hp = Math.min(game.player.maxHp, game.player.hp + 1);
                 game.player.grazeSync = 100;
                 game.showToast('神聖甘露仙瓶被擊碎！甘露灑落，玩家裝甲修復 +1，同步率滿載！');
-                b.hp = Math.max(0, b.hp - 400);
+                const minHpAth = (b.phases > 1 && b.phase === 1) ? Math.round(b.maxHp * 0.5) : 0;
+                b.hp = Math.max(minHpAth, b.hp - 400);
                 game.syncBossHpBar(b);
-                if (b.hp <= 0 && !b.dying) {
-                  game.syncBossHpBar(b, true);
-                  game.startBossDefeatCinematic(b);
+                if (b.hp <= minHpAth && !b.dying) {
+                  if (b.phases > 1 && b.phase < b.phases) {
+                    game.triggerBossPhase2(b);
+                  } else {
+                    game.syncBossHpBar(b, true);
+                    game.startBossDefeatCinematic(b);
+                  }
                 }
               }
             });
@@ -8149,12 +8227,17 @@ class Game {
               type: 'hydra_head', name: '淵毒蛇首(左)',
               x: 55, y: 155, r: 22, hp: 650, maxHp: 650, color: '#48e583',
               onDestroy: (game, b) => {
-                b.hp = Math.max(0, b.hp - 350);
+                const minHpHyd = (b.phases > 1 && b.phase === 1) ? Math.round(b.maxHp * 0.5) : 0;
+                b.hp = Math.max(minHpHyd, b.hp - 350);
                 game.syncBossHpBar(b);
                 game.showToast('左側毒蛇首被斬斷！九頭蛇受到巨額重創！');
-                if (b.hp <= 0 && !b.dying) {
-                  game.syncBossHpBar(b, true);
-                  game.startBossDefeatCinematic(b);
+                if (b.hp <= minHpHyd && !b.dying) {
+                  if (b.phases > 1 && b.phase < b.phases) {
+                    game.triggerBossPhase2(b);
+                  } else {
+                    game.syncBossHpBar(b, true);
+                    game.startBossDefeatCinematic(b);
+                  }
                 }
               }
             });
@@ -8162,12 +8245,17 @@ class Game {
               type: 'hydra_head', name: '淵毒蛇首(右)',
               x: this.W - 55, y: 155, r: 22, hp: 650, maxHp: 650, color: '#48e583',
               onDestroy: (game, b) => {
-                b.hp = Math.max(0, b.hp - 350);
+                const minHpHyd = (b.phases > 1 && b.phase === 1) ? Math.round(b.maxHp * 0.5) : 0;
+                b.hp = Math.max(minHpHyd, b.hp - 350);
                 game.syncBossHpBar(b);
                 game.showToast('右側毒蛇首被斬斷！九頭蛇受到巨額重創！');
-                if (b.hp <= 0 && !b.dying) {
-                  game.syncBossHpBar(b, true);
-                  game.startBossDefeatCinematic(b);
+                if (b.hp <= minHpHyd && !b.dying) {
+                  if (b.phases > 1 && b.phase < b.phases) {
+                    game.triggerBossPhase2(b);
+                  } else {
+                    game.syncBossHpBar(b, true);
+                    game.startBossDefeatCinematic(b);
+                  }
                 }
               }
             });
@@ -8231,12 +8319,17 @@ class Game {
                 game.sound.playExplosion(true);
                 b.invulnerable = false;
                 b.invulnTimer = 0;
-                b.hp = Math.max(0, b.hp - 500);
+                const minHpCyc = (b.phases > 1 && b.phase === 1) ? Math.round(b.maxHp * 0.5) : 0;
+                b.hp = Math.max(minHpCyc, b.hp - 500);
                 game.syncBossHpBar(b);
                 game.showToast('鍛造熔爐引爆過載！獨眼巨人陷入癱瘓！');
-                if (b.hp <= 0 && !b.dying) {
-                  game.syncBossHpBar(b, true);
-                  game.startBossDefeatCinematic(b);
+                if (b.hp <= minHpCyc && !b.dying) {
+                  if (b.phases > 1 && b.phase < b.phases) {
+                    game.triggerBossPhase2(b);
+                  } else {
+                    game.syncBossHpBar(b, true);
+                    game.startBossDefeatCinematic(b);
+                  }
                 }
               }
             });
@@ -8296,12 +8389,17 @@ class Game {
               x: this.W / 2, y: 180, r: 24, hp: 700, maxHp: 700, color: '#e0409a',
               onDestroy: (game, b) => {
                 game.sound.playCrit();
-                b.hp = Math.max(0, b.hp - 400);
+                const minHpTam = (b.phases > 1 && b.phase === 1) ? Math.round(b.maxHp * 0.5) : 0;
+                b.hp = Math.max(minHpTam, b.hp - 400);
                 game.syncBossHpBar(b);
                 game.showToast('殺生石碎裂！妖狐幻影消散，玉藻前真身現形！');
-                if (b.hp <= 0 && !b.dying) {
-                  game.syncBossHpBar(b, true);
-                  game.startBossDefeatCinematic(b);
+                if (b.hp <= minHpTam && !b.dying) {
+                  if (b.phases > 1 && b.phase < b.phases) {
+                    game.triggerBossPhase2(b);
+                  } else {
+                    game.syncBossHpBar(b, true);
+                    game.startBossDefeatCinematic(b);
+                  }
                 }
               }
             });
@@ -11246,9 +11344,11 @@ class Game {
     document.getElementById('hudScore').textContent = this.score;
 
     const pressEl = document.getElementById('hudPressure');
-    const p = this.knowledgePressure;
-    pressEl.textContent = `Lv.${p} (${p >= 7 ? '地獄' : (p >= 4 ? '緊張' : '平穩')})`;
-    pressEl.style.color = p >= 7 ? 'var(--red)' : (p >= 4 ? 'var(--orange)' : 'var(--cyan)');
+    if (pressEl) {
+      const p = this.knowledgePressure;
+      pressEl.textContent = `Lv.${p} (${p >= 7 ? '地獄' : (p >= 4 ? '緊張' : '平穩')})`;
+      pressEl.style.color = p >= 7 ? 'var(--red)' : (p >= 4 ? 'var(--orange)' : 'var(--cyan)');
+    }
 
     const hpContainer = document.getElementById('hudHpCells');
     hpContainer.innerHTML = '';
@@ -12408,35 +12508,41 @@ class Game {
     }
 
     // 3. 稜鏡僚機射線渲染
-    if (this.activePrisms) {
-      this.activePrisms.forEach(p => {
-        if (p.beamTarget) {
-          ctx.save();
-          ctx.strokeStyle = 'rgba(51, 224, 224, 0.8)';
-          ctx.lineWidth = 4;
-          ctx.beginPath();
-          ctx.moveTo(p.x, p.y);
-          ctx.lineTo(p.beamTarget.x, p.beamTarget.y);
-          ctx.stroke();
-
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.moveTo(p.x, p.y);
-          ctx.lineTo(p.beamTarget.x, p.beamTarget.y);
-          ctx.stroke();
-
-          if (p.secondTarget) {
-            ctx.strokeStyle = 'rgba(0, 162, 255, 0.75)';
-            ctx.lineWidth = 3;
+    if (this.activePrisms && this.activePrisms.length > 0) {
+      const pw = this.arsenal && this.arsenal.prism_wingman;
+      if (!pw || pw.rank <= 0 || pw.disabled) {
+        this.activePrisms = [];
+        this.prismCachedTargets = {};
+      } else {
+        this.activePrisms.forEach(p => {
+          if (p.beamTarget) {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(51, 224, 224, 0.8)';
+            ctx.lineWidth = 4;
             ctx.beginPath();
-            ctx.moveTo(p.beamTarget.x, p.beamTarget.y);
-            ctx.lineTo(p.secondTarget.x, p.secondTarget.y);
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(p.beamTarget.x, p.beamTarget.y);
             ctx.stroke();
+
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(p.beamTarget.x, p.beamTarget.y);
+            ctx.stroke();
+
+            if (p.secondTarget) {
+              ctx.strokeStyle = 'rgba(0, 162, 255, 0.75)';
+              ctx.lineWidth = 3;
+              ctx.beginPath();
+              ctx.moveTo(p.beamTarget.x, p.beamTarget.y);
+              ctx.lineTo(p.secondTarget.x, p.secondTarget.y);
+              ctx.stroke();
+            }
+            ctx.restore();
           }
-          ctx.restore();
-        }
-      });
+        });
+      }
     }
 
     // 3.5 熔岩地熱領域 (Meltdown Impact / Comet Spirit)
@@ -12481,22 +12587,27 @@ class Game {
     }
 
     // 4. 迴轉光子球與軌道壁壘 (Orbital Aegis)
-    if (this.orbitals) {
-      this.orbitals.forEach(orb => {
-        ctx.save();
-        ctx.fillStyle = orb.isAegis ? '#33e0e0' : '#67ffff';
-        ctx.shadowColor = orb.isAegis ? '#48e583' : '#00a2ff';
-        ctx.shadowBlur = orb.isAegis ? 14 : 10;
-        ctx.beginPath();
-        ctx.arc(orb.x, orb.y, orb.r, 0, Math.PI * 2);
-        ctx.fill();
-        if (orb.isAegis) {
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 1.5;
-          ctx.stroke();
-        }
-        ctx.restore();
-      });
+    if (this.orbitals && this.orbitals.length > 0) {
+      const qs = this.arsenal && this.arsenal.quantum_shield;
+      if (!qs || qs.rank <= 0 || qs.disabled) {
+        this.orbitals = [];
+      } else {
+        this.orbitals.forEach(orb => {
+          ctx.save();
+          ctx.fillStyle = orb.isAegis ? '#33e0e0' : '#67ffff';
+          ctx.shadowColor = orb.isAegis ? '#48e583' : '#00a2ff';
+          ctx.shadowBlur = orb.isAegis ? 14 : 10;
+          ctx.beginPath();
+          ctx.arc(orb.x, orb.y, orb.r, 0, Math.PI * 2);
+          ctx.fill();
+          if (orb.isAegis) {
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+          }
+          ctx.restore();
+        });
+      }
     }
 
     // 5. 玩家子彈 (支援真融合武器特效與 1-5 階視覺質變)
@@ -14406,6 +14517,14 @@ class Game {
           toggleBtn.onclick = (e) => {
             e.stopPropagation();
             ars.disabled = !ars.disabled;
+            if (ars.disabled) {
+              if (wepId === 'prism_wingman') {
+                this.activePrisms = [];
+                this.prismCachedTargets = {};
+              } else if (wepId === 'quantum_shield') {
+                this.orbitals = [];
+              }
+            }
             this.renderPauseArmory();
             this.updateLoadoutHUD();
             this.showToast(`${cat.name || wepId} 火控狀態：${ars.disabled ? '⏸ 已暫停射擊' : '⚡ 恢復正常射擊'}`);
@@ -14416,6 +14535,12 @@ class Game {
           unequipBtn.onclick = (e) => {
             e.stopPropagation();
             this.equippedActiveWeapons.splice(i, 1);
+            if (wepId === 'prism_wingman') {
+              this.activePrisms = [];
+              this.prismCachedTargets = {};
+            } else if (wepId === 'quantum_shield') {
+              this.orbitals = [];
+            }
             this.renderPauseArmory();
             this.updateLoadoutHUD();
             this.showToast(`已從主動槽位卸下 ${cat.name || wepId}`);
@@ -14666,6 +14791,12 @@ class Game {
         const idx = this.equippedActiveWeapons.indexOf(w.id);
         if (idx !== -1) {
           this.equippedActiveWeapons.splice(idx, 1);
+          if (w.id === 'prism_wingman') {
+            this.activePrisms = [];
+            this.prismCachedTargets = {};
+          } else if (w.id === 'quantum_shield') {
+            this.orbitals = [];
+          }
           this.renderPauseArmory();
           this.updateLoadoutHUD();
           this.showToast(`已卸下主動武器：${w.name}`);

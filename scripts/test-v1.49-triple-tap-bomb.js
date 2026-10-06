@@ -19,10 +19,10 @@ const starfallHtml = fs.readFileSync(path.join(repoRoot, 'starfall-quiz.html'), 
   assert.ok(starfallHtml.includes(el), `starfall-quiz.html 必須包含 ${el}`);
 });
 
-assert.ok(/style\.css\?v=b(?:51|52)/.test(indexHtml), 'index.html 必須引用 style.css?v=b51 或以上');
-assert.ok(/game\.js\?v=b(?:51|52)/.test(indexHtml), 'index.html 必須引用 game.js?v=b51 或以上');
-assert.ok(/style\.css\?v=b(?:51|52)/.test(starfallHtml), 'starfall-quiz.html 必須引用 style.css?v=b51 或以上');
-assert.ok(/game\.js\?v=b(?:51|52)/.test(starfallHtml), 'starfall-quiz.html 必須引用 game.js?v=b51 或以上');
+assert.ok(/style\.css\?v=b(?:5[1-9]|[6-9]\d)/.test(indexHtml), 'index.html 必須引用 style.css?v=b51 或以上');
+assert.ok(/game\.js\?v=b(?:5[1-9]|[6-9]\d)/.test(indexHtml), 'index.html 必須引用 game.js?v=b51 或以上');
+assert.ok(/style\.css\?v=b(?:5[1-9]|[6-9]\d)/.test(starfallHtml), 'starfall-quiz.html 必須引用 style.css?v=b51 或以上');
+assert.ok(/game\.js\?v=b(?:5[1-9]|[6-9]\d)/.test(starfallHtml), 'starfall-quiz.html 必須引用 game.js?v=b51 或以上');
 
 assert.ok(indexHtml.includes('title="核爆緊急避險：連擊機身 3 下或按 B / X 釋放"'), 'index.html 必須包含連擊機身 3 下提示');
 assert.ok(starfallHtml.includes('title="核爆緊急避險：連擊機身 3 下或按 B / X 釋放"'), 'starfall-quiz.html 必須包含連擊機身 3 下提示');
